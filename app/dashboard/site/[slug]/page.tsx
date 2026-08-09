@@ -6,6 +6,10 @@ import PropertyDetailsEditor from "./PropertyDetailsEditor";
 import InvoiceEditor from "./InvoiceEditor";
 import MediaManager from "./MediaManager";
 import MediaLinksEditor from "./MediaLinksEditor";
+import PropertySectionNav from "./PropertySectionNav";
+import SiteSummaryPanel from "./SiteSummaryPanel";
+import LeadCapturePanel from "./LeadCapturePanel";
+import { makePropertySiteSlug, normalizePropertySiteSlug, propertySiteUrl } from "@/lib/property-site-slug";
 
 type Site = {
   id: string;
@@ -303,20 +307,21 @@ function getMatterportEmbedUrl(rawUrl: string): string {
 function sectionCardStyle(): React.CSSProperties {
   return {
     background: "#ffffff",
-    border: "1px solid #e8e8e8",
-    borderRadius: "22px",
-    padding: "28px",
-    boxShadow: "0 10px 30px rgba(0,0,0,.05)",
+    border: "1px solid rgba(23,35,31,.19)",
+    borderRadius: "0",
+    padding: "clamp(22px, 3vw, 36px)",
+    boxShadow: "none",
     scrollMarginTop: "24px",
   };
 }
 
 function sectionTitleStyle(): React.CSSProperties {
   return {
-    fontSize: "22px",
-    fontWeight: 800,
-    margin: "0 0 18px 0",
-    color: "#171717",
+    fontSize: "clamp(24px, 2vw, 32px)",
+    fontWeight: 400,
+    letterSpacing: "-.04em",
+    margin: "0 0 22px 0",
+    color: "#17231f",
   };
 }
 
@@ -487,12 +492,9 @@ function getInvoicePublicUrl(site: Site): string | null {
 
   if (!token || !enabled) return null;
 
-  const base =
-    clean(process.env.NEXT_PUBLIC_SITE_URL) ||
-    clean(process.env.NEXT_PUBLIC_APP_URL) ||
-    "http://localhost:3000";
-
-  return `${base.replace(/\/+$/, "")}/invoice/${encodeURIComponent(token)}`;
+  // Keep in-app links origin-relative so local, preview, and beta deployments
+  // always open the invoice on the same host the admin is currently using.
+  return `/invoice/${encodeURIComponent(token)}`;
 }
 
 function getMediaUrl(asset?: MediaAsset | null): string {
@@ -576,8 +578,9 @@ export default async function SitePage({
 }) {
   const { slug } = await params;
   const cleanSlug = clean(slug);
+  const lookupSlug = normalizePropertySiteSlug(cleanSlug);
 
-  if (!cleanSlug) notFound();
+  if (!lookupSlug) notFound();
 
   const sessionSb = await createSupabaseServerClient();
   const { data: authData, error: authError } = await sessionSb.auth.getUser();
@@ -594,13 +597,10 @@ export default async function SitePage({
     .maybeSingle();
 
   const viewerRole = clean(viewerProfile?.role).toLowerCase();
-  if (
-    viewerProfileError ||
-    !viewerProfile ||
-    (viewerProfile.is_admin !== true && viewerRole !== "admin")
-  ) {
+  if (viewerProfileError || !viewerProfile) {
     redirect("/dashboard");
   }
+  const viewerIsAdmin = viewerProfile.is_admin === true || viewerRole === "admin";
 
   const { data, error } = await adminSb
     .from("sites")
@@ -642,7 +642,7 @@ export default async function SitePage({
       invoice_public_token,
       invoice_public_enabled
     `)
-    .eq("slug", cleanSlug)
+    .or(`slug.eq.${lookupSlug},site_slug.eq.${lookupSlug}`)
     .order("updated_at", { ascending: false })
     .limit(1);
 
@@ -653,6 +653,11 @@ export default async function SitePage({
 
   const site = Array.isArray(data) && data.length ? (data[0] as Site) : null;
   if (!site) notFound();
+
+  const viewerId = clean(authData.user.id);
+  const ownsSite =
+    clean(site.client_id) === viewerId || clean(site.client_ms_id) === viewerId;
+  if (!viewerIsAdmin && !ownsSite) redirect("/dashboard");
 
   const assignedProfileId = clean(site.client_id) || clean(site.client_ms_id);
 
@@ -802,6 +807,66 @@ export default async function SitePage({
 
   const siteData = getSiteData(site.site_data);
 
+  const { data: trafficEventData } = await adminSb
+    .from("site_traffic_events")
+    .select("event_type, media_asset_id, referrer_host, city, region, country, created_at")
+    .eq("site_id", site.id)
+    .order("created_at", { ascending: false })
+    .limit(10000);
+  const trafficEvents = Array.isArray(trafficEventData) ? trafficEventData : [];
+  const now = new Date();
+  const dayMs = 24 * 60 * 60 * 1000;
+  const trafficDateKey = (value: Date | string) => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+  const todayKey = trafficDateKey(now);
+  const pageViews = trafficEvents.filter((event) => clean(event.event_type) === "page_view");
+  const recentPageViews = (days: number) => pageViews.filter((event) => {
+    const created = new Date(clean(event.created_at));
+    return Number.isFinite(created.getTime()) && created.getTime() >= now.getTime() - days * dayMs;
+  }).length;
+  const daily = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(now.getTime() - (29 - index) * dayMs);
+    const dateKey = trafficDateKey(date);
+    return {
+      date: dateKey,
+      label: date.toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", month: "numeric", day: "numeric" }),
+      count: pageViews.filter((event) => trafficDateKey(clean(event.created_at)) === dateKey).length,
+    };
+  });
+  const countBy = (values: string[]) => Array.from(values.reduce((map, value) => {
+    if (value) map.set(value, (map.get(value) || 0) + 1);
+    return map;
+  }, new Map<string, number>()).entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+  const mediaById = new Map(mediaAssets.map((asset, index) => [clean(asset.id), {
+    id: clean(asset.id),
+    title: clean(asset.title) || clean(asset.alt_text) || `Property photo ${index + 1}`,
+    imageUrl: getMediaUrl(asset),
+  }]));
+  const topMediaCounts = trafficEvents.filter((event) => clean(event.event_type) === "media_view" && clean(event.media_asset_id)).reduce((map, event) => {
+    const id = clean(event.media_asset_id);
+    map.set(id, (map.get(id) || 0) + 1);
+    return map;
+  }, new Map<string, number>());
+  const traffic = {
+    today: pageViews.filter((event) => trafficDateKey(clean(event.created_at)) === todayKey).length,
+    last7Days: recentPageViews(7),
+    last30Days: recentPageViews(30),
+    allTime: pageViews.length,
+    startDate: new Date(now.getTime() - 29 * dayMs).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles" }),
+    endDate: now.toLocaleDateString("en-US", { timeZone: "America/Los_Angeles" }),
+    daily,
+    topMedia: Array.from(topMediaCounts.entries()).map(([id, count]) => ({ ...mediaById.get(id), id, title: mediaById.get(id)?.title || "Property media", count })).sort((a, b) => b.count - a.count).slice(0, 8),
+    topReferrers: countBy(pageViews.map((event) => clean(event.referrer_host) || "Direct")),
+    topCities: countBy(pageViews.map((event) => [clean(event.city), clean(event.region) || clean(event.country)].filter(Boolean).join(", ") || "Unknown")),
+  };
+
   const rawVideoUrl =
     clean(siteData.video_url) ||
     clean(siteData.videoUrl) ||
@@ -841,29 +906,31 @@ export default async function SitePage({
   const packageDiscountCents = derivePackageDiscountCents(site, booking);
   const invoicePublicUrl = getInvoicePublicUrl(site);
 
-  const canEdit = true;
-  const agentTileSize = 160;
-  const publicSiteBase =
-    clean(process.env.NEXT_PUBLIC_SITE_URL) ||
-    clean(process.env.NEXT_PUBLIC_APP_URL) ||
-    "http://localhost:3000";
-  const publicSiteUrl = clean(site.slug)
-    ? `${publicSiteBase.replace(/\/+$/, "")}/sites/${clean(site.slug)}`
-    : "";
+  const canEdit = viewerIsAdmin;
+  const agentTileSize = 132;
+  const propertySiteSlug = normalizePropertySiteSlug(site.site_slug) || makePropertySiteSlug(streetAddress || address);
+  const publicSiteAliases = Array.isArray(siteData.public_site_aliases)
+    ? siteData.public_site_aliases.map(normalizePropertySiteSlug).filter(Boolean)
+    : [];
+  const publicSiteUrl = propertySiteUrl(propertySiteSlug);
 
   return (
     <main
       style={{
-        background: "#f6f6f6",
+        background: "#f2f0e9",
         minHeight: "100vh",
-        color: "#171717",
+        color: "#17231f",
+        borderTop: "6px solid #ffc72c",
       }}
     >
       <div
         style={{
-          maxWidth: "1720px",
-          margin: "0 auto",
-          padding: "20px 20px 0 20px",
+          minHeight: "104px",
+          padding: "24px clamp(24px, 5vw, 76px)",
+          display: "flex",
+          alignItems: "center",
+          background: "#17231f",
+          borderBottom: "1px solid rgba(255,255,255,.18)",
         }}
       >
         <Link
@@ -873,14 +940,16 @@ export default async function SitePage({
             alignItems: "center",
             gap: "10px",
             textDecoration: "none",
-            color: "#171717",
+            color: "#ffffff",
             fontWeight: 700,
-            fontSize: "15px",
-            background: "#ffffff",
-            border: "1px solid #e8e8e8",
+            fontSize: "11px",
+            letterSpacing: ".1em",
+            textTransform: "uppercase",
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,.5)",
             borderRadius: "999px",
-            padding: "12px 18px",
-            boxShadow: "0 8px 24px rgba(0,0,0,.05)",
+            padding: "13px 18px",
+            boxShadow: "none",
           }}
         >
           <span style={{ fontSize: "18px", lineHeight: 1 }}>←</span>
@@ -890,76 +959,33 @@ export default async function SitePage({
 
       <div
         style={{
-          maxWidth: "1720px",
+          maxWidth: "1500px",
           margin: "0 auto",
           display: "grid",
-          gridTemplateColumns: "250px minmax(0, 1fr)",
-          gap: "24px",
-          padding: "20px",
+          gridTemplateColumns: "210px minmax(0, 1fr)",
+          gap: "clamp(28px, 4vw, 64px)",
+          padding: "42px clamp(20px, 4vw, 52px) 72px",
         }}
       >
         <aside
           style={{
             position: "sticky",
-            top: "20px",
+            top: "24px",
             alignSelf: "start",
-            height: "calc(100vh - 40px)",
-            background: "#ffffff",
-            border: "1px solid #e8e8e8",
-            borderRadius: "24px",
-            padding: "18px 14px",
-            boxShadow: "0 10px 30px rgba(0,0,0,.05)",
+            maxHeight: "calc(100vh - 48px)",
+            background: "transparent",
+            borderTop: "1px solid rgba(23,35,31,.25)",
+            borderBottom: "1px solid rgba(23,35,31,.25)",
+            borderRadius: "0",
+            padding: "20px 0 0",
+            boxShadow: "none",
             overflow: "auto",
           }}
         >
-          <div
-            style={{
-              fontSize: "13px",
-              fontWeight: 800,
-              letterSpacing: ".12em",
-              textTransform: "uppercase",
-              color: "#8a8a8a",
-              marginBottom: "14px",
-              padding: "0 10px",
-            }}
-          >
-            Property Site
-          </div>
-
-          <nav style={{ display: "grid", gap: "8px" }}>
-            {[
-              ["agent", "Agent"],
-              ["summary", "Site Summary"],
-              ["invoice", "Invoice"],
-              ["details", "Property Details"],
-              ["gallery", "Photo Gallery"],
-              ["video", "Video"],
-              ["matterport", "Matterport"],
-              ["delivery", "Site Delivery"],
-              ["floorplan", "Floor Plan"],
-              ["map", "Map"],
-            ].map(([id, label]) => (
-              <a
-                key={id}
-                href={`#${id}`}
-                style={{
-                  textDecoration: "none",
-                  color: "#171717",
-                  fontWeight: 700,
-                  fontSize: "15px",
-                  padding: "12px 14px",
-                  borderRadius: "14px",
-                  background: "#fafafa",
-                  border: "1px solid #ededed",
-                }}
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
+          <PropertySectionNav publicSiteUrl={publicSiteUrl} />
         </aside>
 
-        <div style={{ display: "grid", gap: "24px" }}>
+        <div style={{ display: "grid", gap: "18px", minWidth: 0 }}>
           <section id="agent" style={sectionCardStyle()}>
             <h2 style={sectionTitleStyle()}>Agent</h2>
 
@@ -975,10 +1001,10 @@ export default async function SitePage({
                 style={{
                   width: `${agentTileSize}px`,
                   height: `${agentTileSize}px`,
-                  borderRadius: "22px",
+                  borderRadius: "0",
                   overflow: "hidden",
-                  border: "1px solid #e8e8e8",
-                  background: "#efefef",
+                  border: "1px solid rgba(23,35,31,.18)",
+                  background: "#e5e2d8",
                   flexShrink: 0,
                 }}
               >
@@ -1029,9 +1055,9 @@ export default async function SitePage({
                       height: `${agentTileSize}px`,
                       minHeight: `${agentTileSize}px`,
                       padding: "16px 18px",
-                      borderRadius: "16px",
-                      background: "#fafafa",
-                      border: "1px solid #ececec",
+                      borderRadius: "0",
+                      background: "#f2f0e9",
+                      border: "1px solid rgba(23,35,31,.14)",
                       boxSizing: "border-box",
                       display: "flex",
                       flexDirection: "column",
@@ -1041,7 +1067,7 @@ export default async function SitePage({
                     <div
                       style={{
                         fontSize: "11px",
-                        color: "#777",
+                        color: "#66706b",
                         textTransform: "uppercase",
                         letterSpacing: ".08em",
                         fontWeight: 700,
@@ -1053,12 +1079,12 @@ export default async function SitePage({
 
                     <div
                       style={{
-                        marginTop: "40px",
-                        fontSize: "16px",
+                        marginTop: "22px",
+                        fontSize: "14px",
                         fontWeight: 600,
                         lineHeight: 1.35,
                         wordBreak: "break-word",
-                        color: "#171717",
+                        color: "#17231f",
                       }}
                     >
                       {value}
@@ -1119,6 +1145,24 @@ export default async function SitePage({
                 </div>
               ) : null}
             </div>
+            <SiteSummaryPanel
+              siteId={site.id}
+              publicSiteUrl={publicSiteUrl}
+              initialPublicSlug={propertySiteSlug}
+              initialPublicAliases={publicSiteAliases}
+              customDomain={clean(siteData.custom_domain)}
+              canManageAddresses={viewerIsAdmin}
+              initialStatus={clean(siteData.listing_status) || "active"}
+              initialOpenHouseEnabled={siteData.open_house_enabled === true}
+              initialOpenHouseStart={clean(siteData.open_house_start)}
+              initialOpenHouseEnd={clean(siteData.open_house_end)}
+              initialOpenHouseNotes={clean(siteData.open_house_notes)}
+              traffic={traffic}
+            />
+          </section>
+
+          <section id="leads" style={sectionCardStyle()}>
+            <LeadCapturePanel siteId={site.id} />
           </section>
 
           <InvoiceEditor
@@ -1136,6 +1180,7 @@ export default async function SitePage({
 
           <PropertyDetailsEditor
             siteId={site.id}
+            canEdit={canEdit}
             initial={{
               property_address: clean(site.property_address),
               property_city: clean(site.property_city),
@@ -1146,6 +1191,10 @@ export default async function SitePage({
               property_sqft: site.property_sqft ?? site.sqft,
               lot_sqft: site.lot_sqft,
               year_built: site.year_built,
+              listing_mls_number: clean(siteData.listing_mls_number) || clean(siteData.mls_number) || clean(siteData.listing_mls),
+              public_site_description: clean(siteData.public_site_description),
+              custom_domain: clean(siteData.custom_domain),
+              custom_domain_requested: siteData.custom_domain_requested === true,
             }}
           />
 
@@ -1207,6 +1256,7 @@ export default async function SitePage({
                 siteId={site.id}
                 type="video"
                 initialValue={rawVideoUrl}
+                canEdit={canEdit}
               />
 
               {rawVideoUrl ? (
@@ -1273,13 +1323,14 @@ export default async function SitePage({
           </section>
 
           <section id="matterport" style={sectionCardStyle()}>
-            <h2 style={sectionTitleStyle()}>Matterport</h2>
+            <h2 style={sectionTitleStyle()}>3D Scanning</h2>
 
             <div style={{ display: "grid", gap: "16px" }}>
               <MediaLinksEditor
                 siteId={site.id}
                 type="matterport"
                 initialValue={rawMatterportUrl}
+                canEdit={canEdit}
               />
 
               {rawMatterportUrl ? (
@@ -1310,7 +1361,7 @@ export default async function SitePage({
                       color: "#777",
                     }}
                   >
-                    Unsupported Matterport URL format.
+                    Unsupported 3D scanning URL format.
                   </div>
                 )
               ) : (
@@ -1323,7 +1374,7 @@ export default async function SitePage({
                     color: "#777",
                   }}
                 >
-                  No Matterport tour added yet.
+                  No 3D scan added yet.
                 </div>
               )}
             </div>
