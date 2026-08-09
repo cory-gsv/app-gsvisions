@@ -1,0 +1,1326 @@
+/* =========================================================
+   GSV BOOKING — CSS
+   COMPLETE WORKING REPLACEMENT
+   ✅ Plain CSS file for Next.js
+   ✅ No <style> wrapper
+   ✅ Step 1 / 2 / 3 / 4 styling
+   ✅ Sticky summary support
+   ✅ Scheduler support
+   ✅ Stripe embed support
+========================================================= */
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+.gsv-booking {
+  --gsv-sticky-top: 50px;
+  --gsv-sticky-bottom: 24px;
+  width: 100%;
+  padding: 40px 20px;
+  display: flex;
+  justify-content: center;
+  overflow: visible !important;
+}
+
+.gsv-booking__card {
+  width: min(1200px, 100%);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(10px);
+  overflow: visible !important;
+}
+
+.gsv-booking__header {
+  margin-bottom: 18px;
+}
+
+.gsv-booking__title {
+  margin: 0 0 6px;
+  font-size: 28px;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.gsv-booking__sub {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 14px;
+}
+
+.gsv-booking__section {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gsv-booking__section-title {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 12px;
+}
+
+.gsv-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.gsv-grid--1 {
+  grid-template-columns: 1fr;
+}
+
+.gsv-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gsv-grid--3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.gsv-grid--4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.gsv-grid--mt {
+  margin-top: 12px;
+}
+
+.gsv-field {
+  display: grid;
+  gap: 6px;
+}
+
+.gsv-field--full {
+  grid-column: 1 / -1;
+}
+
+.gsv-field__label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.gsv-required {
+  color: #ffc72c;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.gsv-field__input {
+  height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  outline: none;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+select.gsv-field__input {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  -moz-appearance: menulist;
+}
+
+.gsv-field__textarea {
+  height: auto;
+  min-height: 120px;
+  padding: 12px;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.gsv-field__input:focus {
+  border-color: rgba(255, 199, 44, 0.55);
+  box-shadow: 0 0 0 3px rgba(255, 199, 44, 0.18);
+}
+
+.gsv-field__input[readonly] {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.gsv-field__input[readonly]:focus {
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+}
+
+.gsv-field__input--locked,
+#gsv-address[readonly],
+#gsv-city[readonly],
+#gsv-state[readonly],
+#gsv-zip[readonly] {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.92);
+  cursor: not-allowed;
+}
+
+/* =========================================================
+   STEP 1 — ADDRESS + MAP LAYOUT
+========================================================= */
+.gsv-address-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 18px;
+  align-items: start;
+}
+
+.gsv-address-layout__left,
+.gsv-address-layout__right {
+  min-width: 0;
+}
+
+.gsv-address-confirmed-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gsv-address-map-wrap {
+  display: block;
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.28);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  min-height: 100%;
+}
+
+.gsv-address-map__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gsv-address-map__title {
+  font-weight: 950;
+  color: #fff;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.gsv-address-map__sub {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+}
+
+.gsv-address-map {
+  width: 100%;
+  height: 275px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+    rgba(0, 0, 0, 0.25);
+  position: relative;
+}
+
+.gsv-address-map:empty::before {
+  content: "Satellite map will appear after address selection";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  text-align: center;
+  padding: 16px;
+}
+
+.gsv-booking__actions {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.gsv-booking__actions--statusonly {
+  margin-top: 12px;
+  min-height: 22px;
+}
+
+.gsv-booking__status {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.75);
+  min-height: 18px;
+}
+
+.gsv-btn {
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+  white-space: nowrap;
+}
+
+.gsv-btn:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.gsv-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.gsv-btn--primary {
+  background: rgba(255, 199, 44, 0.92);
+  border-color: rgba(255, 199, 44, 0.92);
+  color: #111;
+  box-shadow: 0 12px 30px rgba(255, 199, 44, 0.18);
+}
+
+.gsv-btn--primary:hover {
+  box-shadow: 0 18px 40px rgba(255, 199, 44, 0.26);
+}
+
+.gsv-btn--ghost {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.gsv-btn--continue {
+  background: #ffc72c;
+  border-color: #ffc72c;
+  color: #111;
+  box-shadow: 0 12px 30px rgba(255, 199, 44, 0.18);
+}
+
+.gsv-btn--continue:hover {
+  box-shadow: 0 18px 40px rgba(255, 199, 44, 0.26);
+}
+
+.gsv-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.gsv-login-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gsv-booking__footer {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+/* =========================================================
+   ADMIN CLIENT PICKER
+========================================================= */
+.gsv-admin-client-wrap {
+  margin-bottom: 14px;
+  padding: 0 0 6px;
+}
+
+#gsv-admin-client-select {
+  cursor: pointer;
+}
+
+#gsv-admin-client-status {
+  margin-top: 8px;
+}
+
+/* =========================================================
+   STEP PILLS
+========================================================= */
+.gsv-steps {
+  margin-top: 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.gsv-step {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gsv-step.is-active {
+  border-color: rgba(255, 199, 44, 0.4);
+  box-shadow: 0 0 0 3px rgba(255, 199, 44, 0.14);
+}
+
+.gsv-step__num {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-weight: 900;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 12px;
+}
+
+.gsv-step.is-active .gsv-step__num {
+  background: rgba(255, 199, 44, 0.95);
+  border-color: rgba(255, 199, 44, 0.95);
+  color: #111;
+}
+
+.gsv-step__txt {
+  font-size: 12px;
+  font-weight: 850;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.02em;
+}
+
+.gsv-step-panel {
+  display: none;
+}
+
+.gsv-step-panel.is-active {
+  display: block;
+}
+
+/* =========================================================
+   STEP 2 LAYOUT
+========================================================= */
+.gsv-step2-top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.gsv-step2-kicker {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.gsv-step2-note {
+  display: block;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.gsv-step2-search {
+  min-width: 280px;
+  flex: 0 0 320px;
+}
+
+.gsv-step2 {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 14px;
+  align-items: start;
+  overflow: visible !important;
+}
+
+.gsv-step2__right {
+  position: relative !important;
+  overflow: visible !important;
+  align-self: start;
+  min-width: 0;
+}
+
+.gsv-block {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 18px;
+  padding: 14px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  margin-bottom: 14px;
+}
+
+.gsv-block__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.gsv-block__title {
+  font-weight: 950;
+  color: #fff;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.gsv-block__sub {
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 12px;
+}
+
+/* Packages list */
+.gsv-package-layout {
+  display: block;
+}
+
+.gsv-package-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+
+.gsv-package-details,
+#gsv-package-details {
+  display: none !important;
+}
+
+/* Package cards */
+.gsv-card {
+  text-align: left;
+  width: 100%;
+  border-radius: 16px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+  color: #fff;
+  min-width: 0;
+}
+
+.gsv-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.gsv-card.is-selected {
+  border-color: rgba(255, 199, 44, 0.55);
+  box-shadow: 0 0 0 3px rgba(255, 199, 44, 0.16);
+}
+
+.gsv-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.gsv-card__title {
+  font-weight: 950;
+  font-size: 14px;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.gsv-card__price {
+  font-weight: 950;
+  color: rgba(255, 199, 44, 0.95);
+  white-space: nowrap;
+}
+
+.gsv-card__desc {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  line-height: 1.35;
+  margin-bottom: 10px;
+  min-height: 32px;
+}
+
+.gsv-card__chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.gsv-chip {
+  font-size: 11px;
+  font-weight: 850;
+  color: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+
+.gsv-card__cta {
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.9);
+  opacity: 0.9;
+}
+
+/* Included Services */
+.gsv-included {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gsv-included__title {
+  font-size: 12px;
+  font-weight: 950;
+  color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.gsv-included__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gsv-chip--included {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.gsv-included__empty {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* Lists */
+.gsv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gsv-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  min-width: 0;
+  user-select: none;
+}
+
+.gsv-row:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.gsv-row.is-selected {
+  border-color: rgba(255, 199, 44, 0.55);
+  box-shadow: 0 0 0 3px rgba(255, 199, 44, 0.14);
+}
+
+.gsv-row.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gsv-row__title {
+  font-weight: 950;
+  font-size: 13px;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.gsv-row__sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.25;
+}
+
+.gsv-row__price {
+  font-weight: 950;
+  color: rgba(255, 199, 44, 0.95);
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.gsv-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+
+/* =========================================================
+   SUMMARY
+========================================================= */
+.gsv-summary {
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 14px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+  min-width: 0;
+  max-height: calc(100vh - var(--gsv-sticky-top) - var(--gsv-sticky-bottom));
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  will-change: top;
+}
+
+.gsv-summary__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.gsv-summary__title {
+  font-weight: 950;
+  color: #fff;
+  font-size: 14px;
+}
+
+.gsv-linkbtn {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 900;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 999px;
+}
+
+.gsv-linkbtn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.gsv-summary__meta {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px 0;
+  margin: 10px 0;
+}
+
+.gsv-summary__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 6px 0;
+}
+
+.gsv-summary__label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 850;
+  flex: 0 0 auto;
+}
+
+.gsv-summary__value {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  font-weight: 850;
+  text-align: right;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#gsv-step-2 .gsv-summary__value,
+#gsv-step-3 .gsv-summary__value {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#gsv-step-3 #gsv-selected-slot,
+.gsv-step-panel#gsv-step-3 #gsv-selected-slot {
+  color: #ffc72c !important;
+  font-weight: 950 !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.gsv-summary__section {
+  margin-top: 10px;
+}
+
+.gsv-summary__sec-title {
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+}
+
+.gsv-summary__items {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.gsv-summary__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.gsv-summary__item:last-child {
+  border-bottom: 0;
+}
+
+.gsv-summary__itname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+.gsv-summary__itprice {
+  color: rgba(255, 255, 255, 0.92) !important;
+  font-weight: 950;
+  white-space: nowrap;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.gsv-summary__totals {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.gsv-summary__totalrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 8px 0;
+}
+
+.gsv-summary__totalrow--big .gsv-summary__tval {
+  font-size: 16px;
+}
+
+.gsv-summary__tlabel {
+  font-size: 12px;
+  font-weight: 950;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.04em;
+}
+
+.gsv-summary__tval {
+  font-size: 13px;
+  font-weight: 950;
+  color: rgba(255, 255, 255, 0.95);
+  white-space: nowrap;
+}
+
+.gsv-summary__discount {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(255, 199, 44, 0.95);
+  font-weight: 950;
+}
+
+.gsv-summary__actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* =========================================================
+   STEP 3
+========================================================= */
+.gsv-step3-top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.gsv-step3-kicker {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.gsv-step3-note {
+  display: block;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.gsv-step3 {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 14px;
+  align-items: start;
+  overflow: visible !important;
+}
+
+.gsv-step3__right {
+  position: relative !important;
+  overflow: visible !important;
+  align-self: start;
+  min-width: 0;
+}
+
+/* Scheduler UI */
+#gsv-sched {
+  width: 100%;
+}
+
+#gsv-sched-grid {
+  width: 100%;
+}
+
+#gsv-sched .gsv-sched__hdr {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px 6px 12px;
+  opacity: 0.9;
+}
+
+#gsv-sched .gsv-sched__hdrcell {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: center;
+}
+
+#gsv-sched .gsv-sched__grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+#gsv-sched .gsv-sched__cell--empty {
+  min-height: 220px;
+  border-radius: 18px;
+  background: transparent;
+  opacity: 0.2;
+}
+
+#gsv-sched .gsv-sched__cell {
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.25);
+  padding: 12px 10px 10px;
+  min-height: 220px;
+  position: relative;
+  overflow: hidden;
+}
+
+#gsv-sched .gsv-sched__celltop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+#gsv-sched .gsv-sched__cellnum {
+  font-size: 16px;
+  font-weight: 950;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+#gsv-sched .gsv-sched__cellmeta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+#gsv-sched .gsv-sched__today {
+  display: inline-block;
+  margin: -2px 0 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 950;
+  color: #111;
+  background: rgba(255, 199, 44, 0.92);
+  border: 1px solid rgba(255, 199, 44, 0.92);
+  box-shadow: 0 10px 22px rgba(255, 199, 44, 0.18);
+}
+
+#gsv-sched .gsv-sched__slots {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+#gsv-sched .gsv-sched__slot {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.92);
+  border-radius: 12px;
+  padding: 10px;
+  font-weight: 950;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    background 0.12s ease,
+    opacity 0.12s ease;
+  text-align: center;
+}
+
+#gsv-sched .gsv-sched__slot:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#gsv-sched .gsv-sched__slot.is-selected {
+  border-color: rgba(255, 199, 44, 0.55);
+  box-shadow: 0 0 0 3px rgba(255, 199, 44, 0.14);
+  background: rgba(255, 199, 44, 0.1);
+}
+
+#gsv-sched .gsv-sched__slot.is-busy,
+#gsv-sched .gsv-sched__slot:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+#gsv-sched .gsv-sched__noslots {
+  height: 38px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.18);
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 850;
+  font-size: 12px;
+}
+
+.gsv-skip {
+  user-select: none;
+}
+
+.gsv-skip input {
+  width: 16px;
+  height: 16px;
+  accent-color: #ffc72c;
+}
+
+#gsv-sched .gsv-sched__slot.is-disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* =========================================================
+   STEP 4 — PAYMENT LAYOUT
+========================================================= */
+#gsv-step-4 .gsv-step3 {
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 18px;
+}
+
+#gsv-step-4 .gsv-block {
+  min-height: 100%;
+}
+
+#gsv-step-4 .gsv-summary__meta .gsv-summary__row {
+  align-items: flex-start;
+}
+
+#gsv-step-4 .gsv-summary__value {
+  max-width: none !important;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+#gsv-step4-address {
+  display: block;
+  max-width: none !important;
+  white-space: normal !important;
+  text-align: right;
+}
+
+#gsv-step-4 .gsv-summary__items {
+  white-space: normal;
+  word-break: break-word;
+}
+
+#gsv-step-4 .gsv-summary__item {
+  align-items: flex-start;
+}
+
+#gsv-step-4 .gsv-summary__actions {
+  justify-content: space-between;
+  align-items: center;
+}
+
+#gsv-step4-payment-mode-wrap {
+  margin-top: 14px;
+  padding-top: 2px;
+}
+
+.gsv-step4-paymode {
+  display: grid;
+  gap: 12px;
+}
+
+.gsv-step4-paymode .gsv-row {
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: start;
+  padding: 14px;
+  border-radius: 16px;
+}
+
+.gsv-step4-paymode .gsv-row__main {
+  min-width: 0;
+}
+
+.gsv-step4-paymode .gsv-row__title {
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.gsv-step4-paymode .gsv-row__sub {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.gsv-step4-cardarea {
+  margin-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+}
+
+.gsv-step4-cardgrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.gsv-step4-cardgrid--2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gsv-step4-cardmount,
+.gsv-step4-cardinput,
+#gsv-step4-embedded-checkout {
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.gsv-step4-cardmount {
+  display: flex;
+  align-items: center;
+}
+
+.gsv-step4-cardinput::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.gsv-step4-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+}
+
+.gsv-step4-check input {
+  width: 16px;
+  height: 16px;
+  accent-color: #ffc72c;
+}
+
+.gsv-step4-notes-wrap {
+  margin-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
+}
+
+.gsv-step4-notes-wrap .gsv-field__textarea {
+  min-height: 110px;
+}
+
+/* Stripe */
+#gsv-step4-embedded-wrap {
+  overflow: hidden;
+}
+
+#gsv-step4-embedded-checkout .StripeElement,
+#gsv-step4-embedded-checkout iframe {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+/* Google Places dropdown */
+.pac-container {
+  border-radius: 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: rgba(0, 0, 0, 0.92) !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5) !important;
+  overflow: hidden !important;
+  z-index: 999999 !important;
+}
+
+.pac-item {
+  color: rgba(255, 255, 255, 0.88) !important;
+  padding: 10px 12px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  font-size: 13px !important;
+}
+
+.pac-item:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.pac-item-query {
+  color: #fff !important;
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+@media (max-width: 1100px) {
+  .gsv-address-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .gsv-address-map {
+    height: 240px;
+  }
+
+  #gsv-step-4 .gsv-step3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .gsv-step2 {
+    grid-template-columns: 1fr;
+  }
+
+  .gsv-step3 {
+    grid-template-columns: 1fr;
+  }
+
+  .gsv-summary {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: auto !important;
+    max-height: none;
+    overflow: visible;
+  }
+
+  #gsv-sched-grid {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #gsv-sched .gsv-sched__hdr,
+  #gsv-sched .gsv-sched__grid {
+    min-width: 860px;
+  }
+}
+
+@media (max-width: 900px) {
+  .gsv-grid--4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gsv-step2-search {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .gsv-grid--2,
+  .gsv-grid--3,
+  .gsv-grid--4,
+  .gsv-address-confirmed-grid,
+  .gsv-step4-cardgrid--2 {
+    grid-template-columns: 1fr;
+  }
+
+  .gsv-booking__card {
+    padding: 18px;
+  }
+
+  .gsv-summary__actions {
+    justify-content: stretch;
+  }
+
+  .gsv-summary__actions .gsv-btn {
+    width: 100%;
+  }
+
+  .gsv-address-map {
+    height: 220px;
+  }
+}

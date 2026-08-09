@@ -1,0 +1,894 @@
+
+/* =========================================================
+   GSV DASHBOARD — CSS (FULL REPLACEMENT)
+   ✅ Account tab styles LOCKED (unchanged)
+   ✅ Calendar clickability hard-fixed (Webflow/FullCalendar)
+   ✅ Event details modal added (scoped)
+   ✅ FIX: Day-of-week header background + text color (no white bar)
+   ✅ NEW: "Upcoming Appointments" styling (client view)
+        - clean stacked rows (no weird split blocks)
+        - better contrast / spacing
+        - safe wrapping
+========================================================= */
+
+.gsv-dash{
+  min-height: 100vh;
+  padding: 26px 22px 44px;
+  background:
+    radial-gradient(1200px 600px at 80% 20%, rgba(255,199,44,.18), transparent 60%),
+    radial-gradient(900px 500px at 20% 80%, rgba(255,255,255,.10), transparent 55%),
+    #0b0b0b;
+  color: #fff;
+  font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+/* prevent any weird Webflow overlays from intercepting */
+.gsv-dash, .gsv-dash *{ box-sizing: border-box; }
+
+.gsv-dash__top{
+  max-width: 1100px;
+  margin: 0 auto 16px;
+  display:flex;
+  align-items:center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.gsv-dash__brand{
+  display:flex;
+  align-items:center;
+  gap: 14px;
+}
+
+.gsv-dash__mark{
+  width: 100px !important;
+  height: 100px !important;
+  border-radius: 22px !important;
+  background: rgba(255,199,44,.18);
+  border: 1px solid rgba(255,199,44,.25);
+  box-shadow: 0 18px 45px rgba(0,0,0,.4);
+  background-size: cover !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+}
+
+.gsv-dash__welcome{
+  font-size: 12px;
+  color: rgba(255,255,255,.65);
+  margin-bottom: 2px;
+}
+
+.gsv-dash__name{
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: .2px;
+}
+
+.gsv-dash__top-actions{
+  display:flex;
+  gap: 10px;
+  align-items:center;
+}
+
+.gsv-dash__btn{
+  appearance:none;
+  border: 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  text-decoration:none;
+  transition: transform .12s ease, box-shadow .15s ease, background .15s ease, opacity .15s ease;
+}
+.gsv-dash__btn:active{ transform: translateY(1px); }
+
+.gsv-dash__btn--primary{
+  background:#ffc72c;
+  color:#111;
+  box-shadow: 0 12px 30px rgba(255,199,44,.25);
+}
+.gsv-dash__btn--primary:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 18px 42px rgba(255,199,44,.35);
+}
+
+.gsv-dash__btn--ghost{
+  background: rgba(255,255,255,.06);
+  color:#fff;
+  border: 1px solid rgba(255,255,255,.12);
+}
+.gsv-dash__btn--ghost:hover{ opacity: .9; transform: translateY(-1px); }
+
+.gsv-dash__tabs{
+  max-width: 1100px;
+  margin: 0 auto;
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.gsv-dash__tab{
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.82);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 900;
+  cursor:pointer;
+  transition: all .15s ease;
+}
+.gsv-dash__tab.is-active{
+  background: rgba(255,199,44,.18);
+  border-color: rgba(255,199,44,.35);
+  color:#fff;
+  box-shadow: 0 18px 50px rgba(0,0,0,.35);
+}
+
+.gsv-dash__status{
+  max-width: 1100px;
+  margin: 10px auto 0;
+  min-height: 22px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #ffc72c;
+}
+
+.gsv-dash__panels{
+  max-width: 1100px;
+  margin: 14px auto 0;
+}
+
+.gsv-dash__panel{ display:none; }
+.gsv-dash__panel.is-active{ display:block; }
+
+.gsv-dash__card{
+  border-radius: 22px;
+  padding: 22px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 20px 70px rgba(0,0,0,.55);
+  backdrop-filter: blur(12px);
+}
+
+.gsv-dash__grid2{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.gsv-dash__card-title{
+  font-weight: 950;
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+
+.gsv-dash__stats{
+  display:flex;
+  gap: 12px;
+  margin-top: 10px;
+}
+.gsv-dash__stat{
+  flex: 1;
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(0,0,0,.25);
+  border: 1px solid rgba(255,255,255,.10);
+}
+.gsv-dash__stat-num{
+  font-size: 22px;
+  font-weight: 950;
+}
+.gsv-dash__stat-label{
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(255,255,255,.65);
+  font-weight: 800;
+}
+
+.gsv-dash__panel-head{
+  display:flex;
+  align-items:flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.gsv-dash__h2{
+  margin: 0;
+  font-size: 18px;
+  font-weight: 950;
+}
+.gsv-dash__p{
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: rgba(255,255,255,.70);
+}
+
+.gsv-dash__search{ min-width: 280px; }
+
+.gsv-dash__input{
+  width:100%;
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(0,0,0,.35);
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+
+/* labels used by HTML */
+.gsv-dash__label{
+  display:block;
+  margin-top: 10px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 900;
+  color: rgba(255,255,255,.70);
+  letter-spacing: .04em;
+}
+.gsv-dash__grid2--tight{
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* PROPERTY GRID */
+.gsv-dash__tiles{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.gsv-dash__tile-link{
+  display:block;
+  color:inherit;
+  text-decoration:none;
+}
+.gsv-dash__tile{
+  border-radius: 22px;
+  padding: 14px;
+  background: rgba(0,0,0,.25);
+  border: 1px solid rgba(255,255,255,.10);
+  transition: transform .12s ease, box-shadow .15s ease, border-color .15s ease;
+}
+.gsv-dash__tile:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 22px 60px rgba(0,0,0,.45);
+  border-color: rgba(255,255,255,.14);
+}
+
+/* SAFE COLLAGE */
+.gsv-collage{
+  width:100%;
+  aspect-ratio: 16 / 9;
+  display:grid;
+  grid-template-columns: 3fr 1fr;
+  grid-template-rows: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.gsv-collage__slot{
+  position: relative;
+  overflow:hidden;
+  border: 1px solid rgba(255,255,255,.10);
+  background:
+    radial-gradient(800px 400px at 20% 20%, rgba(255,199,44,.14), transparent 55%),
+    rgba(255,255,255,.06);
+}
+.gsv-collage__slot--main{
+  grid-column: 1;
+  grid-row: 1 / 4;
+  border-radius: 18px;
+}
+.gsv-collage__slot--t1{ grid-column: 2; grid-row: 1; border-radius: 16px; }
+.gsv-collage__slot--t2{ grid-column: 2; grid-row: 2; border-radius: 16px; }
+.gsv-collage__slot--t3{ grid-column: 2; grid-row: 3; border-radius: 16px; }
+
+.gsv-collage__img{
+  width:100%;
+  height:100%;
+  object-fit: cover;
+  display:block;
+}
+
+.gsv-collage__ph{
+  position:absolute;
+  inset:0;
+  display:grid;
+  place-items:center;
+  color: rgba(255,255,255,.55);
+  font-weight: 900;
+  letter-spacing: .02em;
+  font-size: 12px;
+}
+.gsv-collage__ph svg{
+  width: 34px;
+  height: 34px;
+  opacity: .55;
+}
+
+/* CARD META */
+.gsv-dash__tile-addr{
+  font-weight: 950;
+  font-size: 15px;
+}
+.gsv-dash__tile-sub{
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: rgba(255,255,255,.70);
+}
+.gsv-dash__tile-row{
+  display:flex;
+  align-items:flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+.gsv-status{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-weight: 950;
+  font-size: 11px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.92);
+}
+.gsv-agent{
+  display:flex;
+  align-items:center;
+  gap: 12px;
+  margin-top: 10px;
+}
+.gsv-agent__avatar{
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+}
+.gsv-agent__name{
+  font-size: 14.5px;
+  font-weight: 950;
+  color: rgba(255,255,255,.94);
+}
+
+/* =========================
+   CALENDAR (SCOPED)
+   ========================= */
+.gsv-cal{ padding: 18px; }
+
+.gsv-cal__top{
+  display:flex;
+  align-items:flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.gsv-cal__kicker{
+  font-size: 12px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.55);
+  font-weight: 950;
+}
+
+.gsv-cal__sub{
+  font-size: 13px;
+  color: rgba(255,255,255,.72);
+  font-weight: 850;
+}
+
+.gsv-cal__actions{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content:flex-end;
+}
+
+.gsv-cal__seg{
+  display:inline-flex;
+  border-radius: 999px;
+  overflow:hidden;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.25);
+}
+
+.gsv-cal__segbtn{
+  border:0;
+  background: transparent;
+  color: rgba(255,255,255,.80);
+  font-weight: 950;
+  padding: 10px 12px;
+  cursor:pointer;
+}
+
+.gsv-cal__segbtn.is-active{
+  background: rgba(255,199,44,.18);
+  color:#fff;
+}
+
+.gsv-cal__nav{
+  display:inline-flex;
+  gap: 8px;
+}
+
+.gsv-cal__navbtn{
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color:#fff;
+  font-weight: 950;
+  font-size: 22px;
+  cursor:pointer;
+}
+
+.gsv-cal__frame{
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.22);
+  overflow: hidden;
+  position: relative;
+  z-index: 2;
+}
+
+.gsv-cal__title{
+  padding: 14px 14px 10px;
+  font-weight: 950;
+  font-size: 24px;
+}
+
+#gsv-calendar{
+  padding: 0 12px 12px;
+  position: relative;
+  z-index: 3;
+}
+
+/* FullCalendar base */
+.gsv-cal .fc{ color:#fff; font-family: inherit; }
+.gsv-cal .fc .fc-scrollgrid,
+.gsv-cal .fc .fc-scrollgrid-section > td{ border-color: rgba(255,255,255,.12); }
+.gsv-cal .fc .fc-daygrid-day,
+.gsv-cal .fc .fc-timegrid-slot{ border-color: rgba(255,255,255,.10); }
+
+.gsv-cal .fc .fc-daygrid-day-number{
+  color: rgba(255,255,255,.92);
+  text-decoration:none;
+  font-weight: 850;
+}
+
+/* =========================
+   ✅ FIX: DAY-OF-WEEK ROW (remove white bar)
+   ========================= */
+.gsv-cal .fc .fc-col-header,
+.gsv-cal .fc .fc-scrollgrid-section-header td,
+.gsv-cal .fc .fc-col-header-cell{
+  background: rgba(0,0,0,.38) !important;
+}
+
+.gsv-cal .fc .fc-col-header-cell-cushion{
+  color: rgba(255,255,255,.92) !important;
+  font-weight: 950;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-size: 12px;
+  padding: 10px 6px;
+  text-decoration: none !important;
+}
+
+.gsv-cal .fc .fc-col-header-cell-cushion:hover{
+  color: #ffc72c !important;
+}
+
+.gsv-cal .fc,
+.gsv-cal .fc table,
+.gsv-cal .fc .fc-scrollgrid{
+  background: transparent !important;
+}
+
+/* Event pill look */
+.gsv-cal .fc .fc-event{
+  border: 1px solid rgba(255,199,44,.45);
+  background: rgba(255,199,44,.18);
+  color: #fff;
+  border-radius: 12px;
+  padding: 2px 6px;
+  font-weight: 850;
+}
+
+/* Footer */
+.gsv-cal__foot{
+  display:flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  color: rgba(255,255,255,.70);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.gsv-cal__legend{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.gsv-cal__dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,199,44,.65);
+  border: 1px solid rgba(255,199,44,.9);
+}
+
+/* =========================================================
+   FULLCALENDAR CLICK FIX (WEBFLOW SAFETY)
+========================================================= */
+.gsv-cal .fc,
+.gsv-cal .fc *{
+  pointer-events: auto !important;
+}
+
+.gsv-cal .fc .fc-highlight,
+.gsv-cal .fc .fc-daygrid-bg-harness,
+.gsv-cal .fc .fc-timegrid-col-bg,
+.gsv-cal .fc .fc-bg-event,
+.gsv-cal .fc .fc-non-business{
+  pointer-events: none !important;
+}
+
+.gsv-cal .fc .fc-daygrid-event-harness,
+.gsv-cal .fc .fc-timegrid-event-harness,
+.gsv-cal .fc .fc-event,
+.gsv-cal .fc .fc-event-main,
+.gsv-cal .fc .fc-event-main-frame,
+.gsv-cal .fc .fc-event-title,
+.gsv-cal .fc .fc-event-time{
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  position: relative;
+  z-index: 50;
+}
+
+.gsv-cal .fc a{
+  pointer-events: auto !important;
+}
+
+/* =========================
+   UPCOMING APPOINTMENTS (CLIENT VIEW)
+   NOTE: This assumes your JS renders markup with:
+     #gsv-calendar .gsv-upcoming
+     .gsv-upcoming__list
+     .gsv-upcoming__item
+     .gsv-upcoming__title
+     .gsv-upcoming__meta
+   If your class names differ, tell me what they are and I’ll map them.
+   ========================= */
+#gsv-calendar .gsv-upcoming{
+  width: 100%;
+  padding: 14px 14px 16px;
+}
+
+#gsv-calendar .gsv-upcoming__list{
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+#gsv-calendar .gsv-upcoming__item{
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+
+  padding: 12px 14px;
+  border-radius: 14px;
+
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+  box-shadow: 0 10px 26px rgba(0,0,0,.35);
+  backdrop-filter: blur(10px);
+
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+
+  white-space: normal;
+  overflow: hidden;
+}
+
+#gsv-calendar .gsv-upcoming__item:hover{
+  background: rgba(255,255,255,.085);
+  border-color: rgba(255,199,44,.35);
+  box-shadow: 0 14px 34px rgba(0,0,0,.45);
+}
+#gsv-calendar .gsv-upcoming__item:focus{
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255,199,44,.25), 0 14px 34px rgba(0,0,0,.45);
+}
+
+#gsv-calendar .gsv-upcoming__title{
+  font-size: 15px;
+  font-weight: 950;
+  color: rgba(255,255,255,.95);
+  line-height: 1.2;
+  width: 100%;
+  display: block;
+}
+
+#gsv-calendar .gsv-upcoming__meta{
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 850;
+  color: rgba(255,255,255,.78);
+  line-height: 1.25;
+
+  width: 100%;
+  display: block;
+
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* CLIENTS (unchanged) */
+#gsv-clients-list{
+  display:flex;
+  flex-direction:column;
+  gap: 12px;
+}
+
+/* ACCOUNT (locked) */
+.gsv-dash__avatar{
+  display:flex;
+  flex-direction: column;
+  align-items:center;
+  justify-content:center;
+  gap: 14px;
+  margin-top: 10px;
+  text-align:center;
+}
+#gsv-avatar-img{
+  width: 240px;
+  height: 240px;
+  border-radius: 42px;
+  object-fit: cover;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 24px 70px rgba(0,0,0,.55);
+}
+#gsv-avatar-file,
+#gsv-logo1-file,
+#gsv-logo2-file{
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0,0,0,0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.gsv-dash__logo-row{
+  display:flex;
+  align-items:center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.gsv-dash__logo-preview{
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.28);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+}
+.gsv-dash__logo-preview img{ width:100%; height:100%; object-fit: cover; }
+.gsv-dash__save-wrap{
+  display:flex;
+  justify-content:center;
+  margin-top: 18px;
+  margin-bottom: 14px;
+}
+#gsv-prof-save{
+  min-width: 240px;
+  border-radius: 16px;
+  padding: 14px 18px;
+}
+
+/* MODALS */
+.gsv-modal{
+  position: fixed;
+  inset: 0;
+  display:none;
+  z-index: 9999;
+}
+.gsv-modal.is-open{ display:block; }
+
+.gsv-modal__backdrop{
+  position:absolute;
+  inset:0;
+  background: rgba(0,0,0,.70);
+  backdrop-filter: blur(6px);
+}
+
+.gsv-modal__panel{
+  position: relative;
+  width: min(560px, calc(100vw - 28px));
+  margin: 8vh auto 0;
+  border-radius: 22px;
+  padding: 18px;
+  background: rgba(20,20,20,.92);
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 30px 120px rgba(0,0,0,.70);
+}
+
+.gsv-modal__title{
+  font-weight: 950;
+  font-size: 18px;
+  margin-top: 6px;
+}
+.gsv-modal__sub{
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgba(255,255,255,.70);
+  font-weight: 800;
+}
+.gsv-modal__actions{
+  display:flex;
+  justify-content:flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.gsv-modal__close{
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.08);
+  color: rgba(255,255,255,.92);
+  font-weight: 950;
+  font-size: 22px;
+  line-height: 1;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+  transition: transform .12s ease, opacity .15s ease, border-color .15s ease, background .15s ease;
+  padding: 0;
+}
+.gsv-modal__close:hover{
+  transform: translateY(-1px);
+  opacity: .95;
+  border-color: rgba(255,199,44,.35);
+  background: rgba(255,199,44,.10);
+}
+.gsv-modal__close:active{ transform: translateY(1px); }
+
+.gsv-evmodal .gsv-modal__panel{
+  width: min(720px, calc(100vw - 28px));
+  border-radius: 26px;
+  padding: 20px;
+  background:
+    radial-gradient(900px 420px at 75% 20%, rgba(255,199,44,.20), transparent 62%),
+    rgba(20,20,20,.92);
+}
+
+.gsv-evmodal__kicker{
+  font-size: 12px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.62);
+  font-weight: 950;
+}
+
+.gsv-evmodal__title{
+  margin-top: 6px;
+  font-weight: 950;
+  font-size: 20px;
+  letter-spacing: .2px;
+}
+
+.gsv-evmodal__when{
+  margin-top: 4px;
+  color: rgba(255,255,255,.72);
+  font-weight: 850;
+  font-size: 13px;
+}
+
+.gsv-evmodal__box{
+  margin-top: 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.22);
+  overflow:hidden;
+}
+
+.gsv-evrow{
+  display:grid;
+  grid-template-columns: 160px 1fr;
+  gap: 10px;
+  padding: 14px 16px;
+  border-top: 1px solid rgba(255,255,255,.10);
+}
+.gsv-evrow:first-child{ border-top: 0; }
+
+.gsv-evrow__label{
+  font-size: 12px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.55);
+  font-weight: 950;
+}
+
+.gsv-evrow__value{
+  font-weight: 900;
+  color: rgba(255,255,255,.92);
+}
+
+.gsv-evrow__value--pre{
+  white-space: pre-wrap;
+  font-weight: 850;
+  color: rgba(255,255,255,.86);
+}
+
+/* responsive */
+@media (max-width: 900px){
+  .gsv-dash__grid2{ grid-template-columns: 1fr; }
+  .gsv-dash__tiles{ grid-template-columns: 1fr; }
+  .gsv-cal__top{ flex-direction: column; align-items:flex-start; }
+  .gsv-cal__actions{ justify-content:flex-start; }
+  .gsv-evrow{ grid-template-columns: 1fr; }
+
+  #gsv-calendar .gsv-upcoming{
+    padding: 12px 12px 14px;
+  }
+  #gsv-calendar .gsv-upcoming__item{
+    padding: 12px 12px;
+    border-radius: 12px;
+  }
+  #gsv-calendar .gsv-upcoming__title{
+    font-size: 14px;
+  }
+  #gsv-calendar .gsv-upcoming__meta{
+    font-size: 12.5px;
+  }
+}
+@media (max-width: 520px){
+  .gsv-dash__top{ flex-direction: column; align-items:flex-start; }
+  .gsv-dash__search{ min-width: 0; width: 100%; }
+}
+
+/* EVENT MODAL link color */
+.gsv-evmodal a,
+#gsv-event-modal a{
+  color: #ffc72c !important;
+  text-decoration: underline;
+  font-weight: 900;
+}
+.gsv-evmodal a:hover,
+#gsv-event-modal a:hover{
+  opacity: .9;
+}

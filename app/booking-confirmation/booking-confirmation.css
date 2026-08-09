@@ -1,0 +1,425 @@
+/* ================================
+   GSV BOOKING CONFIRMATION
+   FULL DROP-IN REPLACEMENT
+================================ */
+
+/* ================================
+   GLOBAL PAGE
+================================ */
+
+#gsv-step-4.gsv-booking-step{
+  padding: 60px 20px;
+  background: #f5f5f5;
+  min-height: 100vh;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  box-sizing: border-box;
+}
+
+#gsv-step-4.gsv-booking-step *,
+#gsv-step-4.gsv-booking-step *::before,
+#gsv-step-4.gsv-booking-step *::after{
+  box-sizing: border-box;
+}
+
+.gsv-confirm{
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ================================
+   HEADER
+================================ */
+
+.gsv-confirm__header{
+  margin-bottom: 40px;
+}
+
+.gsv-confirm__eyebrow{
+  text-transform: uppercase;
+  letter-spacing: .14em;
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffc72c;
+  margin-bottom: 10px;
+}
+
+.gsv-confirm__title{
+  font-size: 40px;
+  line-height: 1.1;
+  font-weight: 800;
+  color: #1b1b1b;
+  margin: 0 0 8px 0;
+}
+
+.gsv-confirm__sub{
+  font-size: 16px;
+  line-height: 1.55;
+  color: #555;
+  max-width: 700px;
+  margin: 0;
+}
+
+/* ================================
+   GRID LAYOUT
+================================ */
+
+.gsv-confirm__grid{
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, .8fr);
+  gap: 26px;
+  align-items: start;
+}
+
+.gsv-confirm__main{
+  display: grid;
+  gap: 26px;
+  min-width: 0;
+}
+
+.gsv-confirm__side{
+  display: grid;
+  min-width: 0;
+}
+
+/* ================================
+   CARD
+================================ */
+
+.gsv-confirm__card{
+  background: linear-gradient(140deg, #1c1c1c, #101010);
+  border-radius: 24px;
+  padding: 26px;
+  border: 1px solid rgba(255,255,255,.06);
+  box-shadow: 0 20px 60px rgba(0,0,0,.18);
+  color: #fff;
+  min-width: 0;
+}
+
+.gsv-confirm__card--sticky{
+  position: sticky;
+  top: 24px;
+}
+
+.gsv-confirm__card-head{
+  margin-bottom: 18px;
+}
+
+.gsv-confirm__card-title{
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 800;
+  margin: 0;
+}
+
+/* ================================
+   STATUS
+================================ */
+
+.gsv-confirm__status-wrap{
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.gsv-confirm__status-badge{
+  background: #ffc72c;
+  color: #1b1b1b;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+.gsv-confirm__status-meta{
+  font-size: 13px;
+  color: #aaa;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+/* ================================
+   KEY VALUE GRID
+================================ */
+
+.gsv-confirm-kv{
+  display: grid;
+  gap: 14px;
+}
+
+.gsv-confirm-kv--two-col{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gsv-confirm-kv__row{
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  min-width: 0;
+}
+
+.gsv-confirm-kv__row:last-child{
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.gsv-confirm-kv__row--full{
+  grid-column: span 2;
+}
+
+.gsv-confirm-kv__label{
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: #888;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.gsv-confirm-kv__value{
+  font-size: 15px;
+  line-height: 1.55;
+  color: #fff;
+  word-break: break-word;
+}
+
+/* ================================
+   SUMMARY
+================================ */
+
+.gsv-confirm__summary-block{
+  margin-bottom: 18px;
+}
+
+.gsv-confirm__summary-label{
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: #ffc72c;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.gsv-confirm__summary-value{
+  font-size: 15px;
+  line-height: 1.55;
+  color: #fff;
+  word-break: break-word;
+}
+
+.gsv-confirm__summary-list{
+  font-size: 14px;
+  line-height: 1.65;
+  color: #fff;
+  word-break: break-word;
+}
+
+.gsv-confirm__summary-list .gsv-summary__item,
+.gsv-confirm__summary-list > div{
+  margin-bottom: 6px;
+}
+
+.gsv-confirm__summary-list .gsv-summary__item:last-child,
+.gsv-confirm__summary-list > div:last-child{
+  margin-bottom: 0;
+}
+
+.gsv-confirm__totals{
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+
+.gsv-confirm__total-row{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.gsv-confirm__total-row span{
+  color: #aaa;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.gsv-confirm__total-row strong{
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1.4;
+  text-align: right;
+  word-break: break-word;
+}
+
+.gsv-confirm__discount-wrap{
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 10px;
+  color: #ffc72c;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.gsv-confirm__discount-wrap strong{
+  font-weight: 800;
+  text-align: right;
+}
+
+/* ================================
+   BUTTONS
+================================ */
+
+.gsv-confirm__actions{
+  margin-top: 24px;
+  display: grid;
+  gap: 12px;
+}
+
+.gsv-btn{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 999px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform .2s ease, box-shadow .2s ease, background .2s ease, border-color .2s ease;
+  border: 0;
+  cursor: pointer;
+  text-align: center;
+}
+
+.gsv-btn--primary{
+  background: #ffc72c;
+  color: #1b1b1b;
+}
+
+.gsv-btn--primary:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(255,199,44,.3);
+}
+
+.gsv-btn--ghost{
+  border: 1px solid rgba(255,255,255,.15);
+  color: #fff;
+  background: transparent;
+}
+
+.gsv-btn--ghost:hover{
+  background: rgba(255,255,255,.05);
+}
+
+/* ================================
+   OPTIONAL EMPTY / ERROR STATES
+================================ */
+
+#gsv-cf-empty{
+  display: none;
+  padding: 24px;
+  border-radius: 20px;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.06);
+  color: #333;
+}
+
+.gsv-confirm__status-error{
+  color: #ff8a8a;
+}
+
+.gsv-confirm__status-success{
+  color: #6dff9b;
+}
+
+/* ================================
+   RESPONSIVE
+================================ */
+
+@media (max-width: 1100px){
+  .gsv-confirm__title{
+    font-size: 34px;
+  }
+
+  .gsv-confirm__grid{
+    grid-template-columns: 1fr;
+  }
+
+  .gsv-confirm__card--sticky{
+    position: relative;
+    top: auto;
+  }
+}
+
+@media (max-width: 1000px){
+  .gsv-confirm-kv--two-col{
+    grid-template-columns: 1fr;
+  }
+
+  .gsv-confirm-kv__row--full{
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 768px){
+  #gsv-step-4.gsv-booking-step{
+    padding: 32px 14px;
+  }
+
+  .gsv-confirm__header{
+    margin-bottom: 26px;
+  }
+
+  .gsv-confirm__title{
+    font-size: 28px;
+  }
+
+  .gsv-confirm__sub{
+    font-size: 15px;
+  }
+
+  .gsv-confirm__grid,
+  .gsv-confirm__main{
+    gap: 16px;
+  }
+
+  .gsv-confirm__card{
+    padding: 18px;
+    border-radius: 18px;
+  }
+
+  .gsv-confirm__card-title{
+    font-size: 18px;
+  }
+
+  .gsv-confirm__status-wrap{
+    gap: 12px;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .gsv-confirm-kv__row{
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .gsv-confirm__total-row,
+  .gsv-confirm__discount-wrap{
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .gsv-confirm__total-row strong,
+  .gsv-confirm__discount-wrap strong{
+    text-align: left;
+  }
+}

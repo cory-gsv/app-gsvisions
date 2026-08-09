@@ -1,0 +1,122 @@
+/* =========================================================
+   GSV DASH — SERVICES / PRODUCT MODAL / DRAG UI
+========================================================= */
+
+#gsv-product-modal .gsv-modal__panel{
+  width: min(1400px, calc(100vw - 40px)) !important;
+  max-width: 1400px !important;
+  height: 90vh !important;
+  max-height: 90vh !important;
+  display:flex !important;
+  flex-direction:column !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  box-sizing:border-box !important;
+}
+
+#gsv-product-modal .gsv-modal__panel *{
+  box-sizing:border-box !important;
+}
+
+#gsv-product-modal .gsv-dash__label{
+  display:block !important;
+  margin: 0 0 6px !important;
+  line-height: 1.2 !important;
+}
+
+#gsv-product-modal .gsv-dash__input,
+#gsv-product-modal textarea.gsv-dash__input,
+#gsv-product-modal select.gsv-dash__input{
+  width:100% !important;
+  line-height: 1.25 !important;
+}
+
+#gsv-product-modal textarea.gsv-dash__input{
+  display:block !important;
+  min-height: 96px !important;
+  resize: vertical !important;
+}
+
+#gsv-product-modal .gsv-dash__grid2 > *{
+  min-width: 0 !important;
+}
+
+#gsv-product-modal .gsv-modal__actions{
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 10 !important;
+  background: rgba(15,15,15,.88) !important;
+  backdrop-filter: blur(10px) !important;
+  border-top: 1px solid rgba(255,255,255,.10) !important;
+  padding: 14px 0 !important;
+  margin-top: 16px !important;
+}
+
+#gsv-product-modal #gsv-pm-service-fields .gsv-dash__grid2.gsv-dash__grid2--tight{
+  display:grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 16px !important;
+}
+
+#gsv-product-modal .gsv-pkg-sel-item[draggable="true"]{
+  cursor: grab;
+}
+
+#gsv-product-modal .gsv-pkg-sel-item.is-dragging{
+  opacity: .55;
+}
+
+#gsv-product-modal .gsv-pkg-sel-ph{
+  border-radius:14px;
+  border:1px dashed rgba(255,199,44,.55);
+  background:rgba(255,199,44,.08);
+}
+
+.gsv-dragging,
+.gsv-dragging *{
+  cursor: grabbing !important;
+}
+
+.gsv-drag-ghost{
+  pointer-events:none !important;
+}
+
+.gsv-drag-placeholder{
+  border-radius:18px;
+  border:1px dashed rgba(255,255,255,.18);
+  background:rgba(255,255,255,.03);
+}
+
+@media (max-width: 1100px){
+  #gsv-product-modal .gsv-dash__grid2{
+    grid-template-columns: 1fr !important;
+  }
+
+  #gsv-product-modal #gsv-pm-service-fields .gsv-dash__grid2.gsv-dash__grid2--tight{
+    grid-template-columns: 1fr !important;
+  }
+
+  #gsv-pm-package-services > div[style*="grid-template-columns"]{
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 700px){
+  #gsv-product-modal .gsv-modal__panel{
+    width: calc(100vw - 16px) !important;
+    height: 92vh !important;
+    max-height: 92vh !important;
+  }
+
+  #gsv-product-modal textarea.gsv-dash__input{
+    min-height: 120px !important;
+  }
+
+  #gsv-product-modal .gsv-modal__actions{
+    padding: 12px 0 !important;
+  }
+
+  #gsv-product-modal .gsv-modal__actions > div{
+    flex-wrap: wrap !important;
+  }
+}

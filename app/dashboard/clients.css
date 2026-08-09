@@ -1,0 +1,228 @@
+/* =========================================================
+   GSV DASH — CLIENTS TAB + CLIENT MODAL (FULL DROP-IN CSS)
+========================================================= */
+
+#gsv-clients-list{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  margin-top:14px;
+}
+
+#gsv-clients-list > *{
+  border-radius:22px;
+  padding:16px 18px;
+  background:rgba(0,0,0,.25);
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:0 18px 60px rgba(0,0,0,.45);
+  backdrop-filter:blur(12px);
+  display:grid !important;
+  grid-template-columns: minmax(260px, 1.35fr) minmax(240px, 0.95fr) minmax(190px, 0.70fr) !important;
+  align-items:center;
+  gap:14px;
+}
+
+#gsv-clients-list .gsv-client__left{
+  display:flex !important;
+  align-items:center !important;
+  gap:14px !important;
+  min-width:0;
+}
+
+#gsv-clients-list .gsv-client__avatar{
+  width:72px !important;
+  height:72px !important;
+  border-radius:999px !important;
+  object-fit:cover !important;
+  display:block !important;
+  border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.08);
+  flex:0 0 72px;
+}
+
+#gsv-clients-list .gsv-client__avatar--initial{
+  display:grid !important;
+  place-items:center !important;
+  font-weight:950;
+  color:rgba(255,255,255,.92);
+}
+
+#gsv-clients-list .gsv-client__meta{
+  display:flex !important;
+  flex-direction:column !important;
+  min-width:0;
+}
+
+#gsv-clients-list .gsv-client__name{
+  font-weight:950;
+  font-size:15px;
+  color:rgba(255,255,255,.96);
+  line-height:1.15;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  margin-bottom:8px;
+}
+
+#gsv-clients-list .gsv-client__email{
+  font-weight:900;
+  font-size:13px;
+  color:rgba(255,255,255,.82);
+  line-height:1.25;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  margin-bottom:6px;
+}
+
+#gsv-clients-list .gsv-client__phone{
+  font-weight:850;
+  font-size:13px;
+  color:rgba(255,255,255,.72);
+  line-height:1.25;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+#gsv-clients-list .gsv-client__stats{
+  display:grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 6px 22px !important;
+  justify-items:start !important;
+  align-items:start !important;
+  min-width: 220px;
+}
+
+#gsv-clients-list .gsv-client__stat{
+  display:flex !important;
+  flex-direction:column !important;
+  gap:6px !important;
+}
+
+#gsv-clients-list .gsv-client__statlab{
+  font-size:12px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:rgba(255,255,255,.62);
+  font-weight:950;
+}
+
+#gsv-clients-list .gsv-client__statnum{
+  font-size:18px;
+  font-weight:950;
+  color:rgba(255,255,255,.95);
+  line-height:1.05;
+}
+
+#gsv-clients-list .gsv-client__actions{
+  display:flex !important;
+  justify-content:flex-end !important;
+  gap:10px !important;
+  align-items:center !important;
+}
+
+#gsv-clients-list .gsv-client__actions button,
+#gsv-clients-list .gsv-client__actions a{
+  white-space:nowrap;
+}
+
+#gsv-client-modal .gsv-modal__panel{
+  width: min(1040px, calc(100vw - 48px)) !important;
+  max-width: 1040px !important;
+}
+
+#gsv-client-modal input[type="file"]{
+  position:absolute !important;
+  width:1px !important;
+  height:1px !important;
+  padding:0 !important;
+  margin:-1px !important;
+  overflow:hidden !important;
+  clip:rect(0,0,0,0) !important;
+  white-space:nowrap !important;
+  border:0 !important;
+}
+
+#gsv-client-modal .gsv-dash__logo-preview{
+  width:72px !important;
+  height:72px !important;
+  border-radius:16px !important;
+  overflow:hidden !important;
+  border:1px solid rgba(255,255,255,.12) !important;
+  background: rgba(255,255,255,.06) !important;
+  background-image:none !important;
+  display:grid !important;
+  place-items:center !important;
+}
+
+#gsv-client-modal .gsv-dash__logo-preview img{
+  width:100% !important;
+  height:100% !important;
+  display:block !important;
+  object-fit:cover !important;
+  background:transparent !important;
+}
+
+#gsv-client-modal #gsv-cm-avatar-img{
+  width:110px !important;
+  height:110px !important;
+  border-radius:24px !important;
+  object-fit:cover !important;
+  border:1px solid rgba(255,255,255,.12) !important;
+  background:rgba(255,255,255,.08) !important;
+  display:block !important;
+}
+
+#gsv-client-modal .gsv-dash__card{
+  border-radius:22px !important;
+}
+
+#gsv-product-modal .gsv-modal__panel{
+  max-width: 1400px !important;
+  width: min(1400px, calc(100vw - 48px)) !important;
+  height: 90vh !important;
+  display:flex !important;
+  flex-direction:column !important;
+  overflow:hidden !important;
+}
+
+#gsv-product-modal .gsv-modal__panel{
+  padding-bottom: 0 !important;
+}
+
+#gsv-product-modal .gsv-modal__title,
+#gsv-product-modal .gsv-modal__sub{
+  flex: 0 0 auto !important;
+}
+
+#gsv-product-modal .gsv-modal__actions{
+  margin-top:auto !important;
+  position: sticky !important;
+  bottom: 0 !important;
+  z-index: 5 !important;
+  background: linear-gradient(to top, rgba(0,0,0,.86), rgba(0,0,0,.65)) !important;
+  padding-top: 16px !important;
+}
+
+#gsv-product-modal .gsv-modal__close{
+  top: 14px !important;
+  right: 14px !important;
+}
+
+@media (max-width: 900px){
+  #gsv-clients-list > *{
+    grid-template-columns:1fr !important;
+    gap:12px;
+  }
+  #gsv-clients-list .gsv-client__actions{
+    justify-content:flex-start !important;
+  }
+  #gsv-client-modal .gsv-modal__panel{
+    width: calc(100vw - 28px) !important;
+  }
+  #gsv-product-modal .gsv-modal__panel{
+    width: calc(100vw - 28px) !important;
+    height: 92vh !important;
+  }
+}
