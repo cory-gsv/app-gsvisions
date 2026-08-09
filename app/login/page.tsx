@@ -104,7 +104,7 @@ export default function LoginPage() {
         <div className="gsv-auth__logo-wrap" aria-hidden="true">
           <img
             className="gsv-auth__logo"
-            src="https://cdn.prod.website-files.com/68f013820a2f6e56e9bbe217/68f013820a2f6e56e9bbe23d_Web-256-DARK.png"
+            src="https://www.gsvisions.co/images/gsv-logo-header.png"
             alt="Golden State Visions"
           />
         </div>

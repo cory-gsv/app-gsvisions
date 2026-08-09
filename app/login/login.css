@@ -1,243 +1,123 @@
-/* =========================
-   AUTH WRAPPER
-========================= */
-.gsv-auth{
-  min-height:100vh;
-  display:grid;
-  place-items:center;
-  padding:48px 20px;
+.gsv-auth {
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: clamp(28px, 5vw, 72px);
+  position: relative;
+  overflow: hidden;
   background:
-    radial-gradient(1200px 600px at 80% 20%, rgba(255,199,44,.18), transparent 60%),
-    radial-gradient(900px 500px at 20% 80%, rgba(255,255,255,.10), transparent 55%),
-    #0b0b0b;
+    linear-gradient(90deg, rgba(8,17,14,.86), rgba(8,17,14,.48) 54%, rgba(8,17,14,.25)),
+    linear-gradient(0deg, rgba(8,17,14,.58), transparent 55%),
+    url("https://www.gsvisions.co/images/hero-gsv.webp") center/cover no-repeat;
 }
-
-/* =========================
-   CARD
-========================= */
-.gsv-auth__card{
-  width:100%;
-  max-width:520px;
-  border-radius:22px;
-  padding:32px;
-  background:rgba(255,255,255,.06);
-  border:1px solid rgba(255,255,255,.12);
-  box-shadow:0 20px 70px rgba(0,0,0,.55);
-  backdrop-filter:blur(12px);
+.gsv-auth::before {
+  content: "GSV / CLIENT PORTAL";
+  position: absolute;
+  top: 32px;
+  left: clamp(28px, 5vw, 72px);
+  color: rgba(255,255,255,.72);
+  font: 600 10px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .17em;
 }
-
-/* =========================
-   LOGO
-========================= */
-.gsv-auth__logo-wrap{
-  width: 84px;
-  height: 84px;
-  margin: 0 auto 14px;
+.gsv-auth::after {
+  content: "LINCOLN, CA  ·  GREATER SACRAMENTO";
+  position: absolute;
+  right: clamp(28px, 5vw, 72px);
+  bottom: 30px;
+  color: rgba(255,255,255,.66);
+  font: 600 9px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .13em;
+}
+.gsv-auth__card {
+  width: min(100%, 500px);
+  margin-left: min(34vw, 420px);
+  padding: clamp(30px, 4vw, 52px);
+  border: 1px solid rgba(255,255,255,.42);
+  border-radius: 0;
+  background: rgba(8,17,14,.82);
+  color: white;
+  box-shadow: 0 32px 100px rgba(0,0,0,.35);
+  backdrop-filter: blur(18px);
+}
+.gsv-auth__logo-wrap {
+  width: auto;
+  height: auto;
+  margin: 0 0 38px;
+  display: flex;
+  justify-content: flex-start;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.gsv-auth__logo { width: 116px; height: auto; object-fit: contain; display: block; }
+.gsv-auth__title {
+  margin: 0;
+  max-width: 360px;
+  color: white;
+  font-size: clamp(36px, 4vw, 54px);
+  line-height: .98;
+  font-weight: 400;
+  letter-spacing: -.055em;
+  text-align: left;
+}
+.gsv-auth__sub {
+  margin: 18px 0 30px;
+  color: rgba(255,255,255,.66);
+  font-size: 14px;
+  line-height: 1.65;
+  text-align: left;
+}
+.gsv-auth__status { min-height: 18px; margin: 0 0 10px; font: 600 10px/1.4 var(--font-geist-mono), monospace; letter-spacing: .06em; text-transform: uppercase; }
+.gsv-auth__status.is-error { color: #ff8585; }
+.gsv-auth__status.is-ok { color: #91e6ad; }
+.gsv-auth__status.is-info { color: var(--gsv-gold); }
+.gsv-auth__form { display: grid; gap: 12px; }
+.gsv-auth__label { margin-top: 5px; color: rgba(255,255,255,.68); font: 600 9px/1 var(--font-geist-mono), monospace; letter-spacing: .13em; text-transform: uppercase; }
+.gsv-auth__input {
+  width: 100%;
+  padding: 15px 0;
+  border: 0;
+  border-bottom: 1px solid rgba(255,255,255,.36);
+  border-radius: 0;
+  background: transparent;
+  color: white;
+  font-size: 15px;
+  outline: none;
+  transition: border-color .2s;
+}
+.gsv-auth__input::placeholder { color: rgba(255,255,255,.3); }
+.gsv-auth__input:focus { border-color: var(--gsv-gold); box-shadow: none; }
+.gsv-auth__forgot-row { margin-top: 0; display: flex; justify-content: flex-end; }
+.gsv-auth__forgot, .gsv-auth__link { color: rgba(255,255,255,.72); border: 0; text-decoration: none; font: 600 9px/1 var(--font-geist-mono), monospace; letter-spacing: .09em; text-transform: uppercase; }
+.gsv-auth__forgot:hover, .gsv-auth__link:hover { color: var(--gsv-gold); }
+.gsv-auth__btn {
+  width: 100%;
+  min-height: 50px;
+  padding: 14px 18px;
   border-radius: 999px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background: rgba(0,0,0,.35);
-  border: 1px solid rgba(255,199,44,.28);
-  box-shadow: 0 18px 45px rgba(0,0,0,.45);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  font: 700 10px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  transition: transform .2s, background .2s, color .2s, border-color .2s;
 }
-
-.gsv-auth__logo{
-  width: 56px;
-  height: 56px;
-  object-fit: contain;
-  display:block;
-}
-
-/* =========================
-   TYPOGRAPHY
-========================= */
-.gsv-auth__title{
-  margin:0;
-  font-size:26px;
-  font-weight:800;
-  color:#fff;
-  letter-spacing:.01em;
-  text-align:center;
-}
-
-.gsv-auth__sub{
-  margin:8px 0 22px;
-  color:rgba(255,255,255,.72);
-  font-size:14px;
-  line-height:1.4;
-  text-align:center;
-}
-
-/* =========================
-   STATUS
-========================= */
-.gsv-auth__status{
-  min-height: 20px;
-  margin: 0 0 12px;
-  font-size: 13px;
-  font-weight: 800;
-}
-.gsv-auth__status.is-error{ color:#ff5a5a; }
-.gsv-auth__status.is-ok{ color:#6dff9b; }
-.gsv-auth__status.is-info{ color:#ffc72c; }
-
-/* =========================
-   FORM
-========================= */
-.gsv-auth__form{
-  display:grid;
-  gap:14px;
-}
-
-.gsv-auth__label{
-  font-size:13px;
-  color:rgba(255,255,255,.82);
-  font-weight: 700;
-}
-
-/* =========================
-   INPUTS
-========================= */
-.gsv-auth__input{
-  width:100%;
-  padding:14px 14px;
-  border-radius:14px;
-  border:1px solid rgba(255,255,255,.16);
-  background:rgba(0,0,0,.35);
-  color:#fff;
-  font-size:14px;
-  outline:none;
-  transition:border .15s ease, box-shadow .15s ease;
-}
-
-.gsv-auth__input::placeholder{
-  color:rgba(255,255,255,.45);
-}
-
-.gsv-auth__input:focus{
-  border-color:rgba(255,199,44,.65);
-  box-shadow:0 0 0 4px rgba(255,199,44,.12);
-}
-
-/* =========================
-   FORGOT PASSWORD
-========================= */
-.gsv-auth__forgot-row{
-  margin-top: -6px;
-  display:flex;
-  justify-content:flex-end;
-}
-
-.gsv-auth__forgot{
-  font-size:13px;
-  color:#ffc72c;
-  text-decoration:none;
-  border-bottom:1px solid rgba(255,199,44,.35);
-  font-weight:800;
-  cursor:pointer;
-}
-.gsv-auth__forgot:hover{ border-bottom-color:#ffc72c; }
-
-/* =========================
-   BUTTONS
-========================= */
-.gsv-auth__btn{
-  appearance:none;
-  border:0;
-  border-radius:16px;
-  padding:15px 18px;
-  font-size:15px;
-  font-weight:800;
-  cursor:pointer;
-  width:100%;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
-  transition:transform .12s ease, box-shadow .15s ease, background .15s ease;
-}
-
-/* Primary */
-.gsv-auth__btn--primary{
-  color:#111;
-  background:#ffc72c;
-  box-shadow:0 12px 30px rgba(255,199,44,.25);
-}
-.gsv-auth__btn--primary:hover{
-  transform:translateY(-1px);
-  box-shadow:0 18px 42px rgba(255,199,44,.35);
-}
-.gsv-auth__btn--primary:active{
-  transform:translateY(0);
-}
-
-/* Divider */
-.gsv-auth__divider{
-  display:flex;
-  align-items:center;
-  gap:14px;
-  margin:6px 0 2px;
-  font-size:12px;
-  color:rgba(255,255,255,.45);
-}
-.gsv-auth__divider::before,
-.gsv-auth__divider::after{
-  content:"";
-  height:1px;
-  flex:1;
-  background:rgba(255,255,255,.14);
-}
-.gsv-auth__divider span{
-  padding:0 2px;
-}
-
-/* Google button */
-.gsv-auth__btn--google{
-  background: rgba(255,255,255,.06);
-  color:#fff;
-  border:1px solid rgba(255,255,255,.12);
-  box-shadow:0 10px 24px rgba(0,0,0,.18);
-  font-weight:800;
-}
-.gsv-auth__btn--google:hover{
-  opacity: .95;
-  transform:translateY(-1px);
-  box-shadow:0 18px 40px rgba(0,0,0,.30);
-}
-.gsv-auth__btn--google:active{
-  transform:translateY(0);
-}
-
-.gsv-auth__google-icon{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  width:18px;
-  height:18px;
-}
-
-/* Links */
-.gsv-auth__links{
-  display:flex;
-  justify-content:center;
-  margin-top:10px;
-}
-.gsv-auth__link{
-  font-size:13px;
-  color:#ffc72c;
-  text-decoration:none;
-  border-bottom:1px solid rgba(255,199,44,.4);
-  font-weight:800;
-}
-.gsv-auth__link:hover{
-  border-bottom-color:#ffc72c;
-}
-
-/* Mobile */
-@media (max-width:480px){
-  .gsv-auth__card{ padding:24px; }
-  .gsv-auth__title{ font-size:22px; }
-  .gsv-auth__logo-wrap{ width:78px; height:78px; }
-  .gsv-auth__logo{ width:52px; height:52px; }
+.gsv-auth__btn--primary { margin-top: 10px; border: 1px solid var(--gsv-gold); background: var(--gsv-gold); color: var(--gsv-ink-deep); box-shadow: none; }
+.gsv-auth__btn--primary:hover { transform: translateY(-2px); background: #ffd75d; box-shadow: none; }
+.gsv-auth__divider { display: flex; align-items: center; gap: 14px; margin: 13px 0 3px; color: rgba(255,255,255,.36); font: 600 8px/1 var(--font-geist-mono), monospace; letter-spacing: .14em; text-transform: uppercase; }
+.gsv-auth__divider::before, .gsv-auth__divider::after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,.18); }
+.gsv-auth__btn--google { border: 1px solid rgba(255,255,255,.42); background: transparent; color: white; box-shadow: none; }
+.gsv-auth__btn--google:hover { transform: translateY(-2px); border-color: var(--gsv-gold); color: var(--gsv-gold); box-shadow: none; }
+.gsv-auth__google-icon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
+.gsv-auth__links { display: flex; justify-content: center; margin-top: 16px; }
+@media (max-width: 760px) {
+  .gsv-auth { place-items: end center; padding: 92px 18px 54px; background-position: 62% center; }
+  .gsv-auth::before { top: 24px; left: 20px; }
+  .gsv-auth::after { display: none; }
+  .gsv-auth__card { margin-left: 0; padding: 28px 24px 30px; background: rgba(8,17,14,.9); }
+  .gsv-auth__logo-wrap { margin-bottom: 25px; }
+  .gsv-auth__title { font-size: 38px; }
 }
