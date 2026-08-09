@@ -43,6 +43,7 @@ export default function DashboardPage() {
   const [status, setStatus] = useState("")
   const [isAdmin, setIsAdmin] = useState(false)
   const [showReturnToAdmin, setShowReturnToAdmin] = useState(false)
+  const [impersonatedClient, setImpersonatedClient] = useState("")
   const [authReady, setAuthReady] = useState(false)
 
   useEffect(() => {
@@ -268,8 +269,16 @@ export default function DashboardPage() {
           !!backup?.access_token && !!backup?.refresh_token && !isAdmin
 
         setShowReturnToAdmin(hasBackup)
+        const impRaw = localStorage.getItem(ADMIN_IMP_STATE_KEY)
+        const imp = impRaw ? JSON.parse(impRaw) : null
+        setImpersonatedClient(
+          hasBackup
+            ? String(imp?.client_name || imp?.client_email || "Client")
+            : ""
+        )
       } catch {
         setShowReturnToAdmin(false)
+        setImpersonatedClient("")
       }
     }
 
@@ -398,6 +407,8 @@ export default function DashboardPage() {
   async function handleLogout() {
     try {
       localStorage.removeItem(INACTIVITY_KEY)
+      localStorage.removeItem(ADMIN_BACKUP_KEY)
+      localStorage.removeItem(ADMIN_IMP_STATE_KEY)
     } catch (_) {}
     await supabase.auth.signOut()
     router.replace("/login")
@@ -525,8 +536,17 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <nav className="gsv-dash__tabs" role="tablist" aria-label="Dashboard Tabs">
-        <button
+      {showReturnToAdmin && (
+        <div className="gsv-dash__client-view" role="status">
+          <span>
+            Viewing the portal as <strong>{impersonatedClient || "Client"}</strong>
+          </span>
+        </div>
+      )}
+
+      <div className="gsv-dash__workspace">
+        <nav className="gsv-dash__tabs" role="tablist" aria-label="Dashboard Tabs">
+          <button
           className={tabClass("home")}
           data-tab="home"
           role="tab"
@@ -534,7 +554,7 @@ export default function DashboardPage() {
           onClick={() => openTab("home")}
         >
           Dashboard
-        </button>
+          </button>
 
         <button
           className={tabClass("grid")}
@@ -579,13 +599,14 @@ export default function DashboardPage() {
         >
           Account
         </button>
-      </nav>
+        </nav>
 
-      <div className="gsv-dash__status" id="gsv-dash-status" aria-live="polite">
-        {status}
-      </div>
+        <div className="gsv-dash__content">
+          <div className="gsv-dash__status" id="gsv-dash-status" aria-live="polite">
+            {status}
+          </div>
 
-      <main className="gsv-dash__panels">
+          <main className="gsv-dash__panels">
         <section className={panelClass("home")} data-panel="home" role="tabpanel">
           <div className="gsv-dash__grid2">
             <div className="gsv-dash__card">
@@ -1000,7 +1021,7 @@ export default function DashboardPage() {
                   <hr
                     style={{
                       border: 0,
-                      borderTop: "1px solid rgba(255,255,255,.10)",
+                      borderTop: "1px solid rgba(23,35,31,.16)",
                       margin: "18px 0",
                     }}
                   />
@@ -1060,49 +1081,49 @@ export default function DashboardPage() {
               <hr
                 style={{
                   border: 0,
-                  borderTop: "1px solid rgba(255,255,255,.10)",
+                  borderTop: "1px solid rgba(23,35,31,.16)",
                   margin: "14px 0",
                 }}
               />
 
               <div style={{ fontWeight: 950, marginBottom: 8 }}>
-                Brokerage Logo 1
+                Wide Brokerage Logo
               </div>
               <div className="gsv-dash__logo-row">
                 <div className="gsv-dash__logo-preview">
-                  <img id="gsv-logo1-img" alt="Brokerage Logo 1" />
+                  <img id="gsv-logo1-img" alt="Wide brokerage logo" />
                 </div>
-                <input id="gsv-logo1-file" type="file" accept="image/*" />
+                <input id="gsv-logo1-file" type="file" accept="image/png" />
                 <button
                   className="gsv-dash__btn gsv-dash__btn--primary"
                   type="button"
                   id="gsv-logo1-choose"
                 >
-                  Upload Logo 1
+                  Upload Wide Logo
                 </button>
               </div>
 
               <div style={{ fontWeight: 950, margin: "14px 0 8px" }}>
-                Brokerage Logo 2
+                Vertical Brokerage Logo
               </div>
               <div className="gsv-dash__logo-row">
                 <div className="gsv-dash__logo-preview">
-                  <img id="gsv-logo2-img" alt="Brokerage Logo 2" />
+                  <img id="gsv-logo2-img" alt="Vertical brokerage logo" />
                 </div>
-                <input id="gsv-logo2-file" type="file" accept="image/*" />
+                <input id="gsv-logo2-file" type="file" accept="image/png" />
                 <button
                   className="gsv-dash__btn gsv-dash__btn--primary"
                   type="button"
                   id="gsv-logo2-choose"
                 >
-                  Upload Logo 2
+                  Upload Vertical Logo
                 </button>
               </div>
 
               <hr
                 style={{
                   border: 0,
-                  borderTop: "1px solid rgba(255,255,255,.10)",
+                  borderTop: "1px solid rgba(23,35,31,.16)",
                   margin: "18px 0",
                 }}
               />
@@ -1110,7 +1131,7 @@ export default function DashboardPage() {
               <div style={{ fontWeight: 950 }}>Change Password</div>
               <div
                 style={{
-                  color: "rgba(255,255,255,.70)",
+                  color: "#66706b",
                   fontSize: 13,
                   marginTop: 4,
                 }}
@@ -1129,7 +1150,9 @@ export default function DashboardPage() {
             </div>
           </div>
         </section>
-      </main>
+          </main>
+        </div>
+      </div>
 
       <div className="gsv-modal" id="gsv-pass-modal" aria-hidden="true">
         <div className="gsv-modal__backdrop" data-close-modal></div>
@@ -1248,7 +1271,7 @@ export default function DashboardPage() {
       <div className="gsv-modal" id="gsv-client-modal" aria-hidden="true">
         <div className="gsv-modal__backdrop" data-close-modal></div>
         <div
-          className="gsv-modal__panel"
+          className="gsv-modal__panel gsv-client-modal__panel"
           role="dialog"
           aria-modal="true"
           aria-labelledby="gsv-client-title"
@@ -1262,17 +1285,17 @@ export default function DashboardPage() {
             ✕
           </button>
 
-          <div className="gsv-modal__title" id="gsv-client-title">
-            Edit Client
-          </div>
-          <div className="gsv-modal__sub">
-            Edits update the client’s row in <strong>profiles</strong>.
-          </div>
+          <header className="gsv-client-modal__header">
+            <span>Client management</span>
+            <div className="gsv-modal__title" id="gsv-client-title">Edit Client</div>
+            <div className="gsv-modal__sub">Manage contact details, account access, and brand assets.</div>
+          </header>
 
           <input id="gsv-cm-id" type="hidden" />
+          <div className="gsv-client-modal__body">
 
-          <div className="gsv-dash__grid2">
-            <div className="gsv-dash__card">
+          <div className="gsv-dash__grid2 gsv-client-media-grid">
+            <div className="gsv-dash__card gsv-client-media-card">
               <div className="gsv-dash__card-title">Client Profile</div>
               <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                 <img
@@ -1300,38 +1323,40 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className="gsv-dash__card">
+            <div className="gsv-dash__card gsv-client-media-card">
               <div className="gsv-dash__card-title">Brokerage Logos</div>
+              <div className="gsv-dash__mini" style={{ marginTop: 6 }}>Transparent PNG files are recommended. Add a wide logo first and an optional vertical version second.</div>
 
               <div className="gsv-dash__logo-row" style={{ marginTop: 10 }}>
                 <div className="gsv-dash__logo-preview">
-                  <img id="gsv-cm-logo1-img" alt="" />
+                  <img id="gsv-cm-logo1-img" alt="Wide brokerage logo" />
                 </div>
-                <input id="gsv-cm-logo1-file" type="file" accept="image/*" />
+                <input id="gsv-cm-logo1-file" type="file" accept="image/png" />
                 <button
                   className="gsv-dash__btn gsv-dash__btn--primary"
                   type="button"
                   id="gsv-cm-logo1-choose"
                 >
-                  Upload Logo 1
+                  Upload Wide Logo
                 </button>
               </div>
 
               <div className="gsv-dash__logo-row" style={{ marginTop: 12 }}>
                 <div className="gsv-dash__logo-preview">
-                  <img id="gsv-cm-logo2-img" alt="" />
+                  <img id="gsv-cm-logo2-img" alt="Vertical brokerage logo" />
                 </div>
-                <input id="gsv-cm-logo2-file" type="file" accept="image/*" />
+                <input id="gsv-cm-logo2-file" type="file" accept="image/png" />
                 <button
                   className="gsv-dash__btn gsv-dash__btn--primary"
                   type="button"
                   id="gsv-cm-logo2-choose"
                 >
-                  Upload Logo 2
+                  Upload Vertical Logo
                 </button>
               </div>
             </div>
           </div>
+          <p className="gsv-client-upload-note" id="gsv-client-upload-note">Profile and logo uploads become available after a new client account is created.</p>
 
           <div className="gsv-dash__grid2 gsv-dash__grid2--tight" style={{ marginTop: 14 }}>
             <div>
@@ -1414,6 +1439,7 @@ export default function DashboardPage() {
             />
             Require payment at checkout during booking
           </label>
+          </div>
 
           <div className="gsv-modal__actions">
             <button
@@ -1642,7 +1668,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="gsv-modal__actions" style={{ marginTop: 16 }}>
+          <div className="gsv-product-actions">
             <button
               className="gsv-dash__btn gsv-dash__btn--ghost"
               type="button"

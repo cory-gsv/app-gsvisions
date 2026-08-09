@@ -241,45 +241,88 @@ export async function initClientsDashboard() {
   }
 
   async function fetchClients(dash) {
+    let clients = null
     try {
       const { data, error } = await dash.sb.rpc("admin_clients")
-      if (!error && Array.isArray(data)) return data
+      if (!error && Array.isArray(data)) clients = data
     } catch (_) {}
 
-    const { data, error } = await dash.sb
-      .from("profiles")
-      .select([
-        "id",
-        COL.first_name,
-        COL.last_name,
-        COL.full_name,
-        COL.email,
-        COL.phone,
-        COL.role,
-        COL.sms_enabled,
-        COL.payment_required_at_checkout,
-        COL.brokerage_name,
-        COL.mls_license,
-        COL.profile_photo_url,
-        COL.brokerage_logo1_url,
-        COL.brokerage_logo2_url
-      ].join(","))
-      .order(COL.full_name, { ascending: true })
+    if (!clients) {
+      const { data, error } = await dash.sb
+        .from("profiles")
+        .select([
+          "id",
+          COL.first_name,
+          COL.last_name,
+          COL.full_name,
+          COL.email,
+          COL.phone,
+          COL.role,
+          COL.sms_enabled,
+          COL.payment_required_at_checkout,
+          COL.brokerage_name,
+          COL.mls_license,
+          COL.profile_photo_url,
+          COL.brokerage_logo1_url,
+          COL.brokerage_logo2_url
+        ].join(","))
+        .order(COL.full_name, { ascending: true })
 
-    if (error) throw error
-    return (data || []).map((r) => ({ ...r, active_sites: 0, total_sites: 0 }))
+      if (error) throw error
+      clients = data || []
+    }
+
+    // Keep client counts tied to the same source of truth as Sites / Orders.
+    // Older imported rows may use client_ms_id instead of client_id.
+    try {
+      const { data: sites, error: sitesError } = await dash.sb
+        .from("sites")
+        .select("client_id,client_ms_id,status")
+
+      if (sitesError) throw sitesError
+
+      const counts = new Map()
+      const inactiveStatuses = new Set(["cancelled", "canceled", "completed", "delivered", "archived"])
+      ;(sites || []).forEach((site) => {
+        const ownerIds = new Set([
+          clean(site?.client_id),
+          clean(site?.client_ms_id)
+        ].filter(Boolean))
+        const active = !inactiveStatuses.has(clean(site?.status).toLowerCase())
+        ownerIds.forEach((ownerId) => {
+          const current = counts.get(ownerId) || { total: 0, active: 0 }
+          current.total += 1
+          if (active) current.active += 1
+          counts.set(ownerId, current)
+        })
+      })
+
+      return clients.map((client) => {
+        const count = counts.get(clean(client?.id)) || { total: 0, active: 0 }
+        return { ...client, active_sites: count.active, total_sites: count.total }
+      })
+    } catch (err) {
+      console.warn("[GSV Clients] Site counts unavailable:", err)
+      return clients.map((client) => ({
+        ...client,
+        active_sites: Number(client?.active_sites || 0),
+        total_sites: Number(client?.total_sites || 0)
+      }))
+    }
   }
 
   async function accessAsClient(dash, clientId) {
     const id = clean(clientId)
     if (!id) return
 
-    try {
-      localStorage.setItem("gsv_admin_impersonate_client_id", id)
-      window.open("/dashboard", "_blank", "noopener,noreferrer")
-    } catch (_) {
-      window.location.href = "/dashboard"
+    const access =
+      window.gsvAdminAccessClient || window.__gsvAdminAccessClient
+
+    if (typeof access !== "function") {
+      throw new Error("Client access is still loading. Please try again.")
     }
+
+    await access(id)
   }
 
   function getCloudinaryConfig() {
@@ -436,6 +479,8 @@ export async function initClientsDashboard() {
   }
 
   function applyModalModeUI() {
+    const modal = $("#gsv-client-modal")
+    modal?.classList.toggle("is-create-mode", _isCreateMode)
     updateModalTitle(_isCreateMode ? "Add New Client" : "Edit Client")
     updateModalSaveText(_isCreateMode ? "Create Client" : "Save Client")
     setEmailLocked(!_isCreateMode)

@@ -5,21 +5,31 @@
 #gsv-clients-list{
   display:flex;
   flex-direction:column;
-  gap:14px;
-  margin-top:14px;
+  gap:12px;
+  margin-top:20px;
 }
 
 #gsv-clients-list > *{
-  border-radius:22px;
-  padding:16px 18px;
-  background:rgba(0,0,0,.25);
-  border:1px solid rgba(255,255,255,.12);
-  box-shadow:0 18px 60px rgba(0,0,0,.45);
-  backdrop-filter:blur(12px);
+  border-radius:0;
+  padding:18px 20px;
+  background:#fff;
+  border:1px solid rgba(23,35,31,.18);
+  border-left:5px solid #9aa09d;
+  box-shadow:0 8px 24px rgba(23,35,31,.07);
+  backdrop-filter:none;
   display:grid !important;
   grid-template-columns: minmax(260px, 1.35fr) minmax(240px, 0.95fr) minmax(190px, 0.70fr) !important;
   align-items:center;
-  gap:14px;
+  gap:20px;
+  color:#17231f;
+  transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+
+#gsv-clients-list > *:hover{
+  border-color:rgba(23,35,31,.38);
+  border-left-color:#ffc72c;
+  box-shadow:0 14px 34px rgba(23,35,31,.11);
+  transform:translateY(-2px);
 }
 
 #gsv-clients-list .gsv-client__left{
@@ -30,21 +40,21 @@
 }
 
 #gsv-clients-list .gsv-client__avatar{
-  width:72px !important;
-  height:72px !important;
+  width:64px !important;
+  height:64px !important;
   border-radius:999px !important;
   object-fit:cover !important;
   display:block !important;
-  border:1px solid rgba(255,255,255,.14);
-  background:rgba(255,255,255,.08);
-  flex:0 0 72px;
+  border:1px solid rgba(23,35,31,.18);
+  background:#e5e2d8;
+  flex:0 0 64px;
 }
 
 #gsv-clients-list .gsv-client__avatar--initial{
   display:grid !important;
   place-items:center !important;
-  font-weight:950;
-  color:rgba(255,255,255,.92);
+  font-weight:700;
+  color:#35413c;
 }
 
 #gsv-clients-list .gsv-client__meta{
@@ -54,20 +64,20 @@
 }
 
 #gsv-clients-list .gsv-client__name{
-  font-weight:950;
-  font-size:15px;
-  color:rgba(255,255,255,.96);
-  line-height:1.15;
+  font-weight:700;
+  font-size:16px;
+  color:#17231f;
+  line-height:1.2;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
-  margin-bottom:8px;
+  margin-bottom:6px;
 }
 
 #gsv-clients-list .gsv-client__email{
-  font-weight:900;
-  font-size:13px;
-  color:rgba(255,255,255,.82);
+  font-weight:500;
+  font-size:12.5px;
+  color:#52605a;
   line-height:1.25;
   white-space:nowrap;
   overflow:hidden;
@@ -76,9 +86,9 @@
 }
 
 #gsv-clients-list .gsv-client__phone{
-  font-weight:850;
-  font-size:13px;
-  color:rgba(255,255,255,.72);
+  font-weight:500;
+  font-size:12.5px;
+  color:#66706b;
   line-height:1.25;
   white-space:nowrap;
   overflow:hidden;
@@ -88,30 +98,39 @@
 #gsv-clients-list .gsv-client__stats{
   display:grid !important;
   grid-template-columns: 1fr 1fr !important;
-  gap: 6px 22px !important;
+  gap: 0 !important;
   justify-items:start !important;
   align-items:start !important;
   min-width: 220px;
+  border:1px solid rgba(23,35,31,.13);
+  background:#f2f0e9;
 }
 
 #gsv-clients-list .gsv-client__stat{
   display:flex !important;
   flex-direction:column !important;
-  gap:6px !important;
+  gap:7px !important;
+  min-height:68px;
+  padding:13px 16px;
+  justify-content:center;
+}
+
+#gsv-clients-list .gsv-client__stat + .gsv-client__stat{
+  border-left:1px solid rgba(23,35,31,.13);
 }
 
 #gsv-clients-list .gsv-client__statlab{
-  font-size:12px;
-  letter-spacing:.14em;
+  font-size:9px;
+  letter-spacing:.12em;
   text-transform:uppercase;
-  color:rgba(255,255,255,.62);
-  font-weight:950;
+  color:#66706b;
+  font-weight:700;
 }
 
 #gsv-clients-list .gsv-client__statnum{
-  font-size:18px;
-  font-weight:950;
-  color:rgba(255,255,255,.95);
+  font-size:22px;
+  font-weight:500;
+  color:#17231f;
   line-height:1.05;
 }
 
@@ -125,6 +144,18 @@
 #gsv-clients-list .gsv-client__actions button,
 #gsv-clients-list .gsv-client__actions a{
   white-space:nowrap;
+}
+
+#gsv-clients-list .gsv-client__actions .gsv-dash__btn--ghost{
+  border-color:rgba(23,35,31,.34);
+  background:transparent;
+  color:#17231f;
+}
+
+#gsv-clients-list .gsv-client__actions .gsv-dash__btn--ghost:hover{
+  border-color:#17231f;
+  background:rgba(23,35,31,.06);
+  color:#17231f;
 }
 
 #gsv-client-modal .gsv-modal__panel{
@@ -225,4 +256,259 @@
     width: calc(100vw - 28px) !important;
     height: 92vh !important;
   }
+}
+
+/* Client create/edit modal */
+#gsv-client-modal.is-open{
+  display:grid;
+  place-items:center;
+  padding:24px;
+}
+
+#gsv-client-modal .gsv-modal__backdrop{
+  background:rgba(9,16,13,.68);
+  backdrop-filter:blur(12px);
+}
+
+#gsv-client-modal .gsv-client-modal__panel{
+  z-index:1;
+  width:min(920px, calc(100vw - 48px)) !important;
+  max-width:920px !important;
+  max-height:calc(100svh - 48px);
+  margin:0 !important;
+  padding:0 !important;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  border:1px solid rgba(23,35,31,.2);
+  border-radius:0;
+  background:#f7f4eb;
+  color:#17231f;
+  box-shadow:0 30px 100px rgba(5,12,9,.38);
+}
+
+#gsv-client-modal .gsv-client-modal__header{
+  flex:0 0 auto;
+  padding:30px 76px 24px 34px;
+  background:#17231f;
+  border-bottom:5px solid #ffc72c;
+  color:#fff;
+}
+
+#gsv-client-modal .gsv-client-modal__header > span{
+  display:block;
+  margin-bottom:8px;
+  color:#ffc72c;
+  font:700 10px/1 var(--font-geist-mono), monospace;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+}
+
+#gsv-client-modal .gsv-modal__title{
+  margin:0;
+  color:#fff;
+  font-size:clamp(27px, 3vw, 38px);
+  line-height:1.05;
+  font-weight:500;
+  letter-spacing:-.04em;
+}
+
+#gsv-client-modal .gsv-modal__sub{
+  margin-top:9px;
+  color:rgba(255,255,255,.68);
+  font-size:14px;
+  line-height:1.45;
+  font-weight:500;
+}
+
+#gsv-client-modal .gsv-modal__close{
+  z-index:3;
+  top:22px;
+  right:24px;
+  width:42px;
+  height:42px;
+  border-radius:999px;
+  border-color:rgba(255,255,255,.25);
+  background:rgba(255,255,255,.08);
+}
+
+#gsv-client-modal .gsv-client-modal__body{
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  padding:28px 34px 34px;
+  scrollbar-gutter:stable;
+}
+
+#gsv-client-modal .gsv-client-media-grid{
+  grid-template-columns:minmax(0, .8fr) minmax(0, 1.2fr);
+  gap:14px;
+  margin:0 0 20px;
+}
+
+#gsv-client-modal .gsv-client-media-card{
+  min-height:176px;
+  padding:22px !important;
+  border:1px solid rgba(23,35,31,.16) !important;
+  border-radius:0 !important;
+  background:#fff !important;
+  box-shadow:none !important;
+}
+
+#gsv-client-modal .gsv-client-media-card .gsv-dash__card-title{
+  margin:0 0 16px;
+  color:#17231f;
+  font-size:19px;
+  font-weight:600;
+  letter-spacing:-.02em;
+}
+
+#gsv-client-modal .gsv-client-media-card .gsv-dash__mini{
+  margin:-8px 0 14px !important;
+  color:#66706b;
+  font-size:12px;
+  line-height:1.45;
+}
+
+#gsv-client-modal #gsv-cm-avatar-img{
+  width:82px !important;
+  height:82px !important;
+  border-radius:999px !important;
+  border:1px solid rgba(23,35,31,.16) !important;
+  background:#e8e4d9 !important;
+}
+
+#gsv-client-modal .gsv-dash__logo-row{
+  display:grid;
+  grid-template-columns:58px minmax(0, 1fr);
+  align-items:center;
+  gap:12px;
+  margin-top:10px !important;
+}
+
+#gsv-client-modal .gsv-dash__logo-preview{
+  width:58px !important;
+  height:58px !important;
+  border-radius:0 !important;
+  border-color:rgba(23,35,31,.16) !important;
+  background:#e8e4d9 !important;
+}
+
+#gsv-client-modal .gsv-dash__logo-preview img{
+  object-fit:contain !important;
+  padding:5px;
+}
+
+#gsv-client-modal .gsv-client-media-card .gsv-dash__btn{
+  min-height:40px;
+  padding:10px 14px;
+  border-radius:0;
+  font-size:9px;
+  white-space:nowrap;
+}
+
+#gsv-client-modal .gsv-client-upload-note{
+  display:none;
+  margin:-8px 0 22px;
+  padding:11px 13px;
+  border-left:3px solid #ffc72c;
+  background:#fff4ca;
+  color:#5a4a18;
+  font-size:12px;
+  line-height:1.45;
+}
+
+#gsv-client-modal.is-create-mode .gsv-client-upload-note{ display:block; }
+#gsv-client-modal.is-create-mode .gsv-client-media-grid{ opacity:.58; }
+
+#gsv-client-modal .gsv-dash__label{
+  display:block;
+  margin:16px 0 7px;
+  color:#59655f;
+  font:700 9px/1 var(--font-geist-mono), monospace;
+  letter-spacing:.13em;
+  text-transform:uppercase;
+}
+
+#gsv-client-modal .gsv-dash__grid2--tight{
+  gap:14px;
+  margin-top:0 !important;
+}
+
+#gsv-client-modal .gsv-dash__input{
+  width:100%;
+  min-height:48px;
+  border:1px solid rgba(23,35,31,.25);
+  border-radius:0;
+  background:#fff;
+  color:#17231f;
+  font-size:15px;
+  padding:12px 14px;
+  box-shadow:none;
+}
+
+#gsv-client-modal .gsv-dash__input:focus{
+  outline:none;
+  border-color:#17231f;
+  box-shadow:0 0 0 3px rgba(255,199,44,.35);
+}
+
+#gsv-client-modal .gsv-dash__input[readonly]{
+  background:#ebe8df;
+  color:#5f6964;
+}
+
+#gsv-client-modal label:has(> input[type="checkbox"]){
+  min-height:58px;
+  margin:16px 0 0 !important;
+  padding:15px 16px;
+  border:1px solid rgba(23,35,31,.16);
+  background:#fff;
+  color:#17231f;
+  font:600 13px/1.4 var(--font-geist-sans), sans-serif;
+  letter-spacing:0;
+  text-transform:none;
+}
+
+#gsv-client-modal input[type="checkbox"]{
+  width:19px;
+  height:19px;
+  accent-color:#17231f;
+}
+
+#gsv-client-modal .gsv-modal__actions{
+  flex:0 0 auto;
+  min-height:78px;
+  margin:0;
+  padding:16px 34px;
+  align-items:center;
+  border-top:1px solid rgba(23,35,31,.16);
+  background:#fff;
+  box-shadow:0 -12px 28px rgba(23,35,31,.06);
+}
+
+#gsv-client-modal .gsv-modal__actions .gsv-dash__btn{
+  min-width:132px;
+  min-height:44px;
+  border-radius:0;
+}
+
+#gsv-client-modal #gsv-cm-delete{ margin-right:auto; }
+
+@media (max-width: 720px){
+  #gsv-client-modal.is-open{ padding:0; align-items:end; }
+  #gsv-client-modal .gsv-client-modal__panel{
+    width:100vw !important;
+    max-height:100svh;
+    border-width:0;
+  }
+  #gsv-client-modal .gsv-client-modal__header{ padding:24px 68px 20px 20px; }
+  #gsv-client-modal .gsv-client-modal__body{ padding:20px; }
+  #gsv-client-modal .gsv-client-media-grid,
+  #gsv-client-modal .gsv-dash__grid2--tight{ grid-template-columns:1fr; }
+  #gsv-client-modal .gsv-client-media-card{ min-height:0; padding:18px !important; }
+  #gsv-client-modal .gsv-modal__actions{ padding:13px 20px; }
+  #gsv-client-modal .gsv-modal__actions .gsv-dash__btn{ min-width:0; flex:1; }
+  #gsv-client-modal #gsv-cm-delete{ flex:0 0 44px; overflow:hidden; color:transparent !important; position:relative; }
+  #gsv-client-modal #gsv-cm-delete::after{ content:"Delete"; color:#a43d32; position:absolute; inset:0; display:grid; place-items:center; }
 }
