@@ -12,6 +12,12 @@ function unauthorized() {
 }
 
 export function proxy(request: NextRequest) {
+  // Stripe authenticates this endpoint with its signed webhook payload and
+  // cannot participate in browser Basic Auth.
+  if (request.nextUrl.pathname === "/api/stripe/webhook") {
+    return NextResponse.next();
+  }
+
   if (process.env.APP_ENV !== "beta") return NextResponse.next();
 
   const expectedPassword = process.env.BETA_ACCESS_PASSWORD || "";
