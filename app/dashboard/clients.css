@@ -419,7 +419,12 @@
 }
 
 #gsv-client-modal.is-create-mode .gsv-client-upload-note{ display:block; }
-#gsv-client-modal.is-create-mode .gsv-client-media-grid{ opacity:.58; }
+#gsv-client-modal.is-create-mode .gsv-client-media-grid{ opacity:1; }
+
+#gsv-client-modal .gsv-client-social-grid{
+  margin-top:2px;
+  gap:14px;
+}
 
 #gsv-client-modal .gsv-dash__label{
   display:block;

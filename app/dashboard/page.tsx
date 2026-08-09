@@ -1356,7 +1356,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          <p className="gsv-client-upload-note" id="gsv-client-upload-note">Profile and logo uploads become available after a new client account is created.</p>
+          <p className="gsv-client-upload-note" id="gsv-client-upload-note">Choose images now. They will upload automatically when you create the client.</p>
 
           <div className="gsv-dash__grid2 gsv-dash__grid2--tight" style={{ marginTop: 14 }}>
             <div>
@@ -1397,6 +1397,17 @@ export default function DashboardPage() {
             MLS License #
           </label>
           <input className="gsv-dash__input" id="gsv-cm-mls" type="text" />
+
+          <label className="gsv-dash__label" htmlFor="gsv-cm-website">Brokerage / Client Website URL</label>
+          <input className="gsv-dash__input" id="gsv-cm-website" type="url" placeholder="https://example.com" />
+
+          <div className="gsv-dash__grid2 gsv-dash__grid2--tight gsv-client-social-grid">
+            <div><label className="gsv-dash__label" htmlFor="gsv-cm-facebook">Facebook</label><input className="gsv-dash__input" id="gsv-cm-facebook" type="url" placeholder="https://facebook.com/..." /></div>
+            <div><label className="gsv-dash__label" htmlFor="gsv-cm-instagram">Instagram</label><input className="gsv-dash__input" id="gsv-cm-instagram" type="url" placeholder="https://instagram.com/..." /></div>
+            <div><label className="gsv-dash__label" htmlFor="gsv-cm-linkedin">LinkedIn</label><input className="gsv-dash__input" id="gsv-cm-linkedin" type="url" placeholder="https://linkedin.com/in/..." /></div>
+            <div><label className="gsv-dash__label" htmlFor="gsv-cm-twitter">X / Twitter</label><input className="gsv-dash__input" id="gsv-cm-twitter" type="url" placeholder="https://x.com/..." /></div>
+            <div><label className="gsv-dash__label" htmlFor="gsv-cm-youtube">YouTube</label><input className="gsv-dash__input" id="gsv-cm-youtube" type="url" placeholder="https://youtube.com/@..." /></div>
+          </div>
 
           <label className="gsv-dash__label" htmlFor="gsv-cm-role">
             Role

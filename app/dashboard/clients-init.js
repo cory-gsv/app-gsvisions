@@ -215,6 +215,12 @@ export async function initClientsDashboard() {
     payment_required_at_checkout: "payment_required_at_checkout",
     brokerage_name: "brokerage_name",
     mls_license: "mls_license",
+    brokerage_website_url: "brokerage_website_url",
+    facebook_url: "facebook_url",
+    instagram_url: "instagram_url",
+    linkedin_url: "linkedin_url",
+    twitter_url: "twitter_url",
+    youtube_url: "youtube_url",
     profile_photo_url: "profile_photo_url",
     brokerage_logo1_url: "brokerage_logo1_url",
     brokerage_logo2_url: "brokerage_logo2_url",
@@ -262,6 +268,12 @@ export async function initClientsDashboard() {
           COL.payment_required_at_checkout,
           COL.brokerage_name,
           COL.mls_license,
+          COL.brokerage_website_url,
+          COL.facebook_url,
+          COL.instagram_url,
+          COL.linkedin_url,
+          COL.twitter_url,
+          COL.youtube_url,
           COL.profile_photo_url,
           COL.brokerage_logo1_url,
           COL.brokerage_logo2_url
@@ -382,14 +394,18 @@ export async function initClientsDashboard() {
   }
 
   async function createProfile(dash, payload) {
-    const { data, error } = await dash.sb
-      .from("profiles")
-      .insert(payload)
-      .select("*")
-      .single()
-
-    if (error) throw error
-    return data
+    const { data: sessionData, error: sessionError } = await dash.sb.auth.getSession()
+    if (sessionError) throw sessionError
+    const token = sessionData?.session?.access_token
+    if (!token) throw new Error("Your admin session has expired. Please log in again.")
+    const response = await fetch("/api/admin/clients", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload)
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(clean(result?.error) || "Could not create client.")
+    return result.client
   }
 
   async function deleteClientViaFunction(dash, clientId) {
@@ -484,7 +500,7 @@ export async function initClientsDashboard() {
     updateModalTitle(_isCreateMode ? "Add New Client" : "Edit Client")
     updateModalSaveText(_isCreateMode ? "Create Client" : "Save Client")
     setEmailLocked(!_isCreateMode)
-    setUploadsEnabled(!_isCreateMode)
+    setUploadsEnabled(true)
     toggleDeleteButton(!_isCreateMode)
   }
 
@@ -500,6 +516,12 @@ export async function initClientsDashboard() {
     setVal("#gsv-cm-phone", "")
     setVal("#gsv-cm-brokerage", "")
     setVal("#gsv-cm-mls", "")
+    setVal("#gsv-cm-website", "")
+    setVal("#gsv-cm-facebook", "")
+    setVal("#gsv-cm-instagram", "")
+    setVal("#gsv-cm-linkedin", "")
+    setVal("#gsv-cm-twitter", "")
+    setVal("#gsv-cm-youtube", "")
     setVal("#gsv-cm-role", "user")
     setVal("#gsv-cm-sms", false)
     setVal("#gsv-cm-payment-required", false)
@@ -528,6 +550,12 @@ export async function initClientsDashboard() {
     setVal("#gsv-cm-phone", clean(client.phone))
     setVal("#gsv-cm-brokerage", clean(client.brokerage_name))
     setVal("#gsv-cm-mls", clean(client.mls_license))
+    setVal("#gsv-cm-website", clean(client.brokerage_website_url))
+    setVal("#gsv-cm-facebook", clean(client.facebook_url))
+    setVal("#gsv-cm-instagram", clean(client.instagram_url))
+    setVal("#gsv-cm-linkedin", clean(client.linkedin_url))
+    setVal("#gsv-cm-twitter", clean(client.twitter_url))
+    setVal("#gsv-cm-youtube", clean(client.youtube_url))
     setVal("#gsv-cm-role", clean(client.role) || "user")
     setVal("#gsv-cm-sms", !!client.sms_enabled)
     setVal("#gsv-cm-payment-required", !!client.payment_required_at_checkout)
@@ -659,7 +687,6 @@ export async function initClientsDashboard() {
     const fullName = [first, last].filter(Boolean).join(" ").trim()
 
     const payload = {
-      [COL.id]: newUUID(),
       [COL.first_name]: first || null,
       [COL.last_name]: last || null,
       [COL.full_name]: fullName || null,
@@ -670,6 +697,12 @@ export async function initClientsDashboard() {
       [COL.payment_required_at_checkout]: paymentRequired,
       [COL.brokerage_name]: brokerage || null,
       [COL.mls_license]: mls || null,
+      [COL.brokerage_website_url]: clean($("#gsv-cm-website")?.value) || null,
+      [COL.facebook_url]: clean($("#gsv-cm-facebook")?.value) || null,
+      [COL.instagram_url]: clean($("#gsv-cm-instagram")?.value) || null,
+      [COL.linkedin_url]: clean($("#gsv-cm-linkedin")?.value) || null,
+      [COL.twitter_url]: clean($("#gsv-cm-twitter")?.value) || null,
+      [COL.youtube_url]: clean($("#gsv-cm-youtube")?.value) || null,
       [COL.profile_photo_url]: null,
       [COL.brokerage_logo1_url]: null,
       [COL.brokerage_logo2_url]: null
@@ -678,11 +711,31 @@ export async function initClientsDashboard() {
     setStatus(dash, "Creating client…", "info")
     const created = await createProfile(dash, payload)
 
-    _editingClient = created || payload
+    const createdId = clean(created?.id)
+    if (!createdId) throw new Error("Client identity was created without an id.")
+    _editingClient = created
     _isCreateMode = false
-
-    setVal("#gsv-cm-id", clean(created?.id || payload.id))
+    setVal("#gsv-cm-id", createdId)
     applyModalModeUI()
+    const pendingUploads = [
+      { fileSel: "#gsv-cm-avatar-file", kind: "profile", column: COL.profile_photo_url, imgSel: "#gsv-cm-avatar-img" },
+      { fileSel: "#gsv-cm-logo1-file", kind: "brokerage", column: COL.brokerage_logo1_url, imgSel: "#gsv-cm-logo1-img" },
+      { fileSel: "#gsv-cm-logo2-file", kind: "brokerage", column: COL.brokerage_logo2_url, imgSel: "#gsv-cm-logo2-img" }
+    ].filter((item) => $(item.fileSel)?.files?.[0])
+    if (pendingUploads.length) {
+      setStatus(dash, "Uploading client images…", "info")
+      const imagePayload = {}
+      for (const item of pendingUploads) {
+        const input = $(item.fileSel)
+        const url = await uploadToCloudinary({ file: input.files[0], kind: item.kind, clientId: createdId })
+        if (url) imagePayload[item.column] = url
+        try { input.value = "" } catch (_) {}
+      }
+      if (Object.keys(imagePayload).length) {
+        await updateProfile(dash, createdId, imagePayload)
+        Object.assign(created, imagePayload)
+      }
+    }
 
     await boot(dash, true)
     setStatus(dash, "Client created.", "success")
@@ -703,6 +756,12 @@ export async function initClientsDashboard() {
       [COL.phone]: clean($("#gsv-cm-phone")?.value) || null,
       [COL.brokerage_name]: clean($("#gsv-cm-brokerage")?.value) || null,
       [COL.mls_license]: clean($("#gsv-cm-mls")?.value) || null,
+      [COL.brokerage_website_url]: clean($("#gsv-cm-website")?.value) || null,
+      [COL.facebook_url]: clean($("#gsv-cm-facebook")?.value) || null,
+      [COL.instagram_url]: clean($("#gsv-cm-instagram")?.value) || null,
+      [COL.linkedin_url]: clean($("#gsv-cm-linkedin")?.value) || null,
+      [COL.twitter_url]: clean($("#gsv-cm-twitter")?.value) || null,
+      [COL.youtube_url]: clean($("#gsv-cm-youtube")?.value) || null,
       [COL.role]: clean($("#gsv-cm-role")?.value) || "user",
       [COL.sms_enabled]: !!$("#gsv-cm-sms")?.checked,
       [COL.payment_required_at_checkout]: !!$("#gsv-cm-payment-required")?.checked
@@ -789,6 +848,17 @@ export async function initClientsDashboard() {
         if (!input.files || !input.files[0]) return
         try {
           hideModalBanner()
+          if (_isCreateMode) {
+            const previewMap = {
+              "#gsv-cm-avatar-file": "#gsv-cm-avatar-img",
+              "#gsv-cm-logo1-file": "#gsv-cm-logo1-img",
+              "#gsv-cm-logo2-file": "#gsv-cm-logo2-img"
+            }
+            const previewSelector = previewMap[fileSel]
+            if (previewSelector) setImgSafe(previewSelector, URL.createObjectURL(input.files[0]))
+            setStatus(dash, "Image ready. It will upload when you create the client.", "info")
+            return
+          }
           await fn()
         } catch (err) {
           console.error("[GSV Clients] upload failed:", err)
