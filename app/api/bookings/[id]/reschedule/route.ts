@@ -316,8 +316,7 @@ async function loadBookingContext(id: string) {
       scheduled_end,
       estimated_minutes,
       photographer_name,
-      client_id,
-      client_notes
+      client_id
     `)
     .eq("id", id)
     .single();
@@ -569,10 +568,6 @@ export async function POST(
 
     const supabase = getSupabaseAdmin();
 
-    const updatePayload: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
-
     if (action === "reschedule") {
       if (!scheduled_start || !scheduled_end) {
         return NextResponse.json(
@@ -617,37 +612,18 @@ export async function POST(
         );
       }
 
-      updatePayload.reschedule_status = "requested";
     }
 
-    if (action === "tbd") {
-      updatePayload.reschedule_status = "tbd_requested";
-    }
-
-    if (action === "cancel") {
-      updatePayload.reschedule_status = "cancel_requested";
-    }
-
-    const requestDetails = [
-      action === "reschedule" ? `Requested start: ${scheduled_start}` : "",
-      action === "reschedule" ? `Requested end: ${scheduled_end}` : "",
-      notes ? `Customer note: ${notes}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    const existingNotes = clean(booking.client_notes);
-    if (requestDetails) {
-      const requestHeader = `[Appointment change request — ${new Date().toISOString()}]`;
-      updatePayload.client_notes = [existingNotes, requestHeader, requestDetails]
-        .filter(Boolean)
-        .join("\n\n");
-    }
-
-    const { error } = await supabase
-      .from("bookings")
-      .update(updatePayload)
-      .eq("id", id);
+    const { data: requestId, error } = await supabase.rpc(
+      "submit_appointment_change_request",
+      {
+        p_booking_id: clean(id),
+        p_request_type: action,
+        p_requested_start: action === "reschedule" ? scheduled_start : null,
+        p_requested_end: action === "reschedule" ? scheduled_end : null,
+        p_customer_notes: notes || null,
+      }
+    );
 
     if (error) {
       return NextResponse.json(
@@ -656,7 +632,7 @@ export async function POST(
       );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, request_id: requestId });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },

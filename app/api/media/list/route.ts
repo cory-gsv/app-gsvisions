@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
+import { authorizationErrorResponse, requireStaff } from "@/lib/authz";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -27,7 +27,7 @@ function getAdminSupabase() {
 
 export async function GET(req: NextRequest) {
   try {
-    await requireAdmin(req);
+    await requireStaff(req);
     const siteId = clean(req.nextUrl.searchParams.get("site_id"));
     const category = clean(req.nextUrl.searchParams.get("category"));
 

@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
+import { authorizationErrorResponse, requireStaff } from "@/lib/authz";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -116,7 +116,7 @@ async function deleteFromS3(params: {
 
 export async function POST(req: Request) {
   try {
-    await requireAdmin(req);
+    await requireStaff(req);
     const supabase = getSupabaseAdmin();
     const body = await req.json().catch(() => null);
 

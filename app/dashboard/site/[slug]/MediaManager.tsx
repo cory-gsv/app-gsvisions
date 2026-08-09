@@ -39,7 +39,6 @@ type PresignS3Response = {
   region: string;
   key: string;
   upload_url: string;
-  public_url: string;
 };
 
 type DragBox = {
@@ -629,7 +628,6 @@ export default function MediaManager({
         storage_provider: "dual",
         original_s3_bucket: params.originalS3.bucket,
         original_s3_key: params.originalS3.key,
-        original_s3_url: params.originalS3.public_url,
       }),
     });
 

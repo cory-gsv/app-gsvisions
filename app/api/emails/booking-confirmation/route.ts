@@ -620,6 +620,42 @@ export async function POST(req: Request) {
         ]
       : [];
 
+    const { data: activeHolds, error: holdError } = await supabase
+      .from("notification_holds")
+      .select("id, reason")
+      .eq("active", true)
+      .in("topic", ["order_confirmation", "appointment_confirmation"])
+      .or(`booking_id.eq.${clean(booking.id)},site_id.eq.${clean(site.id)}`)
+      .limit(1);
+    if (holdError) {
+      return NextResponse.json({ error: "Could not verify notification holds." }, { status: 503 });
+    }
+    if (Array.isArray(activeHolds) && activeHolds.length) {
+      return NextResponse.json(
+        { ok: false, held: true, reason: clean(activeHolds[0]?.reason) || "Customer notifications are on hold." },
+        { status: 409 }
+      );
+    }
+
+    const idempotencyKey = `booking-confirmation:${clean(booking.id)}:${apptStart || "unscheduled"}`;
+    const { data: messageId, error: claimError } = await supabase.rpc(
+      "claim_outbound_message",
+      {
+        p_idempotency_key: idempotencyKey,
+        p_message_type: "booking_confirmation",
+        p_booking_id: clean(booking.id),
+        p_site_id: clean(site.id),
+        p_recipient_email: toEmail,
+        p_subject: subject,
+      }
+    );
+    if (claimError) {
+      return NextResponse.json({ error: "Could not record outbound message." }, { status: 503 });
+    }
+    if (!messageId) {
+      return NextResponse.json({ ok: true, already_sent: true });
+    }
+
     const { data, error } = await getResend().emails.send({
       from:
         process.env.EMAIL_FROM ||
@@ -629,14 +665,28 @@ export async function POST(req: Request) {
       subject,
       html,
       attachments,
-    });
+    }, { idempotencyKey });
 
     if (error) {
+      await supabase
+        .from("outbound_messages")
+        .update({ status: "failed", last_error: error.message, updated_at: new Date().toISOString() })
+        .eq("id", messageId);
       return NextResponse.json(
         { error: error.message || "Failed to send email." },
         { status: 500 }
       );
     }
+
+    await supabase
+      .from("outbound_messages")
+      .update({
+        status: "sent",
+        provider_message_id: data?.id || null,
+        sent_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", messageId);
 
     return NextResponse.json({ ok: true, id: data?.id || null });
   } catch (err) {

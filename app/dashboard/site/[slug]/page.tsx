@@ -848,7 +848,7 @@ export default async function SitePage({
     clean(process.env.NEXT_PUBLIC_APP_URL) ||
     "http://localhost:3000";
   const publicSiteUrl = clean(site.slug)
-    ? `${publicSiteBase.replace(/\/+$/, "")}/${clean(site.slug)}`
+    ? `${publicSiteBase.replace(/\/+$/, "")}/sites/${clean(site.slug)}`
     : "";
 
   return (

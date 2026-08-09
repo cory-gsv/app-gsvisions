@@ -6,7 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from "crypto";
-import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
+import { authorizationErrorResponse, requireStaff } from "@/lib/authz";
 
 const ALLOWED_UPLOAD_TYPES = new Set([
   "image/jpeg",
@@ -187,15 +187,12 @@ async function handlePresignS3(body: Record<string, unknown>) {
   });
 
   const uploadUrl = await getSignedUrl(s3, command, { expiresIn: 900 });
-  const publicUrl = `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
-
   return NextResponse.json({
     ok: true,
     bucket,
     region,
     key,
     upload_url: uploadUrl,
-    public_url: publicUrl,
   });
 }
 
@@ -240,7 +237,6 @@ async function handleMetadataSave(body: Record<string, unknown>) {
 
   const originalS3Bucket = clean(body.original_s3_bucket) || null;
   const originalS3Key = clean(body.original_s3_key) || null;
-  const originalS3Url = clean(body.original_s3_url) || null;
 
   if (!siteId) {
     return NextResponse.json({ error: "Missing site_id." }, { status: 400 });
@@ -323,7 +319,7 @@ async function handleMetadataSave(body: Record<string, unknown>) {
 
     original_s3_bucket: originalS3Bucket,
     original_s3_key: originalS3Key,
-    original_s3_url: originalS3Url,
+    original_s3_url: null,
 
     original_filename: originalFilename,
     mime_type: mimeType,
@@ -386,7 +382,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    await requireAdmin(req);
+    await requireStaff(req);
     const body = await req.json().catch(() => null);
 
     if (!body || typeof body !== "object") {

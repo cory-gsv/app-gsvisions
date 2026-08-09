@@ -18,7 +18,7 @@ function env() {
   return { url, anonKey, serviceRole };
 }
 
-export async function requireAdmin(request: Request) {
+export async function requireUser(request: Request) {
   const authorization = request.headers.get("authorization") || "";
   const match = authorization.match(/^Bearer\s+(.+)$/i);
   const accessToken = match?.[1]?.trim() || "";
@@ -41,12 +41,29 @@ export async function requireAdmin(request: Request) {
     .maybeSingle();
 
   if (profileError) throw new Error("Could not verify account permissions.");
+  return { user: data.user, profile, admin };
+}
+
+export async function requireAdmin(request: Request) {
+  const result = await requireUser(request);
+  const { profile } = result;
   const role = String(profile?.role || "").trim().toLowerCase();
   if (profile?.is_admin !== true && role !== "admin") {
     throw new AuthorizationError("Administrator access required.", 403);
   }
 
-  return { user: data.user, profile };
+  return result;
+}
+
+export async function requireStaff(request: Request) {
+  const result = await requireUser(request);
+  const { profile } = result;
+  const role = String(profile?.role || "").trim().toLowerCase();
+  if (profile?.is_admin !== true && role !== "admin" && role !== "staff") {
+    throw new AuthorizationError("Staff access required.", 403);
+  }
+
+  return result;
 }
 
 export function authorizationErrorResponse(error: unknown) {
