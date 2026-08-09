@@ -627,7 +627,7 @@ export async function initDashboardAddons() {
   const SITES_TABLE = "sites"
   const S = {
     owner_text: "client_ms_id",
-    owner_uuid: "client_ms_id",
+    owner_uuid: "client_id",
     address: "address_full",
     city: "city_state_zip",
     thumb: "main_photo_preview_url",
@@ -699,8 +699,8 @@ export async function initDashboardAddons() {
     const address = clean(site?.[S.address]) || "Untitled Address"
     const city = clean(site?.[S.city])
     const status = clean(site?.[S.status]) || "draft"
-    const slug = clean(site?.[S.slug])
-    const href = slug ? `/dashboard/site/${slug}` : "#"
+    const siteId = clean(site?.id)
+    const href = siteId ? `/dashboard/site/${siteId}` : "#"
 
     const photos = getPhotos(site)
     const agentName = agentNameFromProfile(agentProfile)
@@ -1145,27 +1145,27 @@ export async function initDashboardAddons() {
     try {
       setStatus(dash, "Loading appointments…", "info")
 
-      const tz =
-        Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Los_Angeles"
-      const start = new Date()
-      const end = new Date()
-      end.setDate(end.getDate() + 45)
+      const sessRes = await sb.auth.getSession()
+      const token = sessRes?.data?.session?.access_token
+      if (!token) throw new Error("Missing current session.")
 
-      const resp = await gcalPost(sb, {
-        action: "list",
-        start: start.toISOString(),
-        end: end.toISOString(),
-        tz,
+      const response = await fetch("/api/client/appointments", {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
       })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload?.error || "Could not load appointments.")
+      }
 
-      const events = normalizeEvents(resp)
+      const events = normalizeEvents(payload?.appointments || [])
         .map((e) => ({ ...e, _ts: Date.parse(e.start) }))
         .filter((e) => Number.isFinite(e._ts) && e._ts >= Date.now() - 5 * 60 * 1000)
         .sort((a, b) => a._ts - b._ts)
         .slice(0, 8)
 
       if (!events.length) {
-        listEl.innerHTML = `<div style="opacity:.75;">No upcoming appointments.</div>`
+        listEl.innerHTML = `<div class="gsv-upcoming__empty">No upcoming appointments scheduled.</div>`
         setStatus(dash, "", "info")
         return
       }
@@ -1207,7 +1207,7 @@ export async function initDashboardAddons() {
     } catch (err) {
       if (isAbortErr(err)) return
       console.error("[GSV Upcoming] load failed:", err)
-      listEl.innerHTML = `<div style="opacity:.75;">Could not load appointments.</div>`
+      listEl.innerHTML = `<div class="gsv-upcoming__empty is-error">Could not load appointments.</div>`
       setStatus(
         dash,
         "Appointments failed to load: " + (err?.message || String(err)),

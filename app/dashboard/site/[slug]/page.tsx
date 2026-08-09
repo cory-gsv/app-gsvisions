@@ -579,6 +579,7 @@ export default async function SitePage({
   const { slug } = await params;
   const cleanSlug = clean(slug);
   const lookupSlug = normalizePropertySiteSlug(cleanSlug);
+  const isSiteId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanSlug);
 
   if (!lookupSlug) notFound();
 
@@ -642,7 +643,9 @@ export default async function SitePage({
       invoice_public_token,
       invoice_public_enabled
     `)
-    .or(`slug.eq.${lookupSlug},site_slug.eq.${lookupSlug}`)
+    .or(isSiteId
+      ? `id.eq.${cleanSlug},slug.eq.${lookupSlug},site_slug.eq.${lookupSlug}`
+      : `slug.eq.${lookupSlug},site_slug.eq.${lookupSlug}`)
     .order("updated_at", { ascending: false })
     .limit(1);
 
@@ -658,6 +661,7 @@ export default async function SitePage({
   const ownsSite =
     clean(site.client_id) === viewerId || clean(site.client_ms_id) === viewerId;
   if (!viewerIsAdmin && !ownsSite) redirect("/dashboard");
+  if (cleanSlug !== site.id) redirect(`/dashboard/site/${site.id}`);
 
   const assignedProfileId = clean(site.client_id) || clean(site.client_ms_id);
 
