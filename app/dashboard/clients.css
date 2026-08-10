@@ -340,6 +340,44 @@
   scrollbar-gutter:stable;
 }
 
+#gsv-client-modal .gsv-modal-banner{
+  display:none;
+  position:relative;
+  margin:0 0 20px;
+  padding:14px 48px 14px 16px;
+  border:1px solid #d8a93a;
+  border-left:5px solid #c48b05;
+  border-radius:0;
+  background:#fff4ca;
+  color:#493b14;
+  font-size:13px;
+  font-weight:650;
+  line-height:1.45;
+}
+
+#gsv-client-modal .gsv-modal-banner::before{
+  content:"Please review";
+  display:block;
+  margin-bottom:3px;
+  color:#7a5600;
+  font:700 9px/1 var(--font-geist-mono), monospace;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+
+#gsv-client-modal .gsv-modal-banner__close{
+  position:absolute;
+  top:10px;
+  right:10px;
+  width:28px;
+  height:28px;
+  border:0;
+  background:transparent;
+  color:#6f5619;
+  font-size:14px;
+  cursor:pointer;
+}
+
 #gsv-client-modal .gsv-client-media-grid{
   grid-template-columns:minmax(0, .8fr) minmax(0, 1.2fr);
   gap:14px;

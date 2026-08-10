@@ -113,32 +113,12 @@ export async function initClientsDashboard() {
     banner = document.createElement("div")
     banner.className = "gsv-modal-banner"
     banner.setAttribute("role", "alert")
-    banner.style.cssText = [
-      "display:none",
-      "margin:0 0 14px 0",
-      "padding:12px 14px",
-      "border-radius:14px",
-      "border:1px solid rgba(255,80,80,.35)",
-      "background:rgba(120,20,20,.35)",
-      "color:rgba(255,255,255,.95)",
-      "font-weight:900",
-      "line-height:1.25"
-    ].join(";")
 
     const closeBtn = document.createElement("button")
     closeBtn.type = "button"
     closeBtn.textContent = "✕"
     closeBtn.setAttribute("aria-label", "Dismiss")
-    closeBtn.style.cssText = [
-      "float:right",
-      "margin-left:12px",
-      "border:0",
-      "background:transparent",
-      "color:rgba(255,255,255,.85)",
-      "font-weight:900",
-      "cursor:pointer",
-      "font-size:14px"
-    ].join(";")
+    closeBtn.className = "gsv-modal-banner__close"
     closeBtn.addEventListener("click", () => hideModalBanner(), { signal })
 
     const msg = document.createElement("div")
@@ -146,7 +126,9 @@ export async function initClientsDashboard() {
 
     banner.appendChild(closeBtn)
     banner.appendChild(msg)
-    panel.insertBefore(banner, panel.firstChild)
+    const body = panel.querySelector(".gsv-client-modal__body")
+    if (body) body.prepend(banner)
+    else panel.insertBefore(banner, panel.firstChild)
 
     return banner
   }
@@ -337,19 +319,7 @@ export async function initClientsDashboard() {
     await access(id)
   }
 
-  function getCloudinaryConfig() {
-    const cfg = window.GSV_CLOUDINARY
-    if (!cfg?.cloudName) throw new Error("Cloudinary config missing: window.GSV_CLOUDINARY.cloudName")
-    if (!cfg?.presets?.profile || !cfg?.presets?.brokerage) {
-      throw new Error("Cloudinary presets missing in window.GSV_CLOUDINARY.presets")
-    }
-    if (!cfg?.folders?.profile || !cfg?.folders?.brokerage) {
-      throw new Error("Cloudinary folders missing in window.GSV_CLOUDINARY.folders")
-    }
-    return cfg
-  }
-
-  async function uploadToCloudinary({ file, kind, clientId }) {
+  async function uploadClientImage(dash, { file, kind, clientId }) {
     if (!file) throw new Error("No file selected.")
     const id = clean(clientId)
     if (!id) throw new Error("Missing client id.")
@@ -359,26 +329,22 @@ export async function initClientsDashboard() {
       throw new Error(`File is too large (${Math.round(file.size / 1024 / 1024)}MB). Max is 10MB. Please resize/compress and try again.`)
     }
 
-    const cfg = getCloudinaryConfig()
-    const preset = kind === "profile" ? cfg.presets.profile : cfg.presets.brokerage
-    const folderBase = kind === "profile" ? cfg.folders.profile : cfg.folders.brokerage
-    const folder = `${folderBase}/${id}`
-
-    const url = `https://api.cloudinary.com/v1_1/${encodeURIComponent(cfg.cloudName)}/image/upload`
+    const { data: sessionData, error: sessionError } = await dash.sb.auth.getSession()
+    if (sessionError) throw sessionError
+    const token = sessionData?.session?.access_token
+    if (!token) throw new Error("Your admin session has expired. Please log in again.")
     const fd = new FormData()
     fd.append("file", file)
-    fd.append("upload_preset", preset)
-    fd.append("folder", folder)
-
-    const res = await fetch(url, { method: "POST", body: fd, signal })
+    fd.append("client_id", id)
+    fd.append("kind", kind)
+    const res = await fetch("/api/admin/client-image", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: fd, signal })
     const json = await res.json().catch(() => ({}))
 
     if (!res.ok) {
-      const msg = json?.error?.message || `Cloudinary upload failed (${res.status})`
+      const msg = clean(json?.error) || `Image upload failed (${res.status})`
       throw new Error(msg)
     }
-
-    return json?.secure_url || json?.url || ""
+    return clean(json?.url)
   }
 
   async function updateProfile(dash, id, payload) {
@@ -656,7 +622,7 @@ export async function initClientsDashboard() {
 
     setStatus(dash, "Uploading image…", "info")
 
-    const url = await uploadToCloudinary({ file, kind, clientId: id })
+    const url = await uploadClientImage(dash, { file, kind, clientId: id })
     if (!url) throw new Error("Upload succeeded but returned no URL.")
 
     await updateProfile(dash, id, { [column]: url })
@@ -727,7 +693,7 @@ export async function initClientsDashboard() {
       const imagePayload = {}
       for (const item of pendingUploads) {
         const input = $(item.fileSel)
-        const url = await uploadToCloudinary({ file: input.files[0], kind: item.kind, clientId: createdId })
+        const url = await uploadClientImage(dash, { file: input.files[0], kind: item.kind, clientId: createdId })
         if (url) imagePayload[item.column] = url
         try { input.value = "" } catch (_) {}
       }
