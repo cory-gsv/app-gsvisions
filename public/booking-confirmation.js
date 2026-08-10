@@ -418,6 +418,20 @@
         bookingStatus === "scheduled" ||
         hasScheduledTime;
 
+      if (bookingId) {
+        safeText($(".gsv-confirm__eyebrow"), confirmed ? "Booking Confirmed" : "Booking Received");
+        safeText(
+          $(".gsv-confirm__title"),
+          confirmed ? "Your shoot has been scheduled." : "We received your booking."
+        );
+        safeText(
+          $(".gsv-confirm__sub"),
+          confirmed
+            ? "Your booking details are shown below."
+            : "We’ll confirm the appointment details as soon as possible."
+        );
+      }
+
       badge.textContent = schedule?.skipScheduling
         ? "BOOKING SAVED"
         : confirmed
@@ -742,6 +756,13 @@
 
       if (!hasAnyData) {
         WARN("No confirmation state data found.");
+        safeText($(".gsv-confirm__eyebrow"), "Confirmation Unavailable");
+        safeText($(".gsv-confirm__title"), "We couldn’t find a booking to confirm.");
+        safeText(
+          $(".gsv-confirm__sub"),
+          "Return to the booking page or contact Golden State Visions for help."
+        );
+        safeText($("#gsv-cf-status-badge"), "Booking not found");
         return;
       }
 

@@ -12,7 +12,7 @@ import "./contact.css";
 
 export const dynamic = "force-dynamic";
 
-type AnyRow = Record<string, any>;
+type AnyRow = Record<string, unknown>;
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
@@ -44,8 +44,10 @@ function locality(site: AnyRow) {
   return clean(site.city_state_zip) || [clean(site.property_city), clean(site.property_state), clean(site.property_zip)].filter(Boolean).join(" ");
 }
 
-function siteData(site: AnyRow) {
-  return site.site_data && typeof site.site_data === "object" && !Array.isArray(site.site_data) ? site.site_data : {};
+function siteData(site: AnyRow): AnyRow {
+  return site.site_data && typeof site.site_data === "object" && !Array.isArray(site.site_data)
+    ? site.site_data as AnyRow
+    : {};
 }
 
 async function loadSite(identifier: string) {
@@ -136,7 +138,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const streetAddress = cityIndex > 0 ? address.slice(0, cityIndex).replace(/[\s,]+$/, "") : address;
   const title = `${streetAddress}${place ? `, ${place}` : ""} | Property Website`;
   const description = clean(data.public_site_description) || `Explore photos, property details, video, floor plans, and listing information for ${address}${place ? ` in ${place}` : ""}.`;
-  const media = await loadMedia(site.id);
+  const media = await loadMedia(clean(site.id));
   const image = media.find((item) => item.is_primary)?.url || media[0]?.url || clean(site.hero_image_url) || clean(site.main_photo_url);
   const customDomain = clean(data.custom_domain);
   return {
@@ -152,7 +154,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function PublicPropertySite({ params }: { params: Promise<{ id: string }> }) {
   const site = await loadSite((await params).id);
   if (!site) notFound();
-  const [media, agent] = await Promise.all([loadMedia(site.id), loadAgent(site)]);
+  const [media, agent] = await Promise.all([loadMedia(clean(site.id)), loadAgent(site)]);
   const data = siteData(site);
   const address = siteAddress(site);
   const place = locality(site);
@@ -168,6 +170,8 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
   const agentEmail = clean(agent?.email);
   const brokerageName = clean(agent?.brokerage_name);
   const brokerageLogo = clean(agent?.brokerage_logo1_url) || clean(agent?.brokerage_logo2_url);
+  const agentPhoto = clean(agent?.profile_photo_url);
+  const agentLicense = clean(agent?.mls_license);
   const agentWebsite = clean(data.agent_website_url) || clean(data.agentWebsiteUrl) || clean(data.agent_website) || clean(agent?.brokerage_website_url);
   const socialLinks = [
     { label: "Instagram", url: clean(data.agent_instagram_url) || clean(data.instagram_url) || clean(agent?.instagram_url) },
@@ -224,7 +228,7 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
     : "Explore the listing details for this property.";
 
   return <main className="property-site">
-    <SiteTrafficTracker siteId={site.id} />
+    <SiteTrafficTracker siteId={clean(site.id)} />
     <nav className="property-nav" aria-label="Property navigation">
       <div><a href="#details">Details</a>{gallery.length ? <a href="#gallery">Gallery</a> : null}{video ? <a href="#video">Video</a> : null}{tour ? <a href="#tour">3D Scanning</a> : null}{floorPlans.length ? <a href="#floor-plans">Floor plans</a> : null}<a href="#contact">Contact</a><a href="#map">Map</a></div>
     </nav>
@@ -242,23 +246,23 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
       <div><p className="eyebrow">The property</p><h2>{address}</h2><p className="property-description">{description || fallbackDescription}</p></div>
     </section>
 
-    {gallery.length ? <section id="gallery" className="property-section property-gallery"><div className="section-heading"><p className="eyebrow">Explore</p><h2>Photo gallery</h2></div><PropertyGallery siteId={site.id} images={gallery.map((asset, index) => ({ id: asset.id, url: asset.url, alt: clean(asset.alt_text) || `${address} property photo ${index + 1}` }))} /></section> : null}
+    {gallery.length ? <section id="gallery" className="property-section property-gallery"><div className="section-heading"><p className="eyebrow">Explore</p><h2>Photo gallery</h2></div><PropertyGallery siteId={clean(site.id)} images={gallery.map((asset, index) => ({ id: asset.id, url: asset.url, alt: clean(asset.alt_text) || `${address} property photo ${index + 1}` }))} /></section> : null}
     {video ? <section id="video" className="property-section media-section"><div className="section-heading"><p className="eyebrow">Watch</p><h2>Property video</h2></div><iframe src={video} title={`Property video for ${address}`} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen /></section> : null}
     {tour ? <section id="tour" className="property-section media-section"><div className="section-heading"><p className="eyebrow">Walk through</p><h2>3D scanning tour</h2></div><iframe src={tour} title={`3D tour of ${address}`} allow="fullscreen; xr-spatial-tracking" allowFullScreen /></section> : null}
     {floorPlans.length ? <section id="floor-plans" className="property-section"><div className="section-heading"><p className="eyebrow">Layout</p><h2>Floor plans</h2></div><div className="floor-plan-grid">{floorPlans.map((asset, index) => <img key={asset.id} src={asset.url} alt={clean(asset.alt_text) || `${address} floor plan ${index + 1}`} loading="lazy" />)}</div></section> : null}
 
     <section id="contact" className="property-contact property-section">
       <div className="property-contact-inner">
-        {agentEmail ? <PropertyContactPanel siteId={site.id} agentName={agentName} propertyAddress={fullAddress || address} /> : null}
+        {agentEmail ? <PropertyContactPanel siteId={clean(site.id)} agentName={agentName} propertyAddress={fullAddress || address} /> : null}
         <aside className="listing-agent-profile">
           <div className="listing-agent-main">
-            {agent?.profile_photo_url ? <img className="listing-agent-photo" src={agent.profile_photo_url} alt={agentName} /> : <div className="agent-placeholder">{agentName.charAt(0)}</div>}
+            {agentPhoto ? <img className="listing-agent-photo" src={agentPhoto} alt={agentName} /> : <div className="agent-placeholder">{agentName.charAt(0)}</div>}
             <div className="listing-agent-copy">
               <p className="eyebrow">Listing contact</p><h2>{agentName}</h2>
               {brokerageName ? <p className="listing-agent-brokerage">{brokerageName}</p> : null}
               {agentPhone ? <a href={`tel:${agentPhone.replace(/[^+\d]/g, "")}`}>{agentPhone}</a> : null}
               {agentEmail ? <a href={`mailto:${agentEmail}?subject=${encodeURIComponent(`Question about ${address}`)}`}>{agentEmail}</a> : null}
-              {agent?.mls_license ? <p>License {agent.mls_license}</p> : null}{listingMls ? <p>Listing MLS# {listingMls}</p> : null}
+              {agentLicense ? <p>License {agentLicense}</p> : null}{listingMls ? <p>Listing MLS# {listingMls}</p> : null}
               {(agentWebsite || socialLinks.length) ? <div className="agent-social-links">{agentWebsite ? <a href={agentWebsite} target="_blank" rel="noreferrer">Website ↗</a> : null}{socialLinks.map((item) => <a key={item.label} href={item.url} target="_blank" rel="noreferrer">{item.label} ↗</a>)}</div> : null}
             </div>
           </div>

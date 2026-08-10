@@ -8,9 +8,10 @@ type Props = {
   siteId: string;
   type: "video" | "matterport";
   initialValue?: string | null;
+  canEdit?: boolean;
 };
 
-export default function MediaLinksEditor({ siteId, type, initialValue }: Props) {
+export default function MediaLinksEditor({ siteId, type, initialValue, canEdit = true }: Props) {
   const router = useRouter();
   const [value, setValue] = useState(initialValue || "");
   const [saving, setSaving] = useState(false);
@@ -121,6 +122,8 @@ export default function MediaLinksEditor({ siteId, type, initialValue }: Props) 
     cursor: saving ? "default" : "pointer",
     fontSize: "13px",
   };
+
+  if (!canEdit) return null;
 
   return (
     <div style={cardStyle}>

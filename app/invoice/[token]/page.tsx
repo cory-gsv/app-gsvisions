@@ -314,6 +314,7 @@ export default async function InvoicePublicPage({
   if (!cleanToken) notFound();
 
   const publishableKey = clean(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+  const paypalClientId = clean(process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID);
   const supabase = getAdminSupabase();
 
   const { data: site, error: siteError } = await supabase
@@ -423,6 +424,7 @@ export default async function InvoicePublicPage({
   const pageData = {
     token: cleanToken,
     stripePublishableKey: publishableKey,
+    paypalClientId,
     customerName: clientName,
     customerEmail: clientEmail,
     balanceDueCents,
@@ -546,8 +548,8 @@ export default async function InvoicePublicPage({
                 border: "1px solid #e8e8e8",
                 padding: "20px",
                 display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr) 270px",
-                gap: "18px",
+                gridTemplateColumns: "minmax(0, 1fr) minmax(380px, 42%)",
+                gap: "24px",
               }}
             >
               <div>
@@ -590,8 +592,8 @@ export default async function InvoicePublicPage({
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "100px 1fr",
-                    gap: "12px",
+                    gridTemplateColumns: "120px minmax(0, 1fr)",
+                    gap: "12px 18px",
                   }}
                 >
                   <div style={{ color: "#666" }}>Client</div>
@@ -958,6 +960,15 @@ export default async function InvoicePublicPage({
                   >
                     Pay {money(balanceDueCents)}
                   </button>
+                  {paypalClientId ? (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "16px 0", color: "#777", fontSize: "12px" }}>
+                        <span style={{ height: "1px", background: "#ddd", flex: 1 }} />or pay with PayPal<span style={{ height: "1px", background: "#ddd", flex: 1 }} />
+                      </div>
+                      <div id="gsv-paypal-button" />
+                      <div id="gsv-paypal-status" style={{ marginTop: "8px", color: "#c62828", fontSize: "13px" }} />
+                    </>
+                  ) : null}
                 </>
               )}
             </section>
@@ -973,6 +984,7 @@ export default async function InvoicePublicPage({
             dangerouslySetInnerHTML={{ __html: pageDataJson }}
           />
           <Script src="https://js.stripe.com/v3/" strategy="afterInteractive" />
+          {paypalClientId ? <Script src={`https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(paypalClientId)}&currency=USD&intent=capture&components=buttons`} strategy="afterInteractive" /> : null}
           <Script id="gsv-invoice-pay-script" strategy="afterInteractive">
             {`
 (function () {
@@ -987,6 +999,7 @@ export default async function InvoicePublicPage({
   }
 
   const stripeKey = String(cfg?.stripePublishableKey || "").trim();
+  const paypalClientId = String(cfg?.paypalClientId || "").trim();
   const token = String(cfg?.token || "").trim();
   const customerName = String(cfg?.customerName || "").trim();
   const customerEmail = String(cfg?.customerEmail || "").trim();
@@ -1350,9 +1363,60 @@ export default async function InvoicePublicPage({
     });
   }
 
+  async function waitForPayPal() {
+    if (window.paypal) return window.paypal;
+    await new Promise((resolve, reject) => {
+      const started = Date.now();
+      const timer = window.setInterval(() => {
+        if (window.paypal) { window.clearInterval(timer); resolve(window.paypal); }
+        else if (Date.now() - started > 10000) { window.clearInterval(timer); reject(new Error("PayPal did not finish loading.")); }
+      }, 50);
+    });
+    return window.paypal;
+  }
+
+  async function mountPayPal() {
+    const target = document.getElementById("gsv-paypal-button");
+    const paypalStatus = document.getElementById("gsv-paypal-status");
+    if (!paypalClientId || !target || target.__gsvMounted) return;
+    target.__gsvMounted = true;
+    try {
+      const paypal = await waitForPayPal();
+      paypal.Buttons({
+        style: { layout: "vertical", color: "gold", shape: "pill", label: "paypal", height: 48 },
+        createOrder: async function () {
+          if (!updateSummary()) throw new Error("Enter a valid payment amount.");
+          if (paypalStatus) paypalStatus.textContent = "";
+          const response = await fetch("/api/invoice-public/" + encodeURIComponent(token) + "/paypal/order", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ payment_amount_cents: getPaymentAmountCents(), tip_cents: getTipCents() })
+          });
+          const json = await response.json();
+          if (!response.ok || !json.id) throw new Error(json.error || "PayPal checkout could not start.");
+          return json.id;
+        },
+        onApprove: async function (data) {
+          const response = await fetch("/api/invoice-public/" + encodeURIComponent(token) + "/paypal/capture", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paypal_order_id: data.orderID, payment_amount_cents: getPaymentAmountCents(), tip_cents: getTipCents() })
+          });
+          const json = await response.json();
+          if (!response.ok || !json.paid) throw new Error(json.error || "PayPal payment could not be confirmed.");
+          if (paypalStatus) { paypalStatus.style.color = "#1f8f4e"; paypalStatus.textContent = "Payment successful. Refreshing invoice…"; }
+          window.setTimeout(() => window.location.reload(), 800);
+        },
+        onCancel: function () { if (paypalStatus) paypalStatus.textContent = "PayPal checkout was canceled."; },
+        onError: function (error) { if (paypalStatus) paypalStatus.textContent = error && error.message ? error.message : "PayPal checkout failed."; }
+      }).render(target);
+    } catch (error) {
+      if (paypalStatus) paypalStatus.textContent = error && error.message ? error.message : "PayPal could not load.";
+    }
+  }
+
   bindInputs();
   updateSummary();
   createIntentAndMount();
+  mountPayPal();
 })();
             `}
           </Script>

@@ -87,6 +87,21 @@
   background:rgba(255,255,255,.03);
 }
 
+/* Card stripe indicates pointer focus only, never active/inactive status. */
+[data-panel="services"] .gsv-svcrowcard,
+[data-panel="services"] .gsv-svcrowcard.is-active,
+[data-panel="services"] .gsv-svcrowcard.is-inactive,
+[data-panel="services"] .gsv-svcrowcard.is-active:not(:hover),
+[data-panel="services"] .gsv-svcrowcard.is-inactive:not(:hover){
+  border-left-color:#9aa09d !important;
+}
+
+[data-panel="services"] .gsv-svcrowcard:hover,
+[data-panel="services"] .gsv-svcrowcard.is-active:hover,
+[data-panel="services"] .gsv-svcrowcard.is-inactive:hover{
+  border-left-color:#ffc72c !important;
+}
+
 @media (max-width: 1100px){
   #gsv-product-modal .gsv-dash__grid2{
     grid-template-columns: 1fr !important;

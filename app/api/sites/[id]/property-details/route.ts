@@ -118,8 +118,12 @@ export async function PATCH(
     const hasProperty_sqft = Object.prototype.hasOwnProperty.call(body, "property_sqft");
     const hasLot_sqft = Object.prototype.hasOwnProperty.call(body, "lot_sqft");
     const hasYear_built = Object.prototype.hasOwnProperty.call(body, "year_built");
+    const hasListingMlsNumber = Object.prototype.hasOwnProperty.call(body, "listing_mls_number");
     const hasVideoUrl = Object.prototype.hasOwnProperty.call(body, "video_url");
     const hasMatterportUrl = Object.prototype.hasOwnProperty.call(body, "matterport_url");
+    const hasPublicSiteDescription = Object.prototype.hasOwnProperty.call(body, "public_site_description");
+    const hasCustomDomain = Object.prototype.hasOwnProperty.call(body, "custom_domain");
+    const hasCustomDomainRequested = Object.prototype.hasOwnProperty.call(body, "custom_domain_requested");
 
     const property_address = hasProperty_address
       ? clean(body?.property_address)
@@ -184,6 +188,29 @@ export async function PATCH(
       const matterportUrl = clean(body?.matterport_url);
       if (matterportUrl) nextSiteData.matterport_url = matterportUrl;
       else delete nextSiteData.matterport_url;
+    }
+
+    if (hasListingMlsNumber) {
+      const value = clean(body?.listing_mls_number);
+      if (value) nextSiteData.listing_mls_number = value;
+      else delete nextSiteData.listing_mls_number;
+    }
+
+    if (hasPublicSiteDescription) {
+      const value = clean(body?.public_site_description);
+      if (value) nextSiteData.public_site_description = value;
+      else delete nextSiteData.public_site_description;
+    }
+
+    if (hasCustomDomain) {
+      const value = clean(body?.custom_domain).toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, "");
+      if (value) nextSiteData.custom_domain = value;
+      else delete nextSiteData.custom_domain;
+    }
+
+    if (hasCustomDomainRequested) {
+      nextSiteData.custom_domain_requested = body?.custom_domain_requested === true || clean(body?.custom_domain_requested) === "yes";
+      nextSiteData.custom_domain_requested_at = nextSiteData.custom_domain_requested ? new Date().toISOString() : null;
     }
 
     const updatePayload: Record<string, unknown> = {

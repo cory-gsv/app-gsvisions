@@ -30,8 +30,8 @@
 }
 .gsv-auth__card {
   width: min(100%, 500px);
-  margin-left: min(34vw, 420px);
-  padding: clamp(30px, 4vw, 52px);
+  margin-left: 0;
+  padding: clamp(26px, 3vw, 40px);
   border: 1px solid rgba(255,255,255,.42);
   border-radius: 0;
   background: rgba(8,17,14,.82);
@@ -42,7 +42,7 @@
 .gsv-auth__logo-wrap {
   width: auto;
   height: auto;
-  margin: 0 0 38px;
+  margin: 0 0 24px;
   display: flex;
   justify-content: flex-start;
   background: transparent;
@@ -61,7 +61,7 @@
   text-align: left;
 }
 .gsv-auth__sub {
-  margin: 18px 0 30px;
+  margin: 14px 0 20px;
   color: rgba(255,255,255,.66);
   font-size: 14px;
   line-height: 1.65;
@@ -71,11 +71,11 @@
 .gsv-auth__status.is-error { color: #ff8585; }
 .gsv-auth__status.is-ok { color: #91e6ad; }
 .gsv-auth__status.is-info { color: var(--gsv-gold); }
-.gsv-auth__form { display: grid; gap: 12px; }
+.gsv-auth__form { display: grid; gap: 9px; }
 .gsv-auth__label { margin-top: 5px; color: rgba(255,255,255,.68); font: 600 9px/1 var(--font-geist-mono), monospace; letter-spacing: .13em; text-transform: uppercase; }
 .gsv-auth__input {
   width: 100%;
-  padding: 15px 0;
+  padding: 12px 0;
   border: 0;
   border-bottom: 1px solid rgba(255,255,255,.36);
   border-radius: 0;
@@ -105,19 +105,19 @@
   text-transform: uppercase;
   transition: transform .2s, background .2s, color .2s, border-color .2s;
 }
-.gsv-auth__btn--primary { margin-top: 10px; border: 1px solid var(--gsv-gold); background: var(--gsv-gold); color: var(--gsv-ink-deep); box-shadow: none; }
+.gsv-auth__btn--primary { margin-top: 6px; border: 1px solid var(--gsv-gold); background: var(--gsv-gold); color: var(--gsv-ink-deep); box-shadow: none; }
 .gsv-auth__btn--primary:hover { transform: translateY(-2px); background: #ffd75d; box-shadow: none; }
-.gsv-auth__divider { display: flex; align-items: center; gap: 14px; margin: 13px 0 3px; color: rgba(255,255,255,.36); font: 600 8px/1 var(--font-geist-mono), monospace; letter-spacing: .14em; text-transform: uppercase; }
+.gsv-auth__divider { display: flex; align-items: center; gap: 14px; margin: 8px 0 1px; color: rgba(255,255,255,.36); font: 600 8px/1 var(--font-geist-mono), monospace; letter-spacing: .14em; text-transform: uppercase; }
 .gsv-auth__divider::before, .gsv-auth__divider::after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,.18); }
 .gsv-auth__btn--google { border: 1px solid rgba(255,255,255,.42); background: transparent; color: white; box-shadow: none; }
 .gsv-auth__btn--google:hover { transform: translateY(-2px); border-color: var(--gsv-gold); color: var(--gsv-gold); box-shadow: none; }
 .gsv-auth__google-icon { width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; }
-.gsv-auth__links { display: flex; justify-content: center; margin-top: 16px; }
+.gsv-auth__links { display: flex; justify-content: center; margin-top: 10px; }
 @media (max-width: 760px) {
   .gsv-auth { place-items: end center; padding: 92px 18px 54px; background-position: 62% center; }
   .gsv-auth::before { top: 24px; left: 20px; }
   .gsv-auth::after { display: none; }
-  .gsv-auth__card { margin-left: 0; padding: 28px 24px 30px; background: rgba(8,17,14,.9); }
-  .gsv-auth__logo-wrap { margin-bottom: 25px; }
+  .gsv-auth__card { margin-left: 0; padding: 24px 22px 25px; background: rgba(8,17,14,.9); }
+  .gsv-auth__logo-wrap { margin-bottom: 18px; }
   .gsv-auth__title { font-size: 38px; }
 }

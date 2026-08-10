@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { authorizationErrorResponse, requireStaff } from "@/lib/authz";
+import { authorizationErrorResponse, requireUser } from "@/lib/authz";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -27,12 +27,25 @@ function getAdminSupabase() {
 
 export async function GET(req: NextRequest) {
   try {
-    await requireStaff(req);
+    const { user, profile, admin } = await requireUser(req);
     const siteId = clean(req.nextUrl.searchParams.get("site_id"));
     const category = clean(req.nextUrl.searchParams.get("category"));
 
     if (!siteId) {
       return NextResponse.json({ error: "Missing site_id." }, { status: 400 });
+    }
+
+    const role = clean(profile?.role).toLowerCase();
+    const isStaff = profile?.is_admin === true || role === "admin" || role === "staff";
+    if (!isStaff) {
+      const { data: site } = await admin
+        .from("sites")
+        .select("client_id, client_ms_id")
+        .eq("id", siteId)
+        .maybeSingle();
+      if (clean(site?.client_id) !== user.id && clean(site?.client_ms_id) !== user.id) {
+        return NextResponse.json({ error: "You do not have access to this media." }, { status: 403 });
+      }
     }
 
     const supabase = getAdminSupabase();
@@ -65,6 +78,9 @@ export async function GET(req: NextRequest) {
 
     if (category) {
       query = query.eq("category", category);
+    }
+    if (!isStaff) {
+      query = query.eq("is_published", true).or("status.is.null,status.eq.ready");
     }
 
     const { data, error } = await query;

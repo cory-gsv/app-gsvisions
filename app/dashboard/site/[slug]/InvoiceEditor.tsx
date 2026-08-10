@@ -1102,15 +1102,16 @@ export default function InvoiceEditor({
                   gap: "14px",
                   padding: "14px 16px",
                   borderTop: "1px solid #efefef",
-                  alignItems: "center",
+                  alignItems: "start",
                 }}
               >
                 <div
                   style={{
                     display: "grid",
                     justifyItems: "center",
-                    alignContent: "center",
+                    alignContent: "start",
                     gap: "6px",
+                    paddingTop: "1px",
                   }}
                 >
                   <button
@@ -1293,7 +1294,7 @@ export default function InvoiceEditor({
                 />
 
                 {canEdit ? (
-                  <div style={{ textAlign: "right" }}>
+                  <div style={{ textAlign: "right", paddingTop: "1px" }}>
                     {rowCanDelete ? (
                       <button
                         onClick={() => removeRow(item.id)}

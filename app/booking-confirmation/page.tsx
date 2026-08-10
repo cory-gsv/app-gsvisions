@@ -34,10 +34,10 @@ export default function BookingConfirmationPage() {
       <section id="gsv-step-4" className="gsv-booking-step">
         <div className="gsv-confirm">
           <div className="gsv-confirm__header">
-            <div className="gsv-confirm__eyebrow">Booking Confirmed</div>
-            <h2 className="gsv-confirm__title">Your shoot has been scheduled.</h2>
+            <div className="gsv-confirm__eyebrow">Booking Confirmation</div>
+            <h2 className="gsv-confirm__title">Confirming your booking…</h2>
             <p className="gsv-confirm__sub">
-              We’ve saved your booking details below. A confirmation email will be sent to the client and photographer.
+              We’re loading the booking details associated with this confirmation.
             </p>
           </div>
 
@@ -50,7 +50,7 @@ export default function BookingConfirmationPage() {
 
                 <div className="gsv-confirm__status-wrap">
                   <div id="gsv-cf-status-badge" className="gsv-confirm__status-badge">
-                    Booking Confirmed
+                    Confirming…
                   </div>
                   <div id="gsv-cf-booking-id" className="gsv-confirm__status-meta">
                     Booking ID: —

@@ -394,7 +394,9 @@ export default function MediaManager({
   const [uploading, setUploading] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [visibilityUpdatingId, setVisibilityUpdatingId] = useState<string | null>(null);
   const [isReordering, setReordering] = useState(false);
+  const [downloadingVariant, setDownloadingVariant] = useState<"original" | "mls" | null>(null);
 
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
 
@@ -426,6 +428,37 @@ export default function MediaManager({
       setItems([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function downloadAll(variant: "original" | "mls") {
+    try {
+      setDownloadingVariant(variant);
+      setStatusText("");
+      const response = await authenticatedFetch(
+        `/api/sites/${encodeURIComponent(siteId)}/media-download?variant=${variant}`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) {
+        const json = await response.json().catch(() => ({}));
+        throw new Error(json?.error || "Could not prepare media download.");
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") || "";
+      const filename = disposition.match(/filename="([^"]+)"/i)?.[1]
+        || (variant === "mls" ? "MLS-1200px.zip" : "Originals.zip");
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setStatusText(error instanceof Error ? error.message : "Could not prepare media download.");
+    } finally {
+      setDownloadingVariant(null);
     }
   }
 
@@ -464,35 +497,34 @@ export default function MediaManager({
     };
   }, [pendingUploads]);
 
-  const publishedReadyItems = useMemo(() => {
+  const readyItems = useMemo(() => {
     return items.filter((item) => {
       const status = clean(item.status).toLowerCase();
-      const published = item.is_published !== false;
       const url = getMediaUrl(item);
-      return !!url && published && (!status || status === "ready");
+      return !!url && (!status || status === "ready");
     });
   }, [items]);
 
   const baseGalleryItems = useMemo(() => {
     return sortItems(
-      publishedReadyItems.filter((item) => clean(item.category).toLowerCase() === "gallery")
+      readyItems.filter((item) => clean(item.category).toLowerCase() === "gallery")
     );
-  }, [publishedReadyItems]);
+  }, [readyItems]);
 
   const galleryItems = previewGalleryItems ?? baseGalleryItems;
 
   const heroItem = useMemo(() => {
-    return galleryItems[0] || null;
+    return galleryItems.find((item) => item.is_published !== false) || null;
   }, [galleryItems]);
 
   const floorPlanItems = useMemo(() => {
     return sortItems(
-      publishedReadyItems.filter((item) => {
+      readyItems.filter((item) => {
         const c = clean(item.category).toLowerCase();
         return c === "floor_plan" || c === "floorplan";
       })
     );
-  }, [publishedReadyItems]);
+  }, [readyItems]);
 
   const galleryDisplayItems = useMemo(() => {
     if (mode !== "gallery") return [];
@@ -1143,6 +1175,36 @@ export default function MediaManager({
     }
   }
 
+  async function toggleVisibility(targetItem: MediaAsset) {
+    const mediaId = clean(targetItem.id);
+    if (!mediaId || visibilityUpdatingId) return;
+    const nextPublished = targetItem.is_published === false;
+
+    try {
+      setVisibilityUpdatingId(mediaId);
+      setStatusText(nextPublished ? "Showing photo on property website..." : "Hiding photo from property website...");
+      const response = await authenticatedFetch("/api/media/visibility", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ media_id: mediaId, is_published: nextPublished }),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json?.error || "Could not update photo visibility.");
+
+      const updateItem = (item: MediaAsset) => (
+        clean(item.id) === mediaId ? { ...item, is_published: nextPublished } : item
+      );
+      setItems((previous) => previous.map(updateItem));
+      setPreviewGalleryItems((previous) => previous ? previous.map(updateItem) : null);
+      setStatusText(nextPublished ? "Photo is visible on the property website." : "Photo is hidden from the property website.");
+      emitMediaChanged(siteId);
+    } catch (error) {
+      setStatusText(error instanceof Error ? error.message : "Could not update photo visibility.");
+    } finally {
+      setVisibilityUpdatingId(null);
+    }
+  }
+
   async function persistGalleryOrder(nextItems: MediaAsset[]) {
     try {
       setStatusText("Saving image order...");
@@ -1250,6 +1312,13 @@ export default function MediaManager({
     ...floatingButtonStyle,
     position: "absolute",
     right: "10px",
+    bottom: "10px",
+  };
+
+  const visibilityButtonStyle: React.CSSProperties = {
+    ...floatingButtonStyle,
+    position: "absolute",
+    left: "10px",
     bottom: "10px",
   };
 
@@ -1610,6 +1679,46 @@ if (mode === "floorplan") {
   return (
     <>
       <div style={{ display: "grid", gap: "18px" }}>
+        {!loading && baseGalleryItems.length ? (
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "14px",
+              padding: "18px 20px",
+              border: "1px solid rgba(23,35,31,.18)",
+              background: "#f2f0e9",
+            }}
+          >
+            <div>
+              <div style={{ color: "#17231f", fontSize: "16px", fontWeight: 750 }}>Download photo gallery</div>
+              <div style={{ marginTop: "4px", color: "#66706b", fontSize: "13px" }}>
+                Originals preserve uploaded files. MLS copies are JPEGs sized to 1200px on the long edge. Hidden photos download inside a separate Hidden Photos folder.
+              </div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => void downloadAll("original")}
+                disabled={downloadingVariant !== null}
+                style={{ padding: "12px 18px", border: "1px solid #17231f", borderRadius: "999px", background: "transparent", color: "#17231f", font: "700 10px var(--font-geist-mono), monospace", letterSpacing: ".1em", textTransform: "uppercase", cursor: downloadingVariant ? "wait" : "pointer" }}
+              >
+                {downloadingVariant === "original" ? "Preparing…" : "Download originals"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void downloadAll("mls")}
+                disabled={downloadingVariant !== null}
+                style={{ padding: "12px 18px", border: "1px solid #ffc72c", borderRadius: "999px", background: "#ffc72c", color: "#17231f", font: "700 10px var(--font-geist-mono), monospace", letterSpacing: ".1em", textTransform: "uppercase", cursor: downloadingVariant ? "wait" : "pointer" }}
+              >
+                {downloadingVariant === "mls" ? "Preparing…" : "Download MLS 1200px"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {canManage ? (
           <div
             style={dropZoneStyle}
@@ -1823,6 +1932,7 @@ if (mode === "floorplan") {
 
               const isSelected = selectedIds.includes(id);
               const isDraggingThis = reorder?.active && reorder.draggedIds.includes(id);
+              const isHidden = item.is_published === false;
 
               return (
                 <div
@@ -1873,6 +1983,9 @@ if (mode === "floorplan") {
                       border: "1px solid #ececec",
                       pointerEvents: "none",
                       willChange: "transform",
+                      opacity: isHidden ? 0.42 : 1,
+                      filter: isHidden ? "grayscale(.55) brightness(.72)" : "none",
+                      transition: "opacity 160ms ease, filter 160ms ease",
                     }}
                   />
 
@@ -1882,6 +1995,26 @@ if (mode === "floorplan") {
                     <div style={selectionBadgeStyle}>
                       {selectedIds.length > 1 ? selectedIds.indexOf(id) + 1 : "✓"}
                     </div>
+                  ) : null}
+
+                  {canManage ? (
+                    <button
+                      type="button"
+                      style={{
+                        ...visibilityButtonStyle,
+                        background: isHidden ? "rgba(23,35,31,.9)" : "rgba(23,35,31,.58)",
+                      }}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void toggleVisibility(item);
+                      }}
+                      disabled={visibilityUpdatingId === item.id}
+                      title={isHidden ? "Show photo on property website" : "Hide photo from property website"}
+                      aria-label={isHidden ? "Show photo on property website" : "Hide photo from property website"}
+                    >
+                      <VisibilityIcon hidden={isHidden} />
+                    </button>
                   ) : null}
 
                   {canManage ? (
@@ -2117,5 +2250,15 @@ if (mode === "floorplan") {
         </div>
       ) : null}
     </>
+  );
+}
+
+function VisibilityIcon({ hidden }: { hidden: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="2.7" stroke="white" strokeWidth="1.8" />
+      {hidden ? <path d="M4 4L20 20" stroke="white" strokeWidth="2.1" strokeLinecap="round" /> : null}
+    </svg>
   );
 }

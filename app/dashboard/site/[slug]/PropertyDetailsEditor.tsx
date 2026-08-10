@@ -6,6 +6,7 @@ import { authenticatedFetch } from "@/src/lib/authenticated-fetch";
 
 type Props = {
   siteId: string;
+  canEdit?: boolean;
   initial: {
     property_address: string;
     property_city: string;
@@ -16,10 +17,14 @@ type Props = {
     property_sqft: number | null;
     lot_sqft: number | null;
     year_built: number | null;
+    listing_mls_number?: string;
+    public_site_description?: string;
+    custom_domain?: string;
+    custom_domain_requested?: boolean;
   };
 };
 
-export default function PropertyDetailsEditor({ siteId, initial }: Props) {
+export default function PropertyDetailsEditor({ siteId, initial, canEdit = true }: Props) {
   const router = useRouter();
 
   const [form, setForm] = useState({
@@ -32,6 +37,10 @@ export default function PropertyDetailsEditor({ siteId, initial }: Props) {
     property_sqft: initial.property_sqft?.toString() || "",
     lot_sqft: initial.lot_sqft?.toString() || "",
     year_built: initial.year_built?.toString() || "",
+    listing_mls_number: initial.listing_mls_number || "",
+    public_site_description: initial.public_site_description || "",
+    custom_domain: initial.custom_domain || "",
+    custom_domain_requested: initial.custom_domain_requested ? "yes" : "",
   });
 
   const [saving, setSaving] = useState(false);
@@ -130,7 +139,7 @@ export default function PropertyDetailsEditor({ siteId, initial }: Props) {
           Property Details
         </h2>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        {canEdit ? <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <span style={{ fontSize: "14px", color: status === "Saved" ? "#1f8f4e" : "#777" }}>
             {status}
           </span>
@@ -151,7 +160,7 @@ export default function PropertyDetailsEditor({ siteId, initial }: Props) {
           >
             {saving ? "Saving..." : "Save Property Details"}
           </button>
-        </div>
+        </div> : null}
       </div>
 
       <div
@@ -171,16 +180,52 @@ export default function PropertyDetailsEditor({ siteId, initial }: Props) {
           ["Square Feet", "property_sqft"],
           ["Lot Size", "lot_sqft"],
           ["Year Built", "year_built"],
+          ["Listing MLS #", "listing_mls_number"],
         ].map(([label, key]) => (
           <div key={key} style={cardStyle}>
             <div style={labelStyle}>{label}</div>
             <input
               value={(form as Record<string, string>)[key]}
               onChange={(e) => updateField(key, e.target.value)}
-              style={inputStyle}
+              readOnly={!canEdit}
+              aria-readonly={!canEdit}
+              style={{
+                ...inputStyle,
+                background: canEdit ? "#fff" : "transparent",
+                borderColor: canEdit ? "#dcdcdc" : "transparent",
+                padding: canEdit ? "0 14px" : 0,
+              }}
             />
           </div>
         ))}
+      </div>
+
+      <div style={{ ...cardStyle, marginTop: "20px" }}>
+        <div style={labelStyle}>Property Website Description</div>
+        <textarea
+          value={form.public_site_description}
+          onChange={(e) => updateField("public_site_description", e.target.value)}
+          readOnly={!canEdit}
+          placeholder="Write a unique description of the home, neighborhood, upgrades, and lifestyle."
+          style={{ ...inputStyle, minHeight: "120px", height: "auto", padding: "14px", resize: "vertical" }}
+        />
+        <p style={{ color: "#777", fontSize: "13px", margin: "8px 0 0" }}>Used on the public property website and in search previews. Unique copy helps each listing perform better in search.</p>
+      </div>
+
+      <div style={{ ...cardStyle, marginTop: "16px" }}>
+        <div style={labelStyle}>Custom Property Domain</div>
+        <input
+          value={form.custom_domain}
+          onChange={(e) => updateField("custom_domain", e.target.value)}
+          readOnly={!canEdit}
+          placeholder="Example: 123MainStreet.com"
+          style={inputStyle}
+        />
+        {canEdit ? <label style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "12px", fontSize: "14px", color: "#39443f" }}>
+          <input type="checkbox" checked={form.custom_domain_requested === "yes"} onChange={(e) => updateField("custom_domain_requested", e.target.checked ? "yes" : "")} />
+          Client requested a custom domain purchase
+        </label> : null}
+        <p style={{ color: "#777", fontSize: "13px", margin: "8px 0 0" }}>The property site works immediately at its GSV URL. Check this when GSV should purchase and connect the requested custom domain.</p>
       </div>
     </section>
   );

@@ -415,26 +415,20 @@ export async function initServicesDashboard() {
 
   function pillsHTML(items){
     const list = Array.isArray(items) ? items : [];
-    if (!list.length) return `<div style="opacity:.65; font-size:12px; margin-top:10px;">Included: none</div>`;
+    if (!list.length) return `<div class="gsv-svc-included-empty">Included: none</div>`;
 
     const MAX = 8;
     const shown = list.slice(0, MAX);
     const more = list.length > MAX ? (list.length - MAX) : 0;
 
     const pill = (t) => `
-      <span style="
-        display:inline-flex; align-items:center; gap:6px;
-        padding:6px 10px; border-radius:999px;
-        border:1px solid rgba(255,255,255,.10);
-        background:rgba(255,255,255,.06);
-        font-size:12px; white-space:nowrap;
-      ">${t}</span>
+      <span class="gsv-svc-pill">${t}</span>
     `;
 
     return `
-      <div style="margin-top:12px;">
-        <div style="opacity:.7; font-size:12px; margin-bottom:8px;">Included</div>
-        <div style="display:flex; flex-wrap:wrap; gap:8px;">
+      <div class="gsv-svc-included">
+        <div class="gsv-svc-included__label">Included</div>
+        <div class="gsv-svc-included__pills">
           ${shown.map(it => {
             const prefix = (it.kind === "addon") ? `<span style="opacity:.75;">Add-on:</span>` : `<span style="opacity:.75;">Svc:</span>`;
             return pill(`${prefix} ${escapeHTML(it.name)}`);
@@ -475,8 +469,8 @@ export async function initServicesDashboard() {
     }
 
     const metaHTML = metaLines.length
-      ? `<div class="gsv-svcmeta" style="margin-top:12px; display:grid; gap:8px;">
-           ${metaLines.map(line => `<div style="color:#ffc72c; font-size:12px; opacity:.95;">${line}</div>`).join("")}
+      ? `<div class="gsv-svcmeta">
+           ${metaLines.map(line => `<div class="gsv-svcmeta__item">${line}</div>`).join("")}
          </div>`
       : ``;
 
@@ -486,7 +480,7 @@ export async function initServicesDashboard() {
     const toggleLabel = active ? "Deactivate" : "Activate";
 
     return `
-      <div class="gsv-svcrowcard" data-prod-id="${escapeHTML(id)}"
+      <div class="gsv-svcrowcard ${active ? "is-active" : "is-inactive"}" data-prod-id="${escapeHTML(id)}"
            style="position:relative;border:1px solid rgba(255,255,255,.10);border-radius:18px;padding:16px;margin-top:12px;background:rgba(0,0,0,.14);opacity:${cardOpacity};">
         <div class="gsv-drag-handle" title="Drag to reorder"
              style="position:absolute;left:12px;top:14px;width:26px;height:26px;border-radius:10px;
@@ -498,17 +492,17 @@ export async function initServicesDashboard() {
 
         <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding-left:44px;">
           <div style="min-width:0;flex:1;">
-            <div style="font-weight:950;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+            <div class="gsv-svcrowcard__title">
               ${escapeHTML(name)}
             </div>
-            ${desc ? `<div style="opacity:.85;margin-top:8px;line-height:1.35;">${escapeHTML(desc)}</div>` : ``}
+            ${desc ? `<div class="gsv-svcrowcard__desc">${escapeHTML(desc)}</div>` : ``}
             ${metaHTML}
             ${includedHTML}
           </div>
 
-          <div style="text-align:right;white-space:nowrap;">
-            <div style="font-weight:950;font-size:18px;">${escapeHTML(price)}</div>
-            <div style="margin-top:6px;font-size:12px;opacity:.85;">
+          <div class="gsv-svcrowcard__price-wrap">
+            <div class="gsv-svcrowcard__price">${escapeHTML(price)}</div>
+            <div class="gsv-svcrowcard__state">
               ${active ? "Active" : "Inactive"}
             </div>
           </div>

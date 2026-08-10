@@ -185,8 +185,11 @@ export default function LoginPage() {
           </button>
 
           <div className="gsv-auth__links">
-            <a className="gsv-auth__link" href="/signup">
-              Create an account
+            <a
+              className="gsv-auth__link"
+              href="mailto:info@gsvisions.co?subject=Portal%20account%20request"
+            >
+              Request an account
             </a>
           </div>
         </form>

@@ -1,44 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 
-function unauthorized() {
-  return new NextResponse("GSV beta access required.", {
-    status: 401,
-    headers: {
-      "Cache-Control": "no-store",
-      "WWW-Authenticate": 'Basic realm="GSV Beta", charset="UTF-8"',
-      "X-Robots-Tag": "noindex, nofollow",
-    },
-  });
-}
-
 export function proxy(request: NextRequest) {
-  // Stripe authenticates this endpoint with its signed webhook payload and
-  // cannot participate in browser Basic Auth.
-  if (request.nextUrl.pathname === "/api/stripe/webhook") {
-    return NextResponse.next();
+  const host = (request.headers.get("host") || "").split(":")[0].toLowerCase();
+  const pathname = request.nextUrl.pathname;
+  let response: NextResponse;
+
+  const platformHosts = new Set([
+    "sites.gsvisions.co", "beta.gsvisions.co", "hub.gsvisions.co", "app.gsvisions.co",
+    "gsvisions.co", "www.gsvisions.co", "localhost", "127.0.0.1",
+  ]);
+  const isVercelHost = host.endsWith(".vercel.app");
+
+  if (host === "sites.gsvisions.co" && /^\/[a-zA-Z0-9_-]+\/?$/.test(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = `/sites/${pathname.replace(/^\/+|\/+$/g, "")}`;
+    response = NextResponse.rewrite(url);
+  } else if (host === "sites.gsvisions.co" && pathname.startsWith("/sites/")) {
+    const url = request.nextUrl.clone();
+    url.pathname = pathname.replace(/^\/sites/, "") || "/";
+    response = NextResponse.redirect(url, 308);
+  } else if (!platformHosts.has(host) && !isVercelHost && pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = `/sites/${host}`;
+    response = NextResponse.rewrite(url);
+  } else {
+    response = NextResponse.next();
   }
 
-  if (process.env.APP_ENV !== "beta") return NextResponse.next();
-
-  const expectedPassword = process.env.BETA_ACCESS_PASSWORD || "";
-  if (!expectedPassword) return unauthorized();
-
-  const authorization = request.headers.get("authorization") || "";
-  if (!authorization.startsWith("Basic ")) return unauthorized();
-
-  try {
-    const decoded = atob(authorization.slice(6));
-    const separator = decoded.indexOf(":");
-    const username = separator >= 0 ? decoded.slice(0, separator) : "";
-    const password = separator >= 0 ? decoded.slice(separator + 1) : "";
-
-    if (username !== "gsvbeta" || password !== expectedPassword) return unauthorized();
-  } catch {
-    return unauthorized();
+  if (process.env.APP_ENV === "beta" && host !== "sites.gsvisions.co") {
+    response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
-
-  const response = NextResponse.next();
-  response.headers.set("X-Robots-Tag", "noindex, nofollow");
   return response;
 }
 

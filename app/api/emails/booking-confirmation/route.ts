@@ -378,7 +378,7 @@ export async function POST(req: Request) {
       process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     }/reschedule/${booking.id}?token=${encodeURIComponent(rescheduleToken)}`;
 
-    const prepChecklistUrl = "https://www.gsvisions.co/photoshoot-prep";
+    const prepChecklistUrl = "https://www.gsvisions.co/appointment-checklist";
 
     const icsContent =
       apptStart && apptEnd

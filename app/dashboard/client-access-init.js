@@ -314,28 +314,41 @@ export async function initClientAccessDashboard() {
       throw new Error("Missing current session. Are you logged in?")
     }
 
+    const response = await fetch("/api/admin/client-access", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ client_id: id }),
+    })
+
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(clean(data?.error) || "Could not create client access session.")
+    }
+
+    const access_url = clean(data?.access_url)
+    if (!access_url || !access_url.startsWith("/auth/callback?")) {
+      throw new Error("No client access link was returned.")
+    }
+
     if (!hasAdminBackup()) {
       const ok = setBackup(session)
       if (!ok) {
-        console.warn("[GSV Access] Could not store admin backup session.")
+        throw new Error("Could not preserve the admin session.")
       }
     }
 
-    setImpState({ ts: Date.now(), client_id: id })
-
-    const redirect_to = window.location.origin + "/dashboard"
-    const { data, error } = await dash.sb.functions.invoke("admin-access-client", {
-      body: { client_id: id, redirect_to },
+    setImpState({
+      ts: Date.now(),
+      client_id: id,
+      client_name: clean(data?.client?.name),
+      client_email: clean(data?.client?.email),
     })
-    if (error) throw error
-
-    const action_link = clean(data?.action_link)
-    if (!action_link) {
-      throw new Error("No action_link returned from admin-access-client.")
-    }
 
     setStatus(dash, "Switching into client…", "info")
-    window.location.href = action_link
+    window.location.href = access_url
   }
 
   function ensureAccessButtons() {
@@ -420,11 +433,9 @@ export async function initClientAccessDashboard() {
   const dash = await window.__gsvDashReady
   if (!dash?.sb) return
 
-  syncSwitchBackVisibility(dash)
-
-  if (impInProgress()) {
-    setTimeout(() => clearImpState(), 2500)
-  }
+  // React owns the single switch-back control in the client-view banner.
+  // Remove any legacy header button left behind by an earlier initializer.
+  document.getElementById("gsv-switch-back-admin")?.remove()
 
   overrideLegacyHooks(dash)
   wireHardIntercept(dash)
@@ -452,21 +463,4 @@ export async function initClientAccessDashboard() {
     console.warn("[GSV Access] clients list not found:", ex?.message || ex)
   }
 
-  const top = findTopActionsContainer()
-  if (top && !top.__gsvSwitchBackObserver) {
-    top.__gsvSwitchBackObserver = true
-    const mo2 = new MutationObserver(() => {
-      syncSwitchBackVisibility(dash)
-    })
-    mo2.observe(top, { childList: true, subtree: true })
-    signal.addEventListener(
-      "abort",
-      () => {
-        try {
-          mo2.disconnect()
-        } catch (_) {}
-      },
-      { once: true }
-    )
-  }
 }
