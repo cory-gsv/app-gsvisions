@@ -211,6 +211,10 @@ export async function POST(request: Request) {
       ? siteRow.site_data as Record<string, unknown>
       : {};
     const calendarEventId = clean(body.fulfillment_appointment_id);
+    const twilightCalendarEventId = clean(body.fulfillment_twilight_appointment_id);
+    const twilightAppointment = body.twilight_appointment && typeof body.twilight_appointment === "object"
+      ? body.twilight_appointment as Record<string, unknown>
+      : null;
     const property = body.property && typeof body.property === "object"
       ? body.property as Record<string, unknown>
       : {};
@@ -228,6 +232,8 @@ export async function POST(request: Request) {
       customer_notes: clean(body.customer_notes),
       public_site_aliases: publicSiteAliases,
       ...(calendarEventId ? { calendar_event_id: calendarEventId } : {}),
+      ...(twilightAppointment ? { twilight_appointment: twilightAppointment } : {}),
+      ...(twilightCalendarEventId ? { twilight_calendar_event_id: twilightCalendarEventId } : {}),
     };
     const { error: siteMetadataError } = await admin
       .from("sites")
