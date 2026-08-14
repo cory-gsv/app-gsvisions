@@ -1,0 +1,65 @@
+.gsv-portal-nav-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.gsv-portal-nav-action {
+  min-height: 43px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 18px;
+  border-radius: 999px;
+  font: 800 10px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .1em;
+  text-decoration: none;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gsv-portal-nav-action--primary {
+  border: 1px solid #ffc72c;
+  background: #ffc72c;
+  color: #17231f;
+}
+
+.gsv-portal-nav-action--primary:hover,
+.gsv-portal-nav-action--primary:focus-visible {
+  border-color: #fff;
+  background: #fff;
+  color: #17231f;
+  outline: none;
+}
+
+.gsv-portal-nav-action--ghost {
+  border: 1px solid rgba(255, 255, 255, .5);
+  background: transparent;
+  color: #fff;
+}
+
+.gsv-portal-nav-action--ghost:hover,
+.gsv-portal-nav-action--ghost:focus-visible {
+  border-color: #ffc72c;
+  color: #ffc72c;
+  outline: none;
+}
+
+.gsv-portal-nav-action:disabled {
+  cursor: wait;
+  opacity: .6;
+}
+
+@media (max-width: 620px) {
+  .gsv-portal-nav-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .gsv-portal-nav-action {
+    padding: 0 12px;
+  }
+}

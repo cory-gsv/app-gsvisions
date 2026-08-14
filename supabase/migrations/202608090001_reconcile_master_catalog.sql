@@ -66,7 +66,7 @@ begin
 
   for family in
     select * from (values
-      ('large-property', 'Large property', 'Additional on-site coverage for acreage and expansive exterior features.', 5000, 'Over one acre'),
+      ('large-property', 'Large property', 'Is your property over 1 acre in size? If so, extra time is needed to properly capture it.', 5000, 'Over one acre'),
       ('marketing-kit', 'Marketing kit', 'Custom agent and office branding, property sites, automatic video reels, teaser videos, printable flyers, social graphics, and weekly traffic reports.', 8500, 'Per property'),
       ('property-domain', 'Custom property-site domain', 'A memorable custom web address for the property presentation site.', 7500, 'Per domain'),
       ('virtual-twilight', 'Virtual twilight', 'A daylight exterior transformed into a polished dusk presentation.', 3000, 'Per finished image'),
@@ -100,8 +100,8 @@ begin
     from (values
       ('standard-media', 'photoshoot', 10), ('standard-media', 'aerial-photography', 20), ('standard-media', 'floor-plan', 30), ('standard-media', 'virtual-twilight', 40),
       ('matterport-media', 'photoshoot', 10), ('matterport-media', 'aerial-photography', 20), ('matterport-media', 'floor-plan', 30), ('matterport-media', 'virtual-twilight', 40), ('matterport-media', 'matterport-scanning', 50),
-      ('video-plus', 'photoshoot', 10), ('video-plus', 'cinematic-video-tour', 20), ('video-plus', 'aerial-video', 30), ('video-plus', 'floor-plan', 40), ('video-plus', 'virtual-twilight', 50),
-      ('signature', 'photoshoot', 10), ('signature', 'cinematic-video-tour', 20), ('signature', 'aerial-video', 30), ('signature', 'floor-plan', 40), ('signature', 'virtual-twilight', 50), ('signature', 'matterport-scanning', 60)
+      ('video-plus', 'photoshoot', 10), ('video-plus', 'cinematic-video-tour', 20), ('video-plus', 'aerial-photography', 30), ('video-plus', 'aerial-video', 40), ('video-plus', 'floor-plan', 50), ('video-plus', 'virtual-twilight', 60),
+      ('signature', 'photoshoot', 10), ('signature', 'cinematic-video-tour', 20), ('signature', 'aerial-photography', 30), ('signature', 'aerial-video', 40), ('signature', 'floor-plan', 50), ('signature', 'virtual-twilight', 60), ('signature', 'matterport-scanning', 70)
     ) as x(package_key, item_key, ord)
     join public.products p on p.slug = x.package_key || '-tier-' || i
     join public.products s on s.slug = case

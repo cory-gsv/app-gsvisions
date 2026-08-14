@@ -1439,10 +1439,12 @@ export async function initServicesDashboard() {
     const addonsEl   = $("#gsv-addons-list");
 
     const q = clean($("#gsv-svc-search", panel)?.value);
+    const showInactive = !!$("#gsv-svc-show-inactive", panel)?.checked;
+    const visibleRows = showInactive ? ALL : ALL.filter(isRowActive);
 
-    const packages = applySearch(bucket(ALL, "package"), q);
-    const services = applySearch(bucket(ALL, "service"), q);
-    const addons   = applySearch(bucket(ALL, "addon"),   q);
+    const packages = applySearch(bucket(visibleRows, "package"), q);
+    const services = applySearch(bucket(visibleRows, "service"), q);
+    const addons   = applySearch(bucket(visibleRows, "addon"),   q);
 
     if (packagesEl) packagesEl.innerHTML = packages.length ? packages.map(rowCardHTML).join("") : `<div style="opacity:.75;margin-top:10px;">No packages found.</div>`;
     if (servicesEl) servicesEl.innerHTML = services.length ? services.map(rowCardHTML).join("") : `<div style="opacity:.75;margin-top:10px;">No services found.</div>`;
@@ -1502,6 +1504,12 @@ export async function initServicesDashboard() {
   if (search && !search.__wired){
     search.__wired = true;
     search.addEventListener("input", () => render(panel), { signal });
+  }
+
+  const showInactive = $("#gsv-svc-show-inactive", panel);
+  if (showInactive && !showInactive.__wired){
+    showInactive.__wired = true;
+    showInactive.addEventListener("change", () => render(panel), { signal });
   }
 
   const addService = $("#gsv-svc-add-service", panel);

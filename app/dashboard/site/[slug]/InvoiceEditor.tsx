@@ -64,6 +64,8 @@ type Props = {
   adminUsers: AdminUser[];
   invoicePublicUrl?: string | null;
   invoiceViewUrl?: string | null;
+  customerNotes?: string | null;
+  initialAdminNotes?: string | null;
 };
 
 function clean(v: unknown): string {
@@ -214,8 +216,8 @@ function isLockedPackageChild(item: InvoiceItem, allItems: InvoiceItem[]): boole
   );
 }
 
-function parseMoneyInputToCents(raw: string) {
-  const s = clean(raw).replace(/[^\d.]/g, "");
+function parseMoneyInputToCents(raw: string, allowNegative = false) {
+  const s = clean(raw).replace(allowNegative ? /[^\d.-]/g : /[^\d.]/g, "");
   if (!s) return 0;
   const n = Number(s);
   if (!Number.isFinite(n)) return 0;
@@ -225,7 +227,7 @@ function parseMoneyInputToCents(raw: string) {
 function buildTimeOptions() {
   const out: string[] = [];
   for (let h = 8; h <= 20; h++) {
-    for (const m of [0, 15, 30, 45]) {
+    for (const m of [0, 30]) {
       if (h === 20 && m > 0) continue;
       out.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
     }
@@ -251,27 +253,72 @@ function deriveInvoiceViewUrl(
     const parts = url.pathname.split("/").filter(Boolean);
     const token = clean(parts[parts.length - 1]);
     if (!token) return "";
-    return `/invoice-view/${token}`;
+    return `/invoice/${token}`;
   } catch {
     const parts = publicUrl.split("/").filter(Boolean);
     const token = clean(parts[parts.length - 1]);
     if (!token) return "";
-    return `/invoice-view/${token}`;
+    return `/invoice/${token}`;
   }
 }
 
 const TIME_OPTIONS = buildTimeOptions();
 
+type CalendarEvent = {
+  id: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay?: boolean;
+  showAs?: string;
+};
+
+const WEEK_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function startOfMonth(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date: Date, amount: number) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function sameCalendarDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear()
+    && a.getMonth() === b.getMonth()
+    && a.getDate() === b.getDate();
+}
+
+function monthDays(month: Date) {
+  const first = startOfMonth(month);
+  const gridStart = new Date(first);
+  gridStart.setDate(first.getDate() - first.getDay());
+  return Array.from({ length: 42 }, (_, index) => {
+    const day = new Date(gridStart);
+    day.setDate(gridStart.getDate() + index);
+    return day;
+  });
+}
+
 function AppointmentPicker({
   value,
   disabled,
+  durationMinutes = 60,
   onChange,
 }: {
   value: string | null | undefined;
   disabled?: boolean;
+  durationMinutes?: number;
   onChange: (nextIso: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const initialDate = parseISO(value) || new Date();
+  const [selectedDate, setSelectedDate] = useState(initialDate);
+  const [visibleMonth, setVisibleMonth] = useState(startOfMonth(initialDate));
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState("");
+  const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   const dateValue = toDateInputValue(value);
@@ -279,6 +326,20 @@ function AppointmentPicker({
 
   useEffect(() => {
     if (!open) return;
+
+    function positionPopover() {
+      const anchor = rootRef.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const width = Math.min(590, window.innerWidth - 24);
+      const left = Math.max(12, Math.min(anchor.right - width, window.innerWidth - width - 12));
+      const spaceBelow = window.innerHeight - anchor.bottom;
+      const top = spaceBelow >= 470
+        ? anchor.bottom + 8
+        : Math.max(12, anchor.top - 468);
+      setPopoverStyle({ width, left, top });
+    }
+
+    positionPopover();
 
     function onDocClick(e: MouseEvent) {
       if (!rootRef.current) return;
@@ -288,147 +349,149 @@ function AppointmentPicker({
     }
 
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    window.addEventListener("resize", positionPopover);
+    window.addEventListener("scroll", positionPopover, true);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      window.removeEventListener("resize", positionPopover);
+      window.removeEventListener("scroll", positionPopover, true);
+    };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const start = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+    const end = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 7);
+    Promise.resolve()
+      .then(() => {
+        if (cancelled) return null;
+        setCalendarLoading(true);
+        setCalendarError("");
+        return authenticatedFetch("/api/calendar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "list", start: start.toISOString(), end: end.toISOString() }),
+        });
+      })
+      .then(async (response) => {
+        if (!response) return;
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.error || "Calendar availability could not be loaded.");
+        if (!cancelled) setEvents(Array.isArray(payload?.events) ? payload.events : []);
+      })
+      .catch((error) => {
+        if (!cancelled) setCalendarError(error instanceof Error ? error.message : "Calendar availability could not be loaded.");
+      })
+      .finally(() => {
+        if (!cancelled) setCalendarLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, visibleMonth]);
+
+  const days = useMemo(() => monthDays(visibleMonth), [visibleMonth]);
+  const today = new Date();
+
+  function isBusy(time: string) {
+    const candidateIso = combineDateAndTime(toDateInputValue(selectedDate.toISOString()), time, value);
+    const candidateStart = parseISO(candidateIso);
+    if (!candidateStart) return false;
+    const current = parseISO(value);
+    if (current && current.getTime() === candidateStart.getTime()) return false;
+    const candidateEnd = new Date(candidateStart.getTime() + Math.max(15, durationMinutes) * 60_000);
+    return events.some((event) => {
+      if (clean(event.showAs).toLowerCase() === "free") return false;
+      const eventStart = parseISO(event.start);
+      const eventEnd = parseISO(event.end);
+      return Boolean(eventStart && eventEnd && candidateStart < eventEnd && candidateEnd > eventStart);
+    });
+  }
+
   return (
-    <div ref={rootRef} style={{ position: "relative" }}>
+    <div ref={rootRef} className="gsv-appointment-picker">
       <button
         type="button"
         disabled={disabled}
         onClick={() => {
           if (disabled) return;
+          if (!open) {
+            const parsed = parseISO(value);
+            if (parsed) {
+              setSelectedDate(parsed);
+              setVisibleMonth(startOfMonth(parsed));
+            }
+          }
           setOpen((v) => !v);
         }}
-        style={{
-          width: "100%",
-          height: "42px",
-          borderRadius: "10px",
-          border: "1px solid #dcdcdc",
-          padding: "0 12px",
-          fontSize: "14px",
-          background: disabled ? "#f4f4f4" : "#fff",
-          color: disabled ? "#666" : "#171717",
-          cursor: disabled ? "not-allowed" : "pointer",
-          textAlign: "left",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "10px",
-        }}
+        className="gsv-appointment-trigger"
       >
         <span>{formatAppointmentLabel(value)}</span>
-        <span style={{ fontSize: "16px", opacity: 0.75 }}>🗓️</span>
+        <span aria-hidden="true" className="gsv-calendar-icon">▦</span>
       </button>
 
       {open ? (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 8px)",
-            left: 0,
-            zIndex: 50,
-            width: "360px",
-            borderRadius: "18px",
-            border: "1px solid #e6e6e6",
-            background: "#fff",
-            boxShadow: "0 18px 36px rgba(0,0,0,.14)",
-            padding: "14px",
-          }}
-        >
-          <div style={{ display: "grid", gap: "12px" }}>
-            <div>
-              <div
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: ".06em",
-                  color: "#666",
-                  marginBottom: "6px",
-                }}
-              >
-                Date
+        <div className="gsv-scheduler-popover" style={popoverStyle}>
+          <div className="gsv-scheduler-main">
+            <section className="gsv-month-calendar" aria-label="Choose appointment date">
+              <div className="gsv-month-heading">
+                <button type="button" onClick={() => setVisibleMonth(addMonths(visibleMonth, -1))} aria-label="Previous month">‹</button>
+                <button type="button" className="gsv-month-today" onClick={() => { const next = new Date(); setSelectedDate(next); setVisibleMonth(startOfMonth(next)); }} aria-label="Go to today">⌂</button>
+                <strong>{visibleMonth.toLocaleDateString([], { month: "long", year: "numeric" })}</strong>
+                <button type="button" onClick={() => setVisibleMonth(addMonths(visibleMonth, 1))} aria-label="Next month">›</button>
               </div>
-              <input
-                type="date"
-                value={dateValue}
-                onChange={(e) => {
-                  const nextIso = combineDateAndTime(
-                    e.target.value,
-                    timeValue || "09:00",
-                    value
-                  );
-                  onChange(nextIso);
-                }}
-                style={{
-                  width: "100%",
-                  height: "42px",
-                  borderRadius: "10px",
-                  border: "1px solid #dcdcdc",
-                  padding: "0 12px",
-                  fontSize: "15px",
-                  background: "#fff",
-                }}
-              />
-            </div>
-
-            <div>
-              <div
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  letterSpacing: ".06em",
-                  color: "#666",
-                  marginBottom: "8px",
-                }}
-              >
-                Time
+              <div className="gsv-weekdays">{WEEK_DAYS.map((day) => <span key={day}>{day}</span>)}</div>
+              <div className="gsv-month-grid">
+                {days.map((day) => {
+                  const outside = day.getMonth() !== visibleMonth.getMonth();
+                  const active = sameCalendarDay(day, selectedDate);
+                  return <button
+                    key={day.toISOString()}
+                    type="button"
+                    className={`${outside ? "is-outside" : ""} ${active ? "is-selected" : ""} ${sameCalendarDay(day, today) ? "is-today" : ""}`}
+                    onClick={() => {
+                      setSelectedDate(day);
+                      if (outside) setVisibleMonth(startOfMonth(day));
+                    }}
+                  >{day.getDate()}</button>;
+                })}
               </div>
+              <p className="gsv-calendar-guidance">Admin scheduling allows any date and time. Calendar conflicts are shown for reference only.</p>
+            </section>
 
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-                  gap: "8px",
-                  maxHeight: "220px",
-                  overflow: "auto",
-                  paddingRight: "2px",
-                }}
-              >
+            <section className="gsv-time-list" aria-label="Choose appointment time">
+              <div className="gsv-time-heading">
+                <span>Available times</span>
+                <strong>{selectedDate.toLocaleDateString([], { month: "short", day: "numeric" })}</strong>
+              </div>
+              {calendarLoading ? <p className="gsv-calendar-status">Checking Microsoft 365…</p> : null}
+              {calendarError ? <p className="gsv-calendar-status is-error">Microsoft 365 status is unavailable. Admin scheduling is still enabled.</p> : null}
+              <div className="gsv-time-options">
                 {TIME_OPTIONS.map((time) => {
                   const active = time === timeValue;
+                  const busy = !calendarError && isBusy(time);
                   return (
                     <button
                       key={time}
                       type="button"
+                      className={`${active ? "is-selected" : ""} ${busy ? "is-busy" : ""}`}
                       onClick={() => {
                         const nextIso = combineDateAndTime(
-                          dateValue || toDateInputValue(new Date().toISOString()),
+                          toDateInputValue(selectedDate.toISOString()),
                           time,
                           value
                         );
                         onChange(nextIso);
                         setOpen(false);
                       }}
-                      style={{
-                        height: "38px",
-                        borderRadius: "10px",
-                        border: active ? "1px solid #171717" : "1px solid #dcdcdc",
-                        background: active ? "#171717" : "#fff",
-                        color: active ? "#fff" : "#171717",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
                     >
-                      {formatTimeLabel(time)}
+                      <span>{formatTimeLabel(time)}</span>{busy ? <small>Busy</small> : null}
                     </button>
                   );
                 })}
               </div>
-            </div>
+            </section>
           </div>
+          <div className="gsv-scheduler-footer"><span>Pacific time</span><button type="button" onClick={() => setOpen(false)}>Cancel</button></div>
         </div>
       ) : null}
     </div>
@@ -447,6 +510,8 @@ export default function InvoiceEditor({
   adminUsers,
   invoicePublicUrl,
   invoiceViewUrl,
+  customerNotes,
+  initialAdminNotes,
 }: Props) {
   const router = useRouter();
 
@@ -458,6 +523,7 @@ export default function InvoiceEditor({
   const [sendState, setSendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [sendMessage, setSendMessage] = useState("");
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [adminNotes, setAdminNotes] = useState(clean(initialAdminNotes));
   const firstRenderRef = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedPayloadRef = useRef("");
@@ -478,9 +544,23 @@ export default function InvoiceEditor({
   );
 
   const subtotalCents = useMemo(() => {
+    const chargedPackageGroups = new Set(
+      invoiceItems
+        .filter(
+          (item) =>
+            clean(item.kind) === "package" &&
+            clean(item.group_id) &&
+            (Number(item.price_cents ?? 0) || 0) !== 0
+        )
+        .map((item) => clean(item.group_id))
+    );
+
     return invoiceItems.reduce((sum, item) => {
       const kind = clean(item.kind);
-      if (kind === "package" || kind === "discount") return sum;
+      if (kind === "discount") return sum;
+      if (kind !== "package" && chargedPackageGroups.has(clean(item.group_id))) {
+        return sum;
+      }
       return (
         sum +
         (Number(item.price_cents ?? 0) || 0) *
@@ -530,7 +610,6 @@ export default function InvoiceEditor({
         if (item.id !== id) return item;
         const next = { ...item, ...patch };
         if (clean(next.kind) === "package") {
-          next.price_cents = 0;
           next.qty = 1;
         }
         if (clean(next.kind) === "service") next.qty = 1;
@@ -548,7 +627,6 @@ export default function InvoiceEditor({
         if (!idSet.has(clean(item.id))) return item;
         const next = { ...item, ...patch };
         if (clean(next.kind) === "package") {
-          next.price_cents = 0;
           next.qty = 1;
         }
         if (clean(next.kind) === "service") next.qty = 1;
@@ -618,7 +696,11 @@ export default function InvoiceEditor({
           qty: 1,
         };
 
-        if (nextKind === "fee") {
+        if (nextKind === "custom") {
+          patch.name = "Custom Product";
+          patch.price_cents = 0;
+          patch.group_id = null;
+        } else if (nextKind === "fee") {
           patch.name = "Custom Fee";
           patch.price_cents = 0;
           patch.group_id = null;
@@ -672,7 +754,7 @@ export default function InvoiceEditor({
           kind: nextKind,
           product_id: clean(product.id),
           name: clean(product.name),
-          price_cents: nextKind === "package" ? 0 : Number(product.price_cents ?? 0) || 0,
+          price_cents: Number(product.price_cents ?? 0) || 0,
           qty: nextKind === "addon" ? Math.max(1, Number(item.qty ?? 1) || 1) : 1,
           group_id: nextGroupId,
         };
@@ -736,7 +818,34 @@ export default function InvoiceEditor({
     ]);
   }
 
+  function addCustomLine() {
+    const defaultAdmin = adminUsers[0] || null;
+
+    setInvoiceItems((prev) => [
+      ...prev,
+      {
+        id: makeId("custom"),
+        kind: "custom",
+        source: "admin",
+        product_id: null,
+        name: "Custom Product",
+        price_cents: 0,
+        qty: 1,
+        editable: true,
+        group_id: null,
+        assigned_to: defaultAdmin?.name || clean(booking?.photographer_name) || "",
+        assigned_to_id: defaultAdmin?.id || null,
+        appt_start: roundIsoToQuarterHour(booking?.scheduled_start),
+        appt_end: roundIsoToQuarterHour(booking?.scheduled_end),
+        completed: false,
+        completed_at: null,
+      },
+    ]);
+  }
+
   function toggleCompleted(id: string) {
+    if (!canEdit) return;
+
     setInvoiceItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
@@ -866,11 +975,17 @@ export default function InvoiceEditor({
         package_discount_cents: packageDiscountCents,
         additional_discount_cents: additionalDiscountCents,
         balance_due_cents: balanceDueCents,
+        admin_notes: adminNotes,
       }),
-    [invoiceItems, packageDiscountCents, additionalDiscountCents, balanceDueCents]
+    [invoiceItems, packageDiscountCents, additionalDiscountCents, balanceDueCents, adminNotes]
   );
 
   useEffect(() => {
+    if (!canEdit) {
+      lastSavedPayloadRef.current = autosavePayload;
+      return;
+    }
+
     if (firstRenderRef.current) {
       firstRenderRef.current = false;
       lastSavedPayloadRef.current = autosavePayload;
@@ -888,7 +1003,7 @@ export default function InvoiceEditor({
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [autosavePayload]);
+  }, [autosavePayload, canEdit]);
 
   function getPriceDisplay(item: InvoiceItem) {
     if (priceDrafts[item.id] != null) return priceDrafts[item.id];
@@ -962,30 +1077,44 @@ export default function InvoiceEditor({
   };
 
   const coolActionStyle: React.CSSProperties = {
-    width: "108px",
-    minHeight: "92px",
-    borderRadius: "16px",
-    border: "1px solid #e6e6e6",
-    background: "linear-gradient(180deg, #ffffff 0%, #f5f5f5 100%)",
+    minHeight: "46px",
+    borderRadius: "999px",
+    border: "1px solid #c9cecb",
+    background: "#ffffff",
     color: "#171717",
-    display: "grid",
-    placeItems: "center",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "9px",
     textAlign: "center",
-    padding: "10px 8px",
+    padding: "0 18px",
     textDecoration: "none",
-    boxShadow: "0 8px 18px rgba(0,0,0,.05)",
+    boxShadow: "none",
+    fontWeight: 800,
+    fontSize: "13px",
+    cursor: "pointer",
   };
 
   const coolIconStyle: React.CSSProperties = {
-    width: "42px",
-    height: "42px",
-    borderRadius: "12px",
+    width: "28px",
+    height: "28px",
+    borderRadius: "999px",
     display: "grid",
     placeItems: "center",
-    margin: "0 auto 8px auto",
-    background: "rgba(23,23,23,.06)",
-    fontSize: "20px",
+    background: "#f0f2f0",
+    fontSize: "14px",
     lineHeight: 1,
+  };
+
+  const primaryPaymentStyle: React.CSSProperties = {
+    ...coolActionStyle,
+    minHeight: "54px",
+    padding: "0 24px",
+    borderColor: "#ffc72c",
+    background: "#ffc72c",
+    color: "#13251f",
+    boxShadow: "0 8px 20px rgba(255, 199, 44, .22)",
+    fontSize: "14px",
   };
 
   return (
@@ -1017,7 +1146,7 @@ export default function InvoiceEditor({
                   : "#777",
           }}
         >
-          {saveMessage || "Autosave on"}
+          {canEdit ? saveMessage || "Autosave on" : "Read only"}
         </div>
       </div>
 
@@ -1052,6 +1181,36 @@ export default function InvoiceEditor({
         </div>
       </div>
 
+      <div
+        style={{
+          marginBottom: "18px",
+          display: "grid",
+          gridTemplateColumns: canEdit ? "1fr 1fr" : "1fr",
+          gap: "14px",
+        }}
+      >
+        <label style={{ display: "grid", gap: "8px", color: "#66706b", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
+          Customer notes
+          <div style={{ minHeight: "92px", padding: "13px 14px", border: "1px solid #dedede", borderRadius: "10px", background: "#f7f7f7", color: "#17231f", fontSize: "14px", fontWeight: 500, lineHeight: 1.55, textTransform: "none", letterSpacing: 0, whiteSpace: "pre-wrap" }}>
+            {clean(customerNotes) || "No customer notes were added at booking."}
+          </div>
+        </label>
+
+        {canEdit ? (
+          <label style={{ display: "grid", gap: "8px", color: "#66706b", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
+            Admin notes
+            <textarea
+              value={adminNotes}
+              onChange={(event) => setAdminNotes(event.target.value.slice(0, 4000))}
+              placeholder="Add internal instructions, access details, shot priorities, or follow-up notes…"
+              rows={4}
+              style={{ minHeight: "92px", padding: "13px 14px", border: "1px solid #cfcfcf", borderRadius: "10px", background: "#fff", color: "#17231f", font: "500 14px/1.55 Arial, sans-serif", resize: "vertical", textTransform: "none", letterSpacing: 0 }}
+            />
+            <small style={{ color: "#7a817e", fontSize: "11px", fontWeight: 500, lineHeight: 1.4, textTransform: "none", letterSpacing: 0 }}>Autosaves to the order and Microsoft 365 appointment notes.</small>
+          </label>
+        ) : null}
+      </div>
+
       <div style={invoiceBoxStyle}>
         <div
           style={{
@@ -1070,7 +1229,7 @@ export default function InvoiceEditor({
             color: "#555",
           }}
         >
-          <div>Done</div>
+          <div>{canEdit ? "Done" : "Status"}</div>
           <div>Item</div>
           <div>Kind</div>
           {canEdit ? <div>Assigned To</div> : null}
@@ -1084,12 +1243,12 @@ export default function InvoiceEditor({
           invoiceItems.map((item) => {
             const kind = clean(item.kind);
             const isManual =
-              kind === "fee" || kind === "discount" || kind === "travel_fee";
+              kind === "custom" || kind === "fee" || kind === "discount" || kind === "travel_fee";
             const productChoices = isManual ? [] : getProductList(kind);
             const lockedChild = isLockedPackageChild(item, invoiceItems);
             const rowCanEdit = canEdit && !lockedChild;
             const rowCanDelete = canEdit && !lockedChild;
-            const qtyEditable = rowCanEdit && kind === "addon";
+            const qtyEditable = rowCanEdit && (kind === "addon" || kind === "custom");
 
             return (
               <div
@@ -1114,26 +1273,49 @@ export default function InvoiceEditor({
                     paddingTop: "1px",
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => toggleCompleted(item.id)}
-                    style={{
-                      width: "26px",
-                      height: "26px",
-                      borderRadius: "4px",
-                      border: item.completed ? "2px solid #3fa34d" : "2px solid #555",
-                      background: "#fff",
-                      color: "#3fa34d",
-                      fontSize: "18px",
-                      fontWeight: 900,
-                      lineHeight: 1,
-                      cursor: "pointer",
-                      padding: 0,
-                    }}
-                    title={item.completed ? "Mark undone" : "Mark done"}
-                  >
-                    {item.completed ? "✓" : ""}
-                  </button>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleCompleted(item.id)}
+                      style={{
+                        width: "26px",
+                        height: "26px",
+                        borderRadius: "4px",
+                        border: item.completed ? "2px solid #3fa34d" : "2px solid #555",
+                        background: "#fff",
+                        color: "#3fa34d",
+                        fontSize: "18px",
+                        fontWeight: 900,
+                        lineHeight: 1,
+                        cursor: "pointer",
+                        padding: 0,
+                      }}
+                      title={item.completed ? "Mark undone" : "Mark done"}
+                      aria-label={item.completed ? "Mark item undone" : "Mark item done"}
+                    >
+                      {item.completed ? "✓" : ""}
+                    </button>
+                  ) : (
+                    <div
+                      aria-label={item.completed ? "Completed" : "Not completed"}
+                      style={{
+                        width: "26px",
+                        height: "26px",
+                        borderRadius: "4px",
+                        border: item.completed
+                          ? "2px solid #3fa34d"
+                          : "2px solid #b8b8b8",
+                        background: item.completed ? "#f1fbf3" : "#f5f5f5",
+                        color: "#3fa34d",
+                        fontSize: "18px",
+                        fontWeight: 900,
+                        lineHeight: "22px",
+                        textAlign: "center",
+                      }}
+                    >
+                      {item.completed ? "✓" : ""}
+                    </div>
+                  )}
 
                   <div
                     style={{
@@ -1157,7 +1339,9 @@ export default function InvoiceEditor({
                       onChange={(e) => updateItem(item.id, { name: e.target.value })}
                       style={inputStyle}
                       placeholder={
-                        kind === "discount"
+                        kind === "custom"
+                          ? "Custom product or adjustment"
+                          : kind === "discount"
                           ? "Discount"
                           : kind === "travel_fee"
                             ? "Travel Fee"
@@ -1211,6 +1395,7 @@ export default function InvoiceEditor({
                     <option value="service">Service</option>
                     <option value="addon">Add-On</option>
                     <option value="travel_fee">Travel Fee</option>
+                    <option value="custom">Custom Product</option>
                     <option value="fee">Fee</option>
                     <option value="discount">Discount</option>
                   </select>
@@ -1248,6 +1433,7 @@ export default function InvoiceEditor({
                   <AppointmentPicker
                     value={item.appt_start}
                     disabled={!rowCanEdit}
+                    durationMinutes={Math.max(15, Number(products.find((product) => product.id === item.product_id)?.duration_minutes || 60))}
                     onChange={(nextIso) => updateAppointment(item.id, nextIso)}
                   />
                 ) : null}
@@ -1260,9 +1446,9 @@ export default function InvoiceEditor({
                     const raw = e.target.value;
                     setPriceDrafts((prev) => ({ ...prev, [item.id]: raw }));
 
-                    if (!rowCanEdit || kind === "package") return;
+                    if (!rowCanEdit) return;
 
-                    const cents = parseMoneyInputToCents(raw);
+                    const cents = parseMoneyInputToCents(raw, kind === "custom");
                     updateItem(item.id, {
                       price_cents: kind === "discount" ? Math.abs(cents) : cents,
                     });
@@ -1274,8 +1460,8 @@ export default function InvoiceEditor({
                       return next;
                     });
                   }}
-                  style={rowCanEdit && kind !== "package" ? inputStyle : lockedInputStyle}
-                  disabled={!rowCanEdit || kind === "package"}
+                  style={rowCanEdit ? inputStyle : lockedInputStyle}
+                  disabled={!rowCanEdit}
                 />
 
                 <input
@@ -1368,81 +1554,66 @@ export default function InvoiceEditor({
                 + Add Product Line
               </button>
             ) : null}
+            {canEdit ? (
+              <button onClick={addCustomLine} style={blackPill} type="button">
+                + Add Custom Product
+              </button>
+            ) : null}
           </div>
 
           <div
             style={{
               display: "flex",
-              gap: "14px",
+              gap: "10px",
               flexWrap: "wrap",
-              alignItems: "stretch",
+              alignItems: "center",
             }}
           >
-            <a href="#" style={coolActionStyle}>
-              <div>
-                <div style={coolIconStyle}>📍</div>
-                <div style={{ fontWeight: 700, fontSize: "14px" }}>Google Maps</div>
-              </div>
-            </a>
+            {hasBalanceDue && resolvedInvoicePublicUrl ? (
+              <a href={resolvedInvoicePublicUrl} style={primaryPaymentStyle}>
+                <span style={{ ...coolIconStyle, background: "rgba(19,37,31,.1)" }}>→</span>
+                <span>{canEdit ? "Open Payment Page" : `Pay Balance · ${money(balanceDueCents)}`}</span>
+              </a>
+            ) : null}
 
-            <button
-              type="button"
-              onClick={handleSendConfirmation}
-              disabled={sendState === "sending" || (!clean(siteId) && !clean(booking?.id))}
-              style={{
-                ...coolActionStyle,
-                cursor:
-                  sendState === "sending" || (!clean(siteId) && !clean(booking?.id))
-                    ? "default"
-                    : "pointer",
-                opacity:
-                  sendState === "sending" || (!clean(siteId) && !clean(booking?.id))
-                    ? 0.7
-                    : 1,
-              }}
-            >
-              <div>
-                <div style={coolIconStyle}>✉️</div>
-                <div style={{ fontWeight: 700, fontSize: "14px" }}>
-                  {sendState === "sending" ? "Sending..." : "Send Confirmation"}
-                </div>
-              </div>
-            </button>
+            {canEdit ? (
+              <>
+                <a href="#" style={coolActionStyle}>
+                  <span style={coolIconStyle}>⌖</span>
+                  <span>Open Map</span>
+                </a>
+
+                <button
+                  type="button"
+                  onClick={handleSendConfirmation}
+                  disabled={sendState === "sending" || (!clean(siteId) && !clean(booking?.id))}
+                  style={{
+                    ...coolActionStyle,
+                    opacity: sendState === "sending" || (!clean(siteId) && !clean(booking?.id)) ? 0.55 : 1,
+                  }}
+                >
+                  <span style={coolIconStyle}>✉</span>
+                  <span>{sendState === "sending" ? "Sending..." : "Send Confirmation"}</span>
+                </button>
+
+                <button type="button" style={coolActionStyle}>
+                  <span style={coolIconStyle}>$</span>
+                  <span>Record Check / Cash</span>
+                </button>
+              </>
+            ) : null}
 
             {isFullyPaid && resolvedInvoiceViewUrl ? (
               <a
                 href={resolvedInvoiceViewUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={coolActionStyle}
+                style={canEdit ? coolActionStyle : primaryPaymentStyle}
               >
-                <div>
-                  <div style={coolIconStyle}>🧾</div>
-                  <div style={{ fontWeight: 700, fontSize: "14px" }}>View/Send Invoice</div>
-                </div>
+                <span style={coolIconStyle}>✓</span>
+                <span>{canEdit ? "View / Send Invoice" : "View Paid Invoice"}</span>
               </a>
             ) : null}
-
-            {hasBalanceDue && resolvedInvoicePublicUrl ? (
-              <a
-                href={resolvedInvoicePublicUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={coolActionStyle}
-              >
-                <div>
-                  <div style={coolIconStyle}>💳</div>
-                  <div style={{ fontWeight: 700, fontSize: "14px" }}>Pay with Card</div>
-                </div>
-              </a>
-            ) : null}
-
-            <button type="button" style={coolActionStyle}>
-              <div>
-                <div style={coolIconStyle}>💵</div>
-                <div style={{ fontWeight: 700, fontSize: "14px" }}>Check or Cash</div>
-              </div>
-            </button>
           </div>
 
           {sendMessage ? (

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { authenticatedFetch } from "@/src/lib/authenticated-fetch";
 import CustomDomainStore from "./CustomDomainStore";
+import DeleteSiteButton from "./DeleteSiteButton";
 
 type Props = {
   siteId: string;
@@ -12,6 +13,7 @@ type Props = {
   initialPublicAliases?: string[];
   customDomain?: string;
   canManageAddresses?: boolean;
+  deleteLabel?: string;
   initialStatus?: string;
   initialOpenHouseEnabled?: boolean;
   initialOpenHouseStart?: string;
@@ -59,6 +61,7 @@ export default function SiteSummaryPanel({
   initialPublicAliases = [],
   customDomain,
   canManageAddresses = false,
+  deleteLabel = "this property site",
   initialStatus = "active",
   initialOpenHouseEnabled = false,
   initialOpenHouseStart,
@@ -110,8 +113,7 @@ export default function SiteSummaryPanel({
   }
 
   async function copyLink() {
-    const absoluteUrl = `https://sites.gsvisions.co/${publicSlug}`;
-    await navigator.clipboard.writeText(absoluteUrl);
+    await navigator.clipboard.writeText(resolvedPublicSiteUrl);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   }
@@ -155,7 +157,7 @@ export default function SiteSummaryPanel({
                 <span style={{ paddingLeft: "12px", color: "#64706a", fontSize: "14px" }}>sites.gsvisions.co/</span>
                 <input aria-label="Primary property website path" value={publicSlug} onChange={(event) => setPublicSlug(normalizeSlugInput(event.target.value))} style={{ ...inputStyle, border: 0, paddingLeft: "3px" }} />
               </div>
-              <p style={{ margin: "7px 0 0", color: "#64706a", fontSize: "12px" }}>Admin-managed SEO address. Use lowercase letters, numbers, and hyphens.</p>
+              <p style={{ margin: "7px 0 0", color: "#64706a", fontSize: "12px" }}>Public address based on the property street address. Internal site IDs stay private.</p>
             </> : <div style={{ marginTop: 7, padding: "13px 14px", border: "1px solid #cfd3d0", background: "#f7f7f4", color: "#17231f", fontSize: 14 }}><span style={{ color: "#64706a" }}>sites.gsvisions.co/</span><strong>{publicSlug}</strong></div>}
           </div>
           {canManageAddresses ? publicAliases.map((alias, index) => (
@@ -170,7 +172,7 @@ export default function SiteSummaryPanel({
           {canManageAddresses ? <button type="button" onClick={() => setPublicAliases((current) => [...current, ""])} style={{ ...quickLinkStyle, minHeight: "40px", marginTop: "10px" }}>+ Add another address</button> : null}
           <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "22px" }}>
             <a href={resolvedPublicSiteUrl} target="_blank" rel="noreferrer" style={{ ...quickLinkStyle, background: "#17231f", color: "#ffc72c" }}>Preview website ↗</a>
-            <button type="button" onClick={copyLink} style={quickLinkStyle}>{copied ? "Link copied" : "Copy link"}</button>
+            <button type="button" onClick={copyLink} style={quickLinkStyle}>{copied ? "URL copied" : "Copy URL"}</button>
             <a href={`mailto:?subject=${encodeURIComponent("Property website")}&body=${encodeURIComponent(`View this property: ${resolvedPublicSiteUrl}`)}`} style={quickLinkStyle}>Email site</a>
           </div>
 
@@ -182,7 +184,11 @@ export default function SiteSummaryPanel({
               ))}
             </div>
           </div>
-          <CustomDomainStore siteId={siteId} currentDomain={customDomain} />
+          <CustomDomainStore
+            siteId={siteId}
+            currentDomain={customDomain}
+            suggestedDomain={`${(initialPublicSlug || "property").replace(/[^a-z0-9]/gi, "").toLowerCase()}.com`}
+          />
         </div>
 
         <div style={{ minWidth: 0, borderLeft: "4px solid #ffc72c", background: "#f3f0e7", padding: "24px", boxSizing: "border-box" }}>
@@ -199,6 +205,7 @@ export default function SiteSummaryPanel({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "16px", flexWrap: "wrap", marginTop: "28px", paddingTop: "24px", borderTop: "1px solid #cfd3d0" }}>
+        {canManageAddresses ? <div style={{ marginRight: "auto" }}><DeleteSiteButton siteId={siteId} label={deleteLabel} /></div> : null}
         {message ? <p role="status" style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: message.includes("saved") ? "#17683a" : "#a02020" }}>{message}</p> : null}
         <button type="button" onClick={save} disabled={saving} style={{ ...quickLinkStyle, width: "min(100%, 420px)", minHeight: "54px", background: "#ffc72c", borderColor: "#ffc72c", color: "#17231f", opacity: saving ? .7 : 1 }}>{saving ? "Saving all settings…" : "Save all website settings"}</button>
       </div>

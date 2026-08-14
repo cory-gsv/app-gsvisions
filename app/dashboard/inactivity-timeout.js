@@ -6,7 +6,7 @@
 
 export function initInactivityTimeout() {
 
-  const HOURS = 4
+  const HOURS = 12
   const TIMEOUT = HOURS * 60 * 60 * 1000
 
   let timer

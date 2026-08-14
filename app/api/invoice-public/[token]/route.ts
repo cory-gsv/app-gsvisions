@@ -132,9 +132,20 @@ function getClientName(booking: BookingRow | null): string {
 }
 
 function computeSubtotalFromInvoiceItems(items: InvoiceItem[]): number {
+  const chargedPackageGroups = new Set(
+    items
+      .filter((item) => {
+        return clean(item.kind).toLowerCase() === "package" &&
+          clean(item.group_id) &&
+          (Number(item.price_cents ?? 0) || 0) !== 0;
+      })
+      .map((item) => clean(item.group_id))
+  );
+
   return items.reduce((sum, item) => {
     const kind = clean(item.kind).toLowerCase();
-    if (kind === "package" || kind === "discount") return sum;
+    if (kind === "discount") return sum;
+    if (kind !== "package" && chargedPackageGroups.has(clean(item.group_id))) return sum;
     return sum + (Number(item.price_cents ?? 0) || 0) * Math.max(1, Number(item.qty ?? 1) || 1);
   }, 0);
 }

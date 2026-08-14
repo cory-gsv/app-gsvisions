@@ -166,6 +166,24 @@
   font-size: 18px;
   margin-bottom: 6px;
 }
+.gsv-logo-requirement{
+  display: block;
+  margin: 14px 0 26px;
+  padding-left: 82px;
+  color: #66706b;
+  line-height: 1.4;
+}
+.gsv-client-media-card .gsv-dash__logo-row{
+  min-height: 58px;
+}
+.gsv-client-media-card .gsv-logo-requirement:last-child{
+  margin-bottom: 0;
+}
+@media (max-width: 680px){
+  .gsv-logo-requirement{
+    padding-left: 0;
+  }
+}
 
 .gsv-dash__stats{
   display:flex;
@@ -210,6 +228,12 @@
 }
 
 .gsv-dash__search{ min-width: 280px; }
+.gsv-site-filters{
+  min-width: min(100%, 580px);
+  display: grid;
+  grid-template-columns: minmax(190px, .85fr) minmax(260px, 1.15fr);
+  gap: 10px;
+}
 
 .gsv-dash__input{
   width:100%;
@@ -240,11 +264,12 @@
 /* PROPERTY GRID */
 .gsv-dash__tiles{
   display:grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 .gsv-dash__tile-link{
   display:block;
+  height: 100%;
   color:inherit;
   text-decoration:none;
 }
@@ -857,7 +882,7 @@
 /* responsive */
 @media (max-width: 900px){
   .gsv-dash__grid2{ grid-template-columns: 1fr; }
-  .gsv-dash__tiles{ grid-template-columns: 1fr; }
+  .gsv-dash__tiles{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .gsv-cal__top{ flex-direction: column; align-items:flex-start; }
   .gsv-cal__actions{ justify-content:flex-start; }
   .gsv-evrow{ grid-template-columns: 1fr; }
@@ -879,6 +904,8 @@
 @media (max-width: 520px){
   .gsv-dash__top{ flex-direction: column; align-items:flex-start; }
   .gsv-dash__search{ min-width: 0; width: 100%; }
+  .gsv-site-filters{ min-width: 0; width: 100%; grid-template-columns: 1fr; }
+  .gsv-dash__tiles{ grid-template-columns: 1fr; }
 }
 
 /* EVENT MODAL link color */
@@ -1311,6 +1338,9 @@
   #gsv-product-modal .gsv-modal__actions { margin-left: 0 !important; margin-right: 0 !important; padding: 15px 0 18px !important; }
 }
 .gsv-dash__tile {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
   padding: 0;
   overflow: hidden;
   border: 1px solid rgba(23,35,31,.18);
@@ -1343,23 +1373,31 @@
 }
 .gsv-dash__tile .gsv-collage__ph svg { opacity: .6; }
 .gsv-dash__tile-addr {
+  display: -webkit-box;
+  min-height: 60px;
   padding: 17px 18px 0;
   color: #17231f;
   font-size: 17px;
   font-weight: 700;
   line-height: 1.25;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .gsv-dash__tile-sub {
-  min-height: 34px;
+  min-height: 39px;
   margin: 0;
   padding: 5px 18px 12px;
   color: #66706b;
   font-size: 12px;
   line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .gsv-dash__tile-row {
   align-items: center;
-  margin: 0;
+  margin: auto 0 0;
   padding: 13px 18px 16px;
   border-top: 1px solid rgba(23,35,31,.12);
 }

@@ -9,7 +9,12 @@ import MediaLinksEditor from "./MediaLinksEditor";
 import PropertySectionNav from "./PropertySectionNav";
 import SiteSummaryPanel from "./SiteSummaryPanel";
 import LeadCapturePanel from "./LeadCapturePanel";
+import ClientSummaryCard from "./ClientSummaryCard";
+import DeliveryEmailActions from "./DeliveryEmailActions";
+import PortalNavActions from "../../PortalNavActions";
+import "./property-workspace.css";
 import { makePropertySiteSlug, normalizePropertySiteSlug, propertySiteUrl } from "@/lib/property-site-slug";
+import { marketingEditorAllowsClientAccess, marketingEditorEnabled } from "@/lib/marketing-kit";
 
 type Site = {
   id: string;
@@ -68,6 +73,12 @@ type Profile = {
   profile_photo_url: string | null;
   brokerage_name: string | null;
   mls_license: string | null;
+  brokerage_website_url: string | null;
+  facebook_url: string | null;
+  instagram_url: string | null;
+  linkedin_url: string | null;
+  twitter_url: string | null;
+  youtube_url: string | null;
   is_admin: boolean | null;
   role: string | null;
 };
@@ -141,6 +152,61 @@ type MediaAsset = {
   height: number | null;
   created_at?: string | null;
 };
+
+type OutboundMessage = {
+  id: string;
+  message_type: string;
+  recipient_email: string;
+  subject: string;
+  status: string;
+  sent_at: string | null;
+  delivered_at: string | null;
+  opened_at: string | null;
+  clicked_at: string | null;
+  open_count: number | null;
+  click_count: number | null;
+  last_clicked_url: string | null;
+  last_error: string | null;
+  created_at: string;
+};
+
+type EmailEngagementEvent = {
+  id: string;
+  outbound_message_id: string;
+  event_type: string;
+  occurred_at: string;
+  clicked_url: string | null;
+  provider_payload: unknown;
+};
+
+function formatEmailDateTime(value: string | null | undefined) {
+  if (!value) return "—";
+  return new Date(value).toLocaleString("en-US", {
+    timeZone: "America/Los_Angeles",
+    month: "numeric",
+    day: "numeric",
+    year: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function emailEventLabel(value: string) {
+  return clean(value).replace(/^email\./, "").replaceAll("_", " ");
+}
+
+function emailClickDetails(event: EmailEngagementEvent) {
+  const payload = event.provider_payload && typeof event.provider_payload === "object"
+    ? event.provider_payload as Record<string, unknown>
+    : {};
+  const data = payload.data && typeof payload.data === "object" ? payload.data as Record<string, unknown> : {};
+  const click = data.click && typeof data.click === "object" ? data.click as Record<string, unknown> : {};
+  return {
+    ipAddress: clean(click.ipAddress) || clean(payload.ipAddress),
+    userAgent: clean(click.userAgent) || clean(payload.userAgent),
+    link: clean(event.clicked_url) || clean(click.link),
+  };
+}
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -380,7 +446,7 @@ function buildInitialInvoiceItems(booking: Booking | null, products: Product[]):
       source: "booking",
       product_id: pkgProduct?.id || clean(booking.selected_package_id) || null,
       name: packageName,
-      price_cents: 0,
+      price_cents: Number(pkgProduct?.price_cents ?? 0) || 0,
       qty: 1,
       editable: true,
       group_id: packageGroupId,
@@ -540,7 +606,8 @@ function getPrimaryHeroMedia(rows: MediaAsset[]): MediaAsset | null {
   return null;
 }
 
-function statusPillStyle(active: boolean): React.CSSProperties {
+function statusPillStyle(active: boolean, delivered = false): React.CSSProperties {
+  const deliveredActive = active && delivered;
   return {
     height: "38px",
     padding: "0 14px",
@@ -551,23 +618,9 @@ function statusPillStyle(active: boolean): React.CSSProperties {
     fontSize: "13px",
     fontWeight: 700,
     textTransform: "capitalize",
-    background: active ? "#171717" : "#ffffff",
-    color: active ? "#ffffff" : "#171717",
-    border: active ? "1px solid #171717" : "1px solid #dcdcdc",
-  };
-}
-
-function actionButtonStyle(dark = true): React.CSSProperties {
-  return {
-    height: "40px",
-    borderRadius: "999px",
-    border: dark ? "1px solid #171717" : "1px solid #d7d7d7",
-    background: dark ? "#171717" : "#ffffff",
-    color: dark ? "#ffffff" : "#171717",
-    fontWeight: 700,
-    padding: "0 16px",
-    cursor: "pointer",
-    fontSize: "13px",
+    background: deliveredActive ? "#ffc72c" : active ? "#171717" : "#ffffff",
+    color: deliveredActive ? "#17231f" : active ? "#ffffff" : "#171717",
+    border: deliveredActive ? "1px solid #ffc72c" : active ? "1px solid #171717" : "1px solid #dcdcdc",
   };
 }
 
@@ -679,6 +732,12 @@ export default async function SitePage({
         profile_photo_url,
         brokerage_name,
         mls_license,
+        brokerage_website_url,
+        facebook_url,
+        instagram_url,
+        linkedin_url,
+        twitter_url,
+        youtube_url,
         is_admin,
         role
       `)
@@ -811,6 +870,53 @@ export default async function SitePage({
 
   const siteData = getSiteData(site.site_data);
 
+  const hasAppointment = Boolean(
+    clean(booking?.scheduled_start) || clean(siteData.calendar_event_id) || clean(siteData.fulfillment_appointment_id)
+  );
+  const storedLifecycle = clean(site.status).toLowerCase() || "draft";
+  const lifecycleStatus = storedLifecycle === "draft" && hasAppointment ? "scheduled" : storedLifecycle;
+  if (lifecycleStatus !== storedLifecycle) {
+    const { error: lifecycleError } = await adminSb
+      .from("sites")
+      .update({ status: lifecycleStatus, updated_at: new Date().toISOString() })
+      .eq("id", site.id)
+      .eq("status", storedLifecycle);
+    if (!lifecycleError) site.status = lifecycleStatus;
+  }
+
+  let outboundMessages: OutboundMessage[] = [];
+  let emailEngagementEvents: EmailEngagementEvent[] = [];
+  if (viewerIsAdmin) {
+    const { data: messageData, error: messageError } = await adminSb
+      .from("outbound_messages")
+      .select("id,message_type,recipient_email,subject,status,sent_at,delivered_at,opened_at,clicked_at,open_count,click_count,last_clicked_url,last_error,created_at")
+      .or(`site_id.eq.${site.id}${clean(site.booking_id) ? `,booking_id.eq.${clean(site.booking_id)}` : ""}`)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (!messageError && Array.isArray(messageData)) outboundMessages = messageData as OutboundMessage[];
+    const messageIds = outboundMessages.map((message) => message.id);
+    if (messageIds.length) {
+      const { data: engagementData, error: engagementError } = await adminSb
+        .from("email_engagement_events")
+        .select("id,outbound_message_id,event_type,occurred_at,clicked_url,provider_payload")
+        .in("outbound_message_id", messageIds)
+        .order("occurred_at", { ascending: false })
+        .limit(500);
+      if (!engagementError && Array.isArray(engagementData)) {
+        emailEngagementEvents = engagementData as EmailEngagementEvent[];
+      }
+    }
+  }
+  const engagementEventsByMessage = new Map<string, EmailEngagementEvent[]>();
+  emailEngagementEvents.forEach((event) => {
+    const rows = engagementEventsByMessage.get(event.outbound_message_id) || [];
+    rows.push(event);
+    engagementEventsByMessage.set(event.outbound_message_id, rows);
+  });
+  const mediaHasBeenReleased =
+    ["delivered", "live", "sold", "offline"].includes(lifecycleStatus) ||
+    outboundMessages.some((message) => message.message_type === "media_delivery");
+
   const { data: trafficEventData } = await adminSb
     .from("site_traffic_events")
     .select("event_type, media_asset_id, referrer_host, city, region, country, created_at")
@@ -908,15 +1014,36 @@ export default async function SitePage({
       : buildInitialInvoiceItems(booking, products);
 
   const packageDiscountCents = derivePackageDiscountCents(site, booking);
+  // Every authorized order needs a stable customer payment URL. Older and
+  // admin-created sites may predate public invoice token creation, so repair
+  // that state when the workspace is opened.
+  if (!clean(site.invoice_public_token) || site.invoice_public_enabled !== true) {
+    const invoiceToken = clean(site.invoice_public_token) || crypto.randomUUID();
+    const { error: invoiceLinkError } = await adminSb
+      .from("sites")
+      .update({
+        invoice_public_token: invoiceToken,
+        invoice_public_enabled: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", site.id);
+    if (!invoiceLinkError) {
+      site.invoice_public_token = invoiceToken;
+      site.invoice_public_enabled = true;
+    }
+  }
+
   const invoicePublicUrl = getInvoicePublicUrl(site);
 
   const canEdit = viewerIsAdmin;
-  const agentTileSize = 132;
+  const outstandingBalanceCents = Math.max(0, Number(site.balance_due_cents ?? 0) || 0);
+  const clientMediaLocked = !viewerIsAdmin && site.paid !== true && outstandingBalanceCents > 0;
   const propertySiteSlug = normalizePropertySiteSlug(site.site_slug) || makePropertySiteSlug(streetAddress || address);
   const publicSiteAliases = Array.isArray(siteData.public_site_aliases)
     ? siteData.public_site_aliases.map(normalizePropertySiteSlug).filter(Boolean)
     : [];
   const publicSiteUrl = propertySiteUrl(propertySiteSlug);
+  const showMarketingKit = marketingEditorEnabled() && (viewerIsAdmin || marketingEditorAllowsClientAccess());
 
   return (
     <main
@@ -927,178 +1054,47 @@ export default async function SitePage({
         borderTop: "6px solid #ffc72c",
       }}
     >
-      <div
-        style={{
-          minHeight: "104px",
-          padding: "24px clamp(24px, 5vw, 76px)",
-          display: "flex",
-          alignItems: "center",
-          background: "#17231f",
-          borderBottom: "1px solid rgba(255,255,255,.18)",
-        }}
-      >
+      <div className="gsv-property-topbar">
         <Link
           href="/dashboard"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "10px",
-            textDecoration: "none",
-            color: "#ffffff",
-            fontWeight: 700,
-            fontSize: "11px",
-            letterSpacing: ".1em",
-            textTransform: "uppercase",
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,.5)",
-            borderRadius: "999px",
-            padding: "13px 18px",
-            boxShadow: "none",
-          }}
+          className="gsv-property-topbar__return"
         >
           <span style={{ fontSize: "18px", lineHeight: 1 }}>←</span>
           <span>Return to Dashboard</span>
         </Link>
+        <PortalNavActions isAdmin={viewerIsAdmin} />
       </div>
 
       <div
+        className="gsv-property-layout"
         style={{
           maxWidth: "1500px",
           margin: "0 auto",
-          display: "grid",
-          gridTemplateColumns: "210px minmax(0, 1fr)",
-          gap: "clamp(28px, 4vw, 64px)",
           padding: "42px clamp(20px, 4vw, 52px) 72px",
         }}
       >
         <aside
+          className="gsv-property-sidebar"
           style={{
-            position: "sticky",
-            top: "24px",
-            alignSelf: "start",
-            maxHeight: "calc(100vh - 48px)",
             background: "transparent",
             borderTop: "1px solid rgba(23,35,31,.25)",
             borderBottom: "1px solid rgba(23,35,31,.25)",
             borderRadius: "0",
             padding: "20px 0 0",
             boxShadow: "none",
-            overflow: "auto",
           }}
         >
-          <PropertySectionNav publicSiteUrl={publicSiteUrl} />
+          <PropertySectionNav
+            siteId={site.id}
+            publicSiteUrl={publicSiteUrl}
+            showVideo={canEdit || !!rawVideoUrl}
+            showDelivery={viewerIsAdmin}
+            mediaLocked={clientMediaLocked}
+            showMarketingKit={showMarketingKit}
+          />
         </aside>
 
-        <div style={{ display: "grid", gap: "18px", minWidth: 0 }}>
-          <section id="agent" style={sectionCardStyle()}>
-            <h2 style={sectionTitleStyle()}>Agent</h2>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: `${agentTileSize}px minmax(0, 1fr)`,
-                gap: "24px",
-                alignItems: "stretch",
-              }}
-            >
-              <div
-                style={{
-                  width: `${agentTileSize}px`,
-                  height: `${agentTileSize}px`,
-                  borderRadius: "0",
-                  overflow: "hidden",
-                  border: "1px solid rgba(23,35,31,.18)",
-                  background: "#e5e2d8",
-                  flexShrink: 0,
-                }}
-              >
-                {agentPhoto ? (
-                  <img
-                    src={agentPhoto}
-                    alt={agentName}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      display: "block",
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      display: "grid",
-                      placeItems: "center",
-                      color: "#7a7a7a",
-                      fontWeight: 700,
-                    }}
-                  >
-                    No Photo
-                  </div>
-                )}
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
-                  gap: "16px",
-                }}
-              >
-                {[
-                  ["Agent Name", agentName],
-                  ["Phone", agentPhone],
-                  ["Email", agentEmail],
-                  ["Brokerage", brokerageName],
-                  ["MLS License", mlsLicense],
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    style={{
-                      height: `${agentTileSize}px`,
-                      minHeight: `${agentTileSize}px`,
-                      padding: "16px 18px",
-                      borderRadius: "0",
-                      background: "#f2f0e9",
-                      border: "1px solid rgba(23,35,31,.14)",
-                      boxSizing: "border-box",
-                      display: "flex",
-                      flexDirection: "column",
-                      justifyContent: "flex-start",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "#66706b",
-                        textTransform: "uppercase",
-                        letterSpacing: ".08em",
-                        fontWeight: 700,
-                        lineHeight: 1,
-                      }}
-                    >
-                      {label}
-                    </div>
-
-                    <div
-                      style={{
-                        marginTop: "22px",
-                        fontSize: "14px",
-                        fontWeight: 600,
-                        lineHeight: 1.35,
-                        wordBreak: "break-word",
-                        color: "#17231f",
-                      }}
-                    >
-                      {value}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-
+        <div className="gsv-property-content" style={{ display: "grid", gap: "18px", minWidth: 0 }}>
           <section
             id="summary"
             style={{
@@ -1107,48 +1103,50 @@ export default async function SitePage({
               overflow: "hidden",
             }}
           >
-            <MediaManager
-              siteId={site.id}
-              mode="hero"
-              fallbackHeroUrl={hero}
-              canManage={canEdit}
-            />
-
-            <div
-              style={{
-                position: "relative",
-                marginTop: "-96px",
-                padding: "0 32px 22px 32px",
-                color: "#fff",
-                pointerEvents: "none",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "48px",
-                  lineHeight: 1.05,
-                  fontWeight: 800,
-                  textShadow: "0 8px 30px rgba(0,0,0,.34)",
-                }}
-              >
-                {streetAddress || address}
+            <div className="gsv-summary-header" style={{ padding: "22px 24px", background: "#17231f", color: "#fff", borderTop: "5px solid #ffc72c" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ color: "#ffc72c", fontSize: 9, fontWeight: 900, letterSpacing: ".14em", textTransform: "uppercase" }}>Site summary</div>
+                <div style={{ marginTop: 7, fontSize: "clamp(25px, 3vw, 42px)", lineHeight: 1.05, fontWeight: 800 }}>{streetAddress || address}</div>
+                <div style={{ marginTop: 8, color: "rgba(255,255,255,.72)", fontSize: 14 }}>{cityStateZip}{cityStateZip ? " · " : ""}Site ID: {site.id.slice(0, 8)}</div>
               </div>
-
-              {cityStateZip ? (
-                <div
-                  style={{
-                    marginTop: "6px",
-                    fontSize: "18px",
-                    lineHeight: 1.25,
-                    fontWeight: 600,
-                    color: "rgba(255,255,255,.94)",
-                    textShadow: "0 4px 20px rgba(0,0,0,.28)",
-                  }}
-                >
-                  {cityStateZip}
-                </div>
-              ) : null}
+              <ClientSummaryCard client={{
+                id: clean(assignedProfile?.id),
+                name: agentName,
+                firstName: clean(assignedProfile?.first_name),
+                lastName: clean(assignedProfile?.last_name),
+                photo: agentPhoto,
+                phone: agentPhone,
+                email: agentEmail,
+                brokerage: brokerageName,
+                mlsLicense,
+                website: clean(assignedProfile?.brokerage_website_url),
+                facebook: clean(assignedProfile?.facebook_url),
+                instagram: clean(assignedProfile?.instagram_url),
+                linkedin: clean(assignedProfile?.linkedin_url),
+                twitter: clean(assignedProfile?.twitter_url),
+                youtube: clean(assignedProfile?.youtube_url),
+              }} canEdit={!!assignedProfile?.id && (viewerIsAdmin || clean(assignedProfile.id) === viewerId)} />
             </div>
+            <div className="gsv-summary-hero">
+              <MediaManager
+                siteId={site.id}
+                mode="hero"
+                fallbackHeroUrl={hero}
+                canManage={canEdit}
+              />
+              {clientMediaLocked ? (
+                <Link className="gsv-hero-download-button" href={invoicePublicUrl || "#invoice"}>
+                  <span>Pay Balance · ${(outstandingBalanceCents / 100).toFixed(2)}</span>
+                  <span aria-hidden="true">→</span>
+                </Link>
+              ) : (
+                  <a className="gsv-hero-download-button" href="#downloads">
+                    <span>Download Media</span>
+                    <span aria-hidden="true">↓</span>
+                  </a>
+              )}
+            </div>
+
             <SiteSummaryPanel
               siteId={site.id}
               publicSiteUrl={publicSiteUrl}
@@ -1156,6 +1154,7 @@ export default async function SitePage({
               initialPublicAliases={publicSiteAliases}
               customDomain={clean(siteData.custom_domain)}
               canManageAddresses={viewerIsAdmin}
+              deleteLabel={clean(site.property_full_address) || clean(site.property_address) || clean(site.site_name) || site.id}
               initialStatus={clean(siteData.listing_status) || "active"}
               initialOpenHouseEnabled={siteData.open_house_enabled === true}
               initialOpenHouseStart={clean(siteData.open_house_start)}
@@ -1163,10 +1162,6 @@ export default async function SitePage({
               initialOpenHouseNotes={clean(siteData.open_house_notes)}
               traffic={traffic}
             />
-          </section>
-
-          <section id="leads" style={sectionCardStyle()}>
-            <LeadCapturePanel siteId={site.id} />
           </section>
 
           <InvoiceEditor
@@ -1180,11 +1175,15 @@ export default async function SitePage({
             packageDiscountCents={packageDiscountCents}
             adminUsers={adminUsers}
             invoicePublicUrl={invoicePublicUrl}
+            customerNotes={clean(siteData.customer_notes)}
+            initialAdminNotes={clean(siteData.admin_notes)}
           />
 
           <PropertyDetailsEditor
             siteId={site.id}
-            canEdit={canEdit}
+            canEdit={viewerIsAdmin || ownsSite}
+            canEditAddress={viewerIsAdmin}
+            canEditDescription={viewerIsAdmin || ownsSite}
             initial={{
               property_address: clean(site.property_address),
               property_city: clean(site.property_city),
@@ -1197,18 +1196,100 @@ export default async function SitePage({
               year_built: site.year_built,
               listing_mls_number: clean(siteData.listing_mls_number) || clean(siteData.mls_number) || clean(siteData.listing_mls),
               public_site_description: clean(siteData.public_site_description),
-              custom_domain: clean(siteData.custom_domain),
-              custom_domain_requested: siteData.custom_domain_requested === true,
             }}
           />
 
+          <section id="map" style={sectionCardStyle()}>
+            <h2 style={sectionTitleStyle()}>Map &amp; Location</h2>
+
+            {(() => {
+              const fullAddress =
+                clean(site.property_full_address) ||
+                clean(site.address_full) ||
+                [
+                  clean(site.property_address),
+                  clean(site.property_city),
+                  clean(site.property_state),
+                  clean(site.property_zip),
+                ]
+                  .filter(Boolean)
+                  .join(", ");
+
+              const mapSrc =
+                clean(siteData.map_embed_url) ||
+                clean(siteData.mapUrl) ||
+                (fullAddress
+                  ? `https://www.google.com/maps?q=${encodeURIComponent(fullAddress)}&z=14&output=embed`
+                  : "");
+
+              return mapSrc ? (
+                <div
+                  style={{
+                    borderRadius: "18px",
+                    overflow: "hidden",
+                    background: "#f3f3f3",
+                    border: "1px solid #ececec",
+                    boxShadow: "0 12px 32px rgba(0,0,0,0.08)",
+                  }}
+                >
+                  <iframe
+                    src={mapSrc}
+                    width="100%"
+                    height="440"
+                    style={{ border: "0", display: "block" }}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                  />
+                </div>
+              ) : (
+                <div
+                  style={{
+                    padding: "24px",
+                    borderRadius: "16px",
+                    background: "#fafafa",
+                    border: "1px dashed #d8d8d8",
+                    color: "#777",
+                  }}
+                >
+                  No map available yet. Add the property address in Property Details.
+                </div>
+              );
+            })()}
+          </section>
+
+          {!clientMediaLocked ? <section id="downloads" style={sectionCardStyle()}>
+            <h2 style={sectionTitleStyle()}>Download Media</h2>
+
+            <MediaManager
+              siteId={site.id}
+              mode="gallery"
+              view="downloads"
+              canManage={false}
+            />
+          </section> : null}
+
           <section id="gallery" style={sectionCardStyle()}>
-            <h2 style={sectionTitleStyle()}>Photo Gallery</h2>
+            <h2 style={sectionTitleStyle()}>Media Gallery</h2>
+
+            {clientMediaLocked ? (
+              <div className="gsv-media-payment-notice">
+                <div>
+                  <span>Payment required</span>
+                  <strong>Preview six photos now. Unlock every file after payment.</strong>
+                  <p>Full-size viewing, downloads, video, 3D tours, and floor plans remain protected until the outstanding balance is paid.</p>
+                </div>
+                <Link href={invoicePublicUrl || "#invoice"} className="gsv-media-payment-button">
+                  Pay balance · ${(outstandingBalanceCents / 100).toFixed(2)}
+                </Link>
+              </div>
+            ) : null}
 
             <MediaManager
               siteId={site.id}
               mode="gallery"
               canManage={canEdit}
+              previewLimit={clientMediaLocked ? 6 : undefined}
+              disableLightbox={clientMediaLocked}
             />
 
             {!mediaAssets.length && legacyGalleryImages.length ? (
@@ -1233,7 +1314,7 @@ export default async function SitePage({
                     gap: "14px",
                   }}
                 >
-                  {legacyGalleryImages.map((src, i) => (
+                  {legacyGalleryImages.slice(0, clientMediaLocked ? 6 : undefined).map((src, i) => (
                     <img
                       key={`${src}-${i}`}
                       src={src}
@@ -1252,7 +1333,7 @@ export default async function SitePage({
             ) : null}
           </section>
 
-          <section id="video" style={sectionCardStyle()}>
+          {!clientMediaLocked && (canEdit || rawVideoUrl) ? <section id="video" style={sectionCardStyle()}>
             <h2 style={sectionTitleStyle()}>Video</h2>
 
             <div style={{ display: "grid", gap: "16px" }}>
@@ -1324,9 +1405,9 @@ export default async function SitePage({
                 </div>
               )}
             </div>
-          </section>
+          </section> : null}
 
-          <section id="matterport" style={sectionCardStyle()}>
+          {!clientMediaLocked ? <section id="matterport" style={sectionCardStyle()}>
             <h2 style={sectionTitleStyle()}>3D Scanning</h2>
 
             <div style={{ display: "grid", gap: "16px" }}>
@@ -1382,9 +1463,20 @@ export default async function SitePage({
                 </div>
               )}
             </div>
-          </section>
+          </section> : null}
 
-          <section id="delivery" style={sectionCardStyle()}>
+          {!clientMediaLocked ? <section id="floorplan" style={sectionCardStyle()}>
+            <h2 style={sectionTitleStyle()}>Floor Plan</h2>
+
+            <MediaManager
+              siteId={site.id}
+              mode="floorplan"
+              fallbackFloorPlanUrl={floorPlanUrl}
+              canManage={canEdit}
+            />
+          </section> : null}
+
+          {viewerIsAdmin ? <section id="delivery" style={sectionCardStyle()}>
             <div
               style={{
                 display: "flex",
@@ -1422,21 +1514,21 @@ export default async function SitePage({
                     padding: "0 12px",
                     borderRadius: "999px",
                     background:
-                      clean(site.status).toLowerCase() === "delivered"
-                        ? "#111111"
+                      lifecycleStatus === "delivered"
+                        ? "#ffc72c"
                         : "#ffffff",
                     color:
-                      clean(site.status).toLowerCase() === "delivered"
-                        ? "#ffffff"
+                      lifecycleStatus === "delivered"
+                        ? "#17231f"
                         : "#171717",
                     border:
-                      clean(site.status).toLowerCase() === "delivered"
-                        ? "1px solid #111111"
+                      lifecycleStatus === "delivered"
+                        ? "1px solid #ffc72c"
                         : "1px solid #dcdcdc",
                     textTransform: "capitalize",
                   }}
                 >
-                  {clean(site.status) || "draft"}
+                  {lifecycleStatus}
                 </span>
               </div>
             </div>
@@ -1445,7 +1537,7 @@ export default async function SitePage({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1.2fr 1fr",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                   gap: "18px",
                 }}
               >
@@ -1487,9 +1579,9 @@ export default async function SitePage({
                       "offline",
                       "archived",
                     ].map((status) => {
-                      const active = clean(site.status).toLowerCase() === status;
+                      const active = lifecycleStatus === status;
                       return (
-                        <div key={status} style={statusPillStyle(active)}>
+                        <div key={status} style={statusPillStyle(active, status === "delivered")}>
                           {status}
                         </div>
                       );
@@ -1504,8 +1596,8 @@ export default async function SitePage({
                       lineHeight: 1.5,
                     }}
                   >
-                    Delivery email should send automatically when the site status changes to
-                    <strong> delivered</strong>. Manual resend buttons live below.
+                    <strong>Draft</strong> is assigned at creation, <strong>Scheduled</strong> when an appointment is linked,
+                    and <strong>Delivered</strong> when media is released. Listing states are managed in Website Information.
                   </div>
                 </div>
 
@@ -1527,38 +1619,66 @@ export default async function SitePage({
                       fontWeight: 700,
                     }}
                   >
-                    Automation Rules
+                    Email Activity
                   </div>
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: "10px",
-                      fontSize: "14px",
-                      color: "#171717",
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    <div>
-                      <strong>Confirmation Email</strong>
-                      <div style={{ color: "#666", fontSize: "13px" }}>
-                        Automatic when order is placed or created.
+                  <div className="gsv-delivery-email-list">
+                    {outboundMessages.length ? outboundMessages.slice(0, 10).map((message) => {
+                      const events = engagementEventsByMessage.get(message.id) || [];
+                      const visibleEvents = events.filter((event) => event.event_type !== "email.sent");
+                      return (
+                      <article className="gsv-delivery-email" key={message.id}>
+                        <div className="gsv-delivery-email__heading">
+                          <div>
+                            <strong>{message.subject || message.message_type.replaceAll("_", " ")}</strong>
+                            <span>{events.length ? `${events.length} provider event${events.length === 1 ? "" : "s"}` : "Awaiting provider events"}</span>
+                          </div>
+                          <span className={`gsv-delivery-email__status gsv-delivery-email__status--${message.status}`}>{message.status}</span>
+                        </div>
+                        <div className="gsv-delivery-email__table-wrap">
+                          <table className="gsv-delivery-email__table">
+                            <thead>
+                              <tr>
+                                <th>Sent to</th>
+                                <th>Sent on</th>
+                                <th>Activity</th>
+                                <th>Activity on</th>
+                                <th>From IP</th>
+                                <th>Destination</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {visibleEvents.length ? visibleEvents.map((event) => {
+                                const clickDetails = emailClickDetails(event);
+                                return <tr key={event.id}>
+                                  <td>{message.recipient_email || "—"}</td>
+                                  <td>{formatEmailDateTime(message.sent_at)}</td>
+                                  <td><span className={`gsv-delivery-email__event gsv-delivery-email__event--${emailEventLabel(event.event_type)}`}>{emailEventLabel(event.event_type)}</span></td>
+                                  <td>{formatEmailDateTime(event.occurred_at)}</td>
+                                  <td className="gsv-delivery-email__technical" title={clickDetails.userAgent || undefined}>{clickDetails.ipAddress || "—"}</td>
+                                  <td className="gsv-delivery-email__destination">{clickDetails.link ? <a href={clickDetails.link} target="_blank" rel="noreferrer">{clickDetails.link}</a> : "—"}</td>
+                                </tr>
+                              }) : (
+                                <tr>
+                                  <td>{message.recipient_email || "—"}</td>
+                                  <td>{formatEmailDateTime(message.sent_at)}</td>
+                                  <td><span className="gsv-delivery-email__event">{message.status || "sent"}</span></td>
+                                  <td>Waiting for Resend</td>
+                                  <td>—</td>
+                                  <td>—</td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                        {message.last_error ? <p className="gsv-delivery-email__error">{message.last_error}</p> : null}
+                      </article>
+                    )}) : (
+                      <div style={{ padding: "16px", border: "1px dashed #d8d8d8", background: "#fff", color: "#777", fontSize: "13px" }}>
+                        No email has been recorded for this order yet.
                       </div>
-                    </div>
-
-                    <div>
-                      <strong>Reminder Email</strong>
-                      <div style={{ color: "#666", fontSize: "13px" }}>
-                        Automatic 24 hours before appointment.
-                      </div>
-                    </div>
-
-                    <div>
-                      <strong>Delivery Email</strong>
-                      <div style={{ color: "#666", fontSize: "13px" }}>
-                        Automatic when site status changes to delivered.
-                      </div>
-                    </div>
+                    )}
+                    <p className="gsv-delivery-email__note">Open tracking can be affected by image blocking and email privacy features. IP addresses may represent an email privacy proxy rather than the recipient’s device.</p>
                   </div>
                 </div>
               </div>
@@ -1588,31 +1708,10 @@ export default async function SitePage({
                       fontWeight: 700,
                     }}
                   >
-                    Manual Email Actions
+                    Media Release & Email Actions
                   </div>
 
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "10px",
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    {[
-                      "Send Confirmation Email",
-                      "Send Reminder Email",
-                      "Re-send Delivery Email",
-                      "Send Review Request",
-                    ].map((label, index) => (
-                      <button
-                        key={label}
-                        type="button"
-                        style={actionButtonStyle(index !== 1)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <DeliveryEmailActions siteId={site.id} isReleased={mediaHasBeenReleased} />
 
                   <div
                     style={{
@@ -1622,8 +1721,9 @@ export default async function SitePage({
                       lineHeight: 1.5,
                     }}
                   >
-                    These buttons stay visible at all times and should send the current
-                    saved site/order data.
+                    {mediaHasBeenReleased
+                      ? "Media has been released to the client. The Media Ready email can be re-sent at any time."
+                      : "Release Media publishes the finished assets to the client portal and sends the initial Media Ready email. If a balance is due, the client sees a locked preview and a payment button until payment is complete."}
                   </div>
                 </div>
 
@@ -1723,7 +1823,7 @@ export default async function SitePage({
                 </div>
               </div>
 
-              <div
+              {outboundMessages.length > 4 ? <div
                 style={{
                   padding: "18px",
                   borderRadius: "18px",
@@ -1741,94 +1841,27 @@ export default async function SitePage({
                     fontWeight: 700,
                   }}
                 >
-                  Email Activity
+                  Earlier Email Activity
                 </div>
 
-                <div
-                  style={{
-                    padding: "18px",
-                    borderRadius: "14px",
-                    background: "#fff",
-                    border: "1px dashed #d8d8d8",
-                    color: "#777",
-                    fontSize: "14px",
-                  }}
-                >
-                  Email activity log will appear here once the email automation and
-                  manual send routes are wired up.
+                <div style={{ display: "grid", gap: "8px" }}>
+                  {outboundMessages.slice(4).map((message) => (
+                    <div key={message.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto auto auto", gap: "14px", padding: "12px 14px", borderRadius: "12px", background: "#fff", border: "1px solid #e5e5e5", fontSize: "12px" }}>
+                      <strong>{message.subject || message.message_type.replaceAll("_", " ")}</strong>
+                      <span>Sent {message.sent_at ? new Date(message.sent_at).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles" }) : "—"}</span>
+                      <span>Opened {message.opened_at ? new Date(message.opened_at).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles" }) : "—"}</span>
+                      <span>Clicked {message.clicked_at ? new Date(message.clicked_at).toLocaleDateString("en-US", { timeZone: "America/Los_Angeles" }) : "—"}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
+              </div> : null}
             </div>
+          </section> : null}
+
+          <section id="leads" style={sectionCardStyle()}>
+            <LeadCapturePanel siteId={site.id} />
           </section>
 
-          <section id="floorplan" style={sectionCardStyle()}>
-            <h2 style={sectionTitleStyle()}>Floor Plan</h2>
-
-            <MediaManager
-              siteId={site.id}
-              mode="floorplan"
-              fallbackFloorPlanUrl={floorPlanUrl}
-              canManage={canEdit}
-            />
-          </section>
-
-          <section id="map" style={sectionCardStyle()}>
-            <h2 style={sectionTitleStyle()}>Map</h2>
-
-            {(() => {
-              const fullAddress =
-                clean(site.property_full_address) ||
-                clean(site.address_full) ||
-                [
-                  clean(site.property_address),
-                  clean(site.property_city),
-                  clean(site.property_state),
-                  clean(site.property_zip),
-                ]
-                  .filter(Boolean)
-                  .join(", ");
-
-              const mapSrc =
-                clean(siteData.map_embed_url) ||
-                clean(siteData.mapUrl) ||
-                (fullAddress
-                  ? `https://www.google.com/maps?q=${encodeURIComponent(fullAddress)}&z=14&output=embed`
-                  : "");
-
-              return mapSrc ? (
-                <div
-                  style={{
-                    borderRadius: "18px",
-                    overflow: "hidden",
-                    background: "#f3f3f3",
-                    border: "1px solid #ececec",
-                    boxShadow: "0 12px 32px rgba(0,0,0,0.08)",
-                  }}
-                >
-                  <iframe
-                    src={mapSrc}
-                    width="100%"
-                    height="560"
-                    style={{ border: "0", display: "block" }}
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  />
-                </div>
-              ) : (
-                <div
-                  style={{
-                    padding: "24px",
-                    borderRadius: "16px",
-                    background: "#fafafa",
-                    border: "1px dashed #d8d8d8",
-                    color: "#777",
-                  }}
-                >
-                  No map available yet. Add the property address in Property Details.
-                </div>
-              );
-            })()}
-          </section>
         </div>
       </div>
     </main>

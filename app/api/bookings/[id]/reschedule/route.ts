@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifyRescheduleToken } from "@/lib/reschedule-token";
+import { listMicrosoftCalendarEvents } from "@/lib/m365-calendar";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -24,14 +25,6 @@ function getSupabaseAdmin() {
       autoRefreshToken: false,
     },
   });
-}
-
-function getGcalSyncUrl() {
-  return clean(
-    process.env.GSV_GCAL_SYNC_URL ||
-      process.env.NEXT_PUBLIC_GSV_GCAL_SYNC_URL ||
-      "https://etlquqhgwrrzgcccchxc.supabase.co/functions/v1/gcal-sync"
-  );
 }
 
 function dayKeyLocal(d: Date) {
@@ -382,43 +375,8 @@ async function fetchCalendarEvents(args: {
   endIso: string;
   tz: string;
 }) {
-  const url = getGcalSyncUrl();
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceRole}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      action: "list",
-      start: args.startIso,
-      end: args.endIso,
-      tz: args.tz,
-    }),
-    cache: "no-store",
-  });
-
-  const text = await res.text().catch(() => "");
-  let json: unknown = null;
-
-  try {
-    json = text ? JSON.parse(text) : null;
-  } catch {
-    json = null;
-  }
-
-  if (!res.ok) {
-    throw new Error(
-      (json as { error?: string; message?: string } | null)?.error ||
-        (json as { error?: string; message?: string } | null)?.message ||
-        text ||
-        `Calendar sync failed (${res.status})`
-    );
-  }
-
-  return normalizeEvents(json);
+  const events = await listMicrosoftCalendarEvents(args.startIso, args.endIso);
+  return normalizeEvents({ events });
 }
 
 export async function GET(

@@ -123,7 +123,35 @@ export default function MediaLinksEditor({ siteId, type, initialValue, canEdit =
     fontSize: "13px",
   };
 
-  if (!canEdit) return null;
+  if (!canEdit) {
+    if (!value) return null;
+
+    return (
+      <div style={cardStyle}>
+        <div style={labelStyle}>{label}</div>
+        <input
+          value={value}
+          readOnly
+          aria-readonly="true"
+          aria-label={`${label} (read only)`}
+          style={{ ...inputStyle, background: "#f3f0e7", color: "#17231f" }}
+        />
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+          <button type="button" style={actionButtonStyle} onClick={copyText}>
+            Copy URL
+          </button>
+          <a href={value} target="_blank" rel="noreferrer" style={actionButtonStyle}>
+            Open URL ↗
+          </a>
+          {status ? (
+            <span role="status" style={{ fontSize: "13px", color: status === "Copied" ? "#17683a" : "#777" }}>
+              {status}
+            </span>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={cardStyle}>

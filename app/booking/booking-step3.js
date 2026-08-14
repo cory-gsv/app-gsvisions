@@ -51,10 +51,7 @@ export function initBookingStep3() {
 
   const SAME_DAY_BOOKING_ALLOWED = false
 
-  const GCAL_FN_URL = clean(
-    window.GSV_GCAL_SYNC_URL ||
-      "https://etlquqhgwrrzgcccchxc.supabase.co/functions/v1/gcal-sync"
-  )
+  const CALENDAR_API_URL = clean(window.GSV_CALENDAR_API_URL || "/api/calendar")
 
   const BOOKING_STATE_KEY = "gsv_booking_state_v2"
 
@@ -478,12 +475,12 @@ export function initBookingStep3() {
       .filter((ev) => ev.id && ev.s && Number.isFinite(ev.s.getTime()))
   }
 
-  async function gcalPost(sb, payload) {
+  async function calendarPost(sb, payload) {
     const sessRes = await sb.auth.getSession()
     const token = sessRes?.data?.session?.access_token
     if (!token) throw new Error("Missing JWT (not logged in).")
 
-    const res = await fetch(GCAL_FN_URL, {
+    const res = await fetch(CALENDAR_API_URL, {
       method: "POST",
       headers: {
         Authorization: "Bearer " + token,
@@ -1771,7 +1768,7 @@ export function initBookingStep3() {
       const windowStart = startOfDay(actualDays[0])
       const windowEnd = addDays(startOfDay(actualDays[actualDays.length - 1]), 1)
 
-      const resp = await gcalPost(sb, {
+      const resp = await calendarPost(sb, {
         action: "list",
         start: windowStart.toISOString(),
         end: windowEnd.toISOString(),

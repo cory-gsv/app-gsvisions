@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { addDomainToProject, buyDomain, getDomainQuote, normalizeDomain } from "@/lib/custom-domains";
+import { completeDomainPurchase as completePaidDomainPurchase, registrantFromMetadata } from "@/lib/domain-purchase";
 
 export const runtime = "nodejs";
 
@@ -151,6 +152,25 @@ export async function POST(request: Request) {
 
   if (event.type === "payment_intent.succeeded") {
     const intent = event.data.object as Stripe.PaymentIntent;
+    if (intent.metadata.purpose === "custom_domain_purchase") {
+      try {
+        await completePaidDomainPurchase({
+          db: supabase,
+          siteId: String(intent.metadata.site_id || "").trim(),
+          domain: intent.metadata.domain,
+          chargedCents: intent.amount_received || intent.amount,
+          paymentReference: intent.id,
+          provider: "stripe",
+          contact: registrantFromMetadata(intent.metadata),
+          live: intent.livemode,
+          refund: () => stripe.refunds.create({ payment_intent: intent.id, reason: "requested_by_customer", metadata: { purpose: "custom_domain_registration_failed", site_id: intent.metadata.site_id || "", domain: intent.metadata.domain || "" } }).then(() => undefined),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Custom domain processing failed.";
+        await supabase.from("stripe_webhook_events").update({ processing_error: message }).eq("event_id", event.id);
+        return NextResponse.json({ error: "Custom domain processing failed." }, { status: 500 });
+      }
+    } else {
     const siteId = String(intent.metadata.site_id || "").trim();
     const bookingId = String(intent.metadata.booking_id || "").trim() || null;
     const invoiceAmount = Number(intent.metadata.invoice_payment_amount_cents || 0);
@@ -172,6 +192,7 @@ export async function POST(request: Request) {
     if (error) {
       await supabase.from("stripe_webhook_events").update({ processing_error: error.message }).eq("event_id", event.id);
       return NextResponse.json({ error: "Payment processing failed." }, { status: 500 });
+    }
     }
   }
 

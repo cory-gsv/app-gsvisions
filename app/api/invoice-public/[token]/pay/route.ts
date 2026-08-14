@@ -115,7 +115,7 @@ export async function POST(
     }
 
     const alreadyPaid = !!site.paid;
-    const balanceDueCents = Math.max(
+    let balanceDueCents = Math.max(
       0,
       Number(site.balance_due_cents ?? 0) || 0
     );
@@ -234,6 +234,130 @@ export async function POST(
           ).toFixed(2)} + Tip $${(tipCents / 100).toFixed(2)})`
         : `GSV Invoice - ${address}`;
 
+    const existingIntentId = clean(site.stripe_payment_intent_id);
+    if (existingIntentId) {
+      try {
+        const existingIntent = await stripe.paymentIntents.retrieve(existingIntentId);
+        const belongsToInvoice =
+          clean(existingIntent.metadata?.site_id) === clean(site.id) &&
+          clean(existingIntent.metadata?.booking_id) === clean(site.booking_id);
+
+        if (belongsToInvoice && existingIntent.status === "succeeded") {
+          const paidAmountCents = asCents(
+            existingIntent.metadata?.invoice_payment_amount_cents
+          );
+          const paidTipCents = asCents(existingIntent.metadata?.tip_cents);
+
+          if (paidAmountCents > 0) {
+            const { error: applyError } = await supabase.rpc(
+              "apply_invoice_payment",
+              {
+                p_site_id: site.id,
+                p_booking_id: site.booking_id,
+                p_payment_intent_id: existingIntent.id,
+                p_amount_cents: paidAmountCents,
+                p_tip_cents: paidTipCents,
+                p_currency: existingIntent.currency,
+                p_provider_created_at: new Date(
+                  existingIntent.created * 1000
+                ).toISOString(),
+              }
+            );
+
+            if (applyError) {
+              throw new Error(`Could not reconcile completed payment: ${applyError.message}`);
+            }
+
+            const { data: reconciledSite, error: refreshError } = await supabase
+              .from("sites")
+              .select("paid, balance_due_cents")
+              .eq("id", site.id)
+              .single();
+
+            if (refreshError) {
+              throw new Error(`Could not refresh invoice balance: ${refreshError.message}`);
+            }
+
+            balanceDueCents = asCents(reconciledSite?.balance_due_cents);
+            if (reconciledSite?.paid === true || balanceDueCents <= 0) {
+              return NextResponse.json({
+                ok: true,
+                already_paid: true,
+                payment_intent_id: existingIntent.id,
+                balance_due_cents: 0,
+                message: "Payment received. This invoice is paid.",
+              });
+            }
+
+            if (requestedPaymentAmountCents > balanceDueCents) {
+              return NextResponse.json(
+                {
+                  error: "The invoice balance changed after a recent payment. Refresh and try again.",
+                  balance_due_cents: balanceDueCents,
+                },
+                { status: 409 }
+              );
+            }
+          }
+        }
+
+        if (
+          belongsToInvoice &&
+          (existingIntent.status === "processing" ||
+            existingIntent.status === "requires_capture")
+        ) {
+          return NextResponse.json(
+            {
+              ok: true,
+              payment_processing: true,
+              payment_intent_id: existingIntent.id,
+              message:
+                "A payment is already processing. Do not retry or submit another payment.",
+            },
+            { status: 409 }
+          );
+        }
+
+        const matchesCurrentRequest =
+          belongsToInvoice &&
+          existingIntent.amount === totalChargeCents &&
+          asCents(existingIntent.metadata?.invoice_payment_amount_cents) ===
+            requestedPaymentAmountCents &&
+          asCents(existingIntent.metadata?.tip_cents) === tipCents;
+
+        if (
+          matchesCurrentRequest &&
+          existingIntent.client_secret &&
+          (existingIntent.status === "requires_payment_method" ||
+            existingIntent.status === "requires_confirmation" ||
+            existingIntent.status === "requires_action")
+        ) {
+          return NextResponse.json({
+            ok: true,
+            client_secret: existingIntent.client_secret,
+            payment_intent_id: existingIntent.id,
+            amount_cents: requestedPaymentAmountCents,
+            tip_cents: tipCents,
+            total_charge_cents: totalChargeCents,
+            amount_display: (requestedPaymentAmountCents / 100).toFixed(2),
+            tip_display: (tipCents / 100).toFixed(2),
+            total_charge_display: (totalChargeCents / 100).toFixed(2),
+            balance_due_cents: balanceDueCents,
+            site_id: site.id,
+            booking_id: site.booking_id,
+            already_paid: false,
+            reused: true,
+          });
+        }
+      } catch (intentError) {
+        const stripeError = intentError as { code?: string; message?: string };
+        if (stripeError?.code !== "resource_missing") {
+          console.error("INVOICE_PUBLIC_EXISTING_INTENT_FAIL", intentError);
+          throw intentError;
+        }
+      }
+    }
+
     const paymentIntent = await stripe.paymentIntents.create(
       {
         amount: totalChargeCents,
@@ -259,11 +383,11 @@ export async function POST(
       },
       {
         idempotencyKey: [
-          "invoice-payment",
+          "invoice-payment-v2",
           clean(site.id),
+          balanceDueCents,
           requestedPaymentAmountCents,
           tipCents,
-          balanceDueCents,
         ].join("-"),
       }
     );
@@ -292,9 +416,10 @@ export async function POST(
       already_paid: false,
     });
   } catch (err) {
+    console.error("INVOICE_PUBLIC_PAYMENT_INTENT_FAIL", err);
     return NextResponse.json(
       {
-        error: err instanceof Error ? err.message : "Unknown error.",
+        error: "Secure card payment could not be loaded. Please refresh and try again, or use PayPal below.",
       },
       { status: 500 }
     );

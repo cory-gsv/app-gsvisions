@@ -110,8 +110,20 @@ export async function initDashboardAddons() {
     return cfg
   }
 
-  async function uploadToCloudinary({ file, kind, userId }) {
+  function validateUploadImage(file) {
     if (!file) throw new Error("No file selected.")
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"])
+    const allowedExtension = /\.(jpe?g|png|webp)$/i.test(clean(file.name))
+    if (!allowedTypes.has(clean(file.type).toLowerCase()) && !allowedExtension) {
+      throw new Error("Choose a JPG, PNG, or WebP image.")
+    }
+    if (file.size < 1 || file.size > 10 * 1024 * 1024) {
+      throw new Error("Image must be smaller than 10 MB.")
+    }
+  }
+
+  async function uploadToCloudinary({ file, kind, userId }) {
+    validateUploadImage(file)
     if (!clean(userId)) throw new Error("Missing user id.")
 
     const cfg = getCloudinaryConfig()
@@ -195,9 +207,9 @@ export async function initDashboardAddons() {
     })
   }
 
-  function forceBookingButton() {
+  function forceBookingButton(isAdmin = false) {
     const a = document.getElementById("gsv-new-order-btn")
-    if (a) a.setAttribute("href", "/booking?new=1")
+    if (a) a.setAttribute("href", isAdmin ? "/booking?new=1&admin_order=1" : "/booking?new=1")
   }
 
   const ADMIN_SETTINGS_TABLE = "admin_settings"
@@ -661,7 +673,69 @@ export async function initDashboardAddons() {
     return uuid || txt || ""
   }
 
+  function getSiteAddress(site) {
+    return clean(site?.property_full_address) ||
+      clean(site?.address_full) ||
+      clean(site?.property_address) ||
+      clean(site?.site_name) ||
+      clean(site?.name)
+  }
+
+  function getSiteCity(site) {
+    return clean(site?.city_state_zip) ||
+      [clean(site?.property_city), clean(site?.property_state), clean(site?.property_zip)]
+        .filter(Boolean)
+        .join(" ")
+  }
+
   function getPhotos(site) {
+    const assets = Array.isArray(site?.__mediaAssets) ? site.__mediaAssets : []
+    if (assets.length) {
+      const first = assets[0]
+      const remaining = assets.slice(1)
+      const aerialPattern = /(?:^|[\s_.-])(aerial|drone|dji|uav|overhead|birds?-?eye)(?:[\s_.-]|$)/i
+      const isAerial = (asset) => aerialPattern.test([
+        asset?.category,
+        asset?.original_filename,
+        asset?.title,
+        asset?.alt_text,
+        asset?.description,
+      ].map(clean).join(" "))
+
+      let seed = 2166136261
+      for (const char of clean(site?.id)) {
+        seed ^= char.charCodeAt(0)
+        seed = Math.imul(seed, 16777619)
+      }
+      const random = () => {
+        seed += 0x6d2b79f5
+        let value = seed
+        value = Math.imul(value ^ (value >>> 15), value | 1)
+        value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+      }
+      const shuffle = (items) => {
+        const copy = [...items]
+        for (let index = copy.length - 1; index > 0; index -= 1) {
+          const swapIndex = Math.floor(random() * (index + 1))
+          ;[copy[index], copy[swapIndex]] = [copy[swapIndex], copy[index]]
+        }
+        return copy
+      }
+
+      const firstIsAerial = isAerial(first)
+      const explicitlyAerial = remaining.filter(isAerial)
+      const deliveredAerialGroupSize = Math.max(3, Math.ceil(assets.length * 0.2))
+      const deliveredAerialGroup = remaining.slice(-deliveredAerialGroupSize)
+      const aerial = firstIsAerial
+        ? null
+        : shuffle(explicitlyAerial.length ? explicitlyAerial : deliveredAerialGroup)[0] || null
+      const otherCandidates = remaining.filter((asset) => !aerial || clean(asset?.id) !== clean(aerial?.id))
+      const smallTiles = [...(aerial ? [aerial] : []), ...shuffle(otherCandidates)].slice(0, 3)
+      return [first, ...smallTiles]
+        .map((asset) => clean(asset?.cloudinary_secure_url) || clean(asset?.s3_url))
+        .filter(Boolean)
+    }
     const main = clean(site?.[S.thumb])
     return main ? [main, main, main, main] : []
   }
@@ -696,8 +770,8 @@ export async function initDashboardAddons() {
   }
 
   function siteCard(site, agentProfile) {
-    const address = clean(site?.[S.address]) || "Untitled Address"
-    const city = clean(site?.[S.city])
+    const address = getSiteAddress(site) || "Untitled Address"
+    const city = getSiteCity(site)
     const status = clean(site?.[S.status]) || "draft"
     const siteId = clean(site?.id)
     const href = siteId ? `/dashboard/site/${siteId}` : "#"
@@ -744,12 +818,62 @@ export async function initDashboardAddons() {
   }
 
   async function loadSites(sb, userId, admin) {
-    const cols = [ "id", S.created, S.owner_uuid, S.owner_text, S.address, S.city, S.thumb, S.slug, S.status ].join(",")
+    const cols = [
+      "id", S.created, S.owner_uuid, S.owner_text, S.address, S.city,
+      "property_address", "property_city", "property_state", "property_zip",
+      "property_full_address", "site_name", "name", S.thumb, S.slug, S.status,
+    ].join(",")
     let q = sb.from(SITES_TABLE).select(cols).order(S.created, { ascending: false })
     if (!admin) q = q.or(`${S.owner_uuid}.eq.${userId},${S.owner_text}.eq.${userId}`)
     const res = await q
     if (res.error) throw res.error
     return Array.isArray(res.data) ? res.data : []
+  }
+
+  async function loadSiteMediaPreviews(sb, sites) {
+    const ids = Array.from(
+      new Set((Array.isArray(sites) ? sites : []).map((site) => clean(site?.id)).filter(Boolean))
+    )
+    if (!ids.length) return
+
+    const sessRes = await sb.auth.getSession()
+    const token = sessRes?.data?.session?.access_token
+    if (!token) return
+
+    const mediaBySite = new Map()
+    const chunks = []
+    for (let index = 0; index < ids.length; index += 40) {
+      chunks.push(ids.slice(index, index + 40))
+    }
+
+    const payloads = await Promise.all(
+      chunks.map(async (chunk) => {
+        const params = new URLSearchParams({
+          site_ids: chunk.join(","),
+          category: "gallery",
+        })
+        const response = await fetch(`/api/media/list?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(payload?.error || "Could not load site media.")
+        return Array.isArray(payload?.items) ? payload.items : []
+      })
+    )
+
+    payloads.flat().forEach((asset) => {
+      const siteId = clean(asset?.site_id)
+      const url = clean(asset?.cloudinary_secure_url) || clean(asset?.s3_url)
+      const status = clean(asset?.status).toLowerCase()
+      if (!siteId || !url || asset?.is_published === false || (status && status !== "ready")) return
+      const assets = mediaBySite.get(siteId) || []
+      assets.push(asset)
+      mediaBySite.set(siteId, assets)
+    })
+
+    sites.forEach((site) => {
+      site.__mediaAssets = mediaBySite.get(clean(site?.id)) || []
+    })
   }
 
   function applySitesStats(sites) {
@@ -770,7 +894,7 @@ export async function initDashboardAddons() {
       else {
         const s = sites[0]
         recentCard.innerHTML = `<div><strong>${escapeHtml(
-          clean(s?.[S.address]) || "Untitled Address"
+          getSiteAddress(s) || "Untitled Address"
         )}</strong></div><div style="margin-top:6px;opacity:.75;">${escapeHtml(
           clean(s?.[S.status]) || "pending"
         )}</div>`
@@ -778,34 +902,42 @@ export async function initDashboardAddons() {
     }
   }
 
-  function wireSearch(allSites, renderFn) {
+  function wireSearch(allSites, renderFn, agentMap) {
     const input = $("#gsv-search")
+    const clientFilter = $("#gsv-client-filter")
     const grid = $("#gsv-sites-grid")
     if (!input || !grid || input.__wired) return
     input.__wired = true
 
-    input.addEventListener(
-      "input",
-      () => {
+    if (clientFilter) {
+      const owners = Array.from(new Set(allSites.map(getOwnerId).filter(Boolean)))
+        .map((id) => ({ id, name: agentNameFromProfile(agentMap.get(id)) }))
+        .sort((a, b) => a.name.localeCompare(b.name))
+      clientFilter.innerHTML = `<option value="">All clients</option>${owners
+        .map((owner) => `<option value="${escapeHtml(owner.id)}">${escapeHtml(owner.name)}</option>`)
+        .join("")}`
+    }
+
+    const applyFilters = () => {
         const q = clean(input.value).toLowerCase()
-        const filtered = !q
-          ? allSites
-          : allSites.filter((s) => {
-              const a = clean(s?.[S.address]).toLowerCase()
-              const c = clean(s?.[S.city]).toLowerCase()
+        const clientId = clean(clientFilter?.value)
+        const filtered = allSites.filter((s) => {
+              if (clientId && getOwnerId(s) !== clientId) return false
+              if (!q) return true
+              const a = getSiteAddress(s).toLowerCase()
+              const c = getSiteCity(s).toLowerCase()
               const st = clean(s?.[S.status]).toLowerCase()
-              return a.includes(q) || c.includes(q) || st.includes(q)
+              const clientName = agentNameFromProfile(agentMap.get(getOwnerId(s))).toLowerCase()
+              return a.includes(q) || c.includes(q) || st.includes(q) || clientName.includes(q)
             })
         grid.innerHTML = renderFn(filtered)
-      },
-      { signal }
-    )
+    }
+
+    input.addEventListener("input", applyFilters, { signal })
+    clientFilter?.addEventListener("change", applyFilters, { signal })
   }
 
-  const GCAL_FN_URL = clean(
-    window.GSV_GCAL_SYNC_URL ||
-      "https://etlquqhgwrrzgcccchxc.supabase.co/functions/v1/gcal-sync"
-  )
+  const CALENDAR_API_URL = clean(window.GSV_CALENDAR_API_URL || "/api/calendar")
   const FC_CSS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css"
   const FC_JS = "https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"
 
@@ -837,12 +969,12 @@ export async function initDashboardAddons() {
     return !!window.FullCalendar?.Calendar
   }
 
-  async function gcalPost(sb, payload) {
+  async function calendarPost(sb, payload) {
     const sessRes = await sb.auth.getSession()
     const token = sessRes?.data?.session?.access_token
     if (!token) throw new Error("Missing JWT (not logged in).")
 
-    const res = await fetch(GCAL_FN_URL, {
+    const res = await fetch(CALENDAR_API_URL, {
       method: "POST",
       headers: {
         Authorization: "Bearer " + token,
@@ -1041,7 +1173,7 @@ export async function initDashboardAddons() {
       events: async (fetchInfo, success, failure) => {
         try {
           setStatus(dash, "Loading calendar…", "info")
-          const resp = await gcalPost(sb, {
+          const resp = await calendarPost(sb, {
             action: "list",
             start: fetchInfo.startStr,
             end: fetchInfo.endStr,
@@ -1217,8 +1349,6 @@ export async function initDashboardAddons() {
   }
 
   wireModalClose()
-  forceBookingButton()
-
   const dash = await window.__gsvDashReady
   if (!dash?.sb || !dash?.user?.id) {
     console.warn("[GSV Dash] window.__gsvDashReady missing sb/user")
@@ -1226,6 +1356,7 @@ export async function initDashboardAddons() {
   }
 
   applyAdminUI(!!dash.admin)
+  forceBookingButton(!!dash.admin)
 
   try {
     const profile = await loadAccountProfile(dash.sb, dash.user.id)
@@ -1254,6 +1385,11 @@ export async function initDashboardAddons() {
   try {
     setStatus(dash, "Loading sites…", "info")
     const sites = await loadSites(dash.sb, dash.user.id, !!dash.admin)
+    try {
+      await loadSiteMediaPreviews(dash.sb, sites)
+    } catch (mediaError) {
+      console.warn("[GSV Sites] media previews failed:", mediaError)
+    }
     window.__gsvAllSites = sites
 
     applySitesStats(sites)
@@ -1275,7 +1411,7 @@ export async function initDashboardAddons() {
     const gridEl = $("#gsv-sites-grid")
     if (gridEl) gridEl.innerHTML = renderSites(sites)
 
-    wireSearch(sites, renderSites)
+    wireSearch(sites, renderSites, agentMap)
     setStatus(dash, "", "info")
   } catch (err) {
     console.error("[GSV Sites] load failed:", err)

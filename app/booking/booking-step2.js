@@ -886,7 +886,10 @@ export function initBookingStep2() {
       if (nameEl) nameEl.textContent = clean(row.name) || "Untitled";
       if (priceEl) priceEl.textContent = money(normalizePriceCents(row));
 
-      const desc = clean(row.description) || "";
+      const isLargeProperty = kind === "addon" && String(id) === String(findLargePropertyAddonId());
+      const desc = isLargeProperty
+        ? "Is your property over 1 acre in size? If so, extra time is needed to properly capture it."
+        : clean(row.description) || "";
       const mins = durationMinutes(row);
       const range = kind === "addon" ? "" : sqftRangeLabel(row);
 

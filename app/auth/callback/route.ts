@@ -12,7 +12,8 @@ export async function GET(request: Request) {
     : "/dashboard";
   const response = NextResponse.redirect(new URL(next, url.origin));
 
-  if (!code && !(tokenHash && type === "magiclink")) {
+  const otpType = type === "magiclink" || type === "recovery" || type === "invite" ? type : null;
+  if (!code && !(tokenHash && otpType)) {
     return NextResponse.redirect(new URL("/login?error=oauth", url.origin));
   }
 
@@ -46,7 +47,7 @@ export async function GET(request: Request) {
     ? await supabase.auth.exchangeCodeForSession(code)
     : await supabase.auth.verifyOtp({
         token_hash: tokenHash!,
-        type: "magiclink",
+        type: otpType!,
       });
   if (error) return NextResponse.redirect(new URL("/login?error=oauth", url.origin));
   return response;

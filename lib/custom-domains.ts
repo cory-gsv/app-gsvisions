@@ -16,6 +16,30 @@ export function validDomain(domain: string) {
   return domain.length <= 253 && /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(domain);
 }
 
+export function domainSearchBase(value: unknown) {
+  const normalized = normalizeDomain(value);
+  const withoutExtension = normalized.includes(".") ? normalized.split(".")[0] : normalized;
+  return withoutExtension
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9-]+/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 55);
+}
+
+export function suggestedComDomains(value: unknown) {
+  const base = domainSearchBase(value);
+  if (!base) throw new Error("Enter a property or domain name.");
+  return [...new Set([
+    `${base}.com`,
+    `${base}home.com`,
+    `${base}property.com`,
+    `view${base}.com`,
+    `${base}tour.com`,
+  ])];
+}
+
 function vercelHeaders() {
   const token = process.env.VERCEL_API_TOKEN || "";
   if (!token) throw new Error("Custom domain purchasing is not configured yet.");
@@ -69,10 +93,21 @@ export async function getDomainQuote(rawDomain: unknown) {
   const wholesaleDollars = findNumber(pricing, ["price", "purchasePrice", "purchase", "amount"]);
   if (available && wholesaleDollars === null) throw new Error("The registrar did not return a purchase price.");
   const wholesalePriceCents = Math.round((wholesaleDollars || 0) * 100);
-  const markupPercent = Math.max(0, Number(process.env.CUSTOM_DOMAIN_MARKUP_PERCENT || 30));
-  const markupFlatCents = Math.max(0, Math.round(Number(process.env.CUSTOM_DOMAIN_MARKUP_FLAT_CENTS || 0)));
-  const retailPriceCents = Math.ceil((wholesalePriceCents * (1 + markupPercent / 100) + markupFlatCents) / 100) * 100;
+  const markupPercent = Math.max(0, Number(process.env.CUSTOM_DOMAIN_MARKUP_PERCENT || 0));
+  const markupFlatCents = Math.max(0, Math.round(Number(process.env.CUSTOM_DOMAIN_MARKUP_FLAT_CENTS || 2500)));
+  const retailPriceCents = Math.round(wholesalePriceCents * (1 + markupPercent / 100) + markupFlatCents);
   return { domain, available, wholesalePriceCents, retailPriceCents, markupPercent };
+}
+
+export async function getSuggestedDomainQuotes(rawDomain: unknown) {
+  const candidates = suggestedComDomains(rawDomain);
+  const settled = await Promise.allSettled(candidates.map((domain) => getDomainQuote(domain)));
+  const quotes = settled.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+  if (!quotes.length) {
+    const firstError = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    throw firstError?.reason instanceof Error ? firstError.reason : new Error("Could not search for that domain.");
+  }
+  return quotes;
 }
 
 export async function buyDomain(args: {

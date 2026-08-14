@@ -52,6 +52,8 @@ export function initBookingStep4() {
     confirm: "#gsv-step4-confirm",
 
     paymentModeName: 'input[name="gsv-step4-payment-mode"]',
+    notificationHoldWrap: "#gsv-step4-notification-hold-wrap",
+    notificationHold: "#gsv-step4-notification-hold",
     embeddedWrap: "#gsv-step4-embedded-wrap",
     embeddedMount: "#gsv-step4-embedded-checkout",
 
@@ -142,6 +144,42 @@ export function initBookingStep4() {
 
   function getBackendPaymentMethod() {
     return getSelectedPaymentMode() === "send_invoice" ? "invoice" : "pay_now";
+  }
+
+  function isAdminMode() {
+    return typeof ctx.isAdminOrderFlow === "function" && ctx.isAdminOrderFlow();
+  }
+
+  function shouldHoldNotifications() {
+    return isAdminMode() && $(IDS.notificationHold)?.checked === true;
+  }
+
+  async function setInitialNotificationHolds(bookingId, siteId) {
+    if (!shouldHoldNotifications()) return;
+
+    const supabase = typeof ctx.getSupabase === "function" ? ctx.getSupabase() : null;
+    const { data } = await supabase?.auth?.getSession?.() || {};
+    const token = clean(data?.session?.access_token);
+    if (!token) throw new Error("Your admin session expired before notification holds could be saved.");
+
+    for (const topic of ["order_confirmation", "appointment_confirmation"]) {
+      const res = await fetch(`/api/sites/${encodeURIComponent(siteId)}/order`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: "set_notification_hold",
+          topic,
+          active: true,
+          reason: "Held by admin during order creation for final review.",
+          bookingId,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(clean(json?.error) || "Could not hold customer notifications.");
+    }
   }
 
   function getFunctionBaseUrl() {
@@ -406,6 +444,11 @@ export function initBookingStep4() {
       updatedAt: Date.now(),
     }, extra.payment || {});
 
+    state.communications = Object.assign({}, state.communications || {}, {
+      hold_customer_notifications: shouldHoldNotifications(),
+      updatedAt: Date.now(),
+    }, extra.communications || {});
+
     state.pending_booking = state.pending_booking || {};
     state.pending_booking.draft = Object.assign({}, state.pending_booking.draft || {}, state.draft || {});
     state.pending_booking.selection = Object.assign({}, state.pending_booking.selection || {}, state.selection || {});
@@ -594,6 +637,12 @@ export function initBookingStep4() {
         baths: clean(draft.baths),
         lot: clean(draft.lot),
         year: clean(draft.year),
+        // Send the canonical database-facing names alongside the legacy
+        // aliases. The booking function historically consumed `year`, while
+        // the portal records use `year_built`; including both prevents the
+        // verified property year from being dropped during order creation.
+        lot_sqft: clean(draft.lot),
+        year_built: clean(draft.year),
       },
 
       packageData: {
@@ -638,6 +687,10 @@ export function initBookingStep4() {
         estimated_minutes: estimatedMinutes,
         payment_intent_id: clean(state?.payment?.payment_intent_id || ""),
       },
+
+      communications: {
+        hold_customer_notifications: shouldHoldNotifications(),
+      },
     };
   }
 
@@ -654,6 +707,9 @@ export function initBookingStep4() {
     if (!bookingId || !siteId) {
       throw new Error("Booking was created, but booking/site IDs were missing.");
     }
+
+
+    await setInitialNotificationHolds(bookingId, siteId);
 
     persistStep4State({
       payment: {
@@ -823,10 +879,9 @@ export function initBookingStep4() {
         const confirmBtn = $(IDS.confirm);
 
         if (confirmBtn) {
-          confirmBtn.textContent =
-            mode === "send_invoice"
-              ? "Create Booking & Send Invoice"
-              : "Create Booking & Pay Now";
+          confirmBtn.textContent = shouldHoldNotifications()
+            ? (mode === "send_invoice" ? "Create Order Without Email" : "Create & Pay Without Email")
+            : (mode === "send_invoice" ? "Create Booking & Send Invoice" : "Create Booking & Pay Now");
         }
 
         persistStep4State();
@@ -855,10 +910,9 @@ export function initBookingStep4() {
     const mode = getSelectedPaymentMode();
     const confirmBtn = $(IDS.confirm);
     if (confirmBtn) {
-      confirmBtn.textContent =
-        mode === "send_invoice"
-          ? "Create Booking & Send Invoice"
-          : "Create Booking & Pay Now";
+      confirmBtn.textContent = shouldHoldNotifications()
+        ? (mode === "send_invoice" ? "Create Order Without Email" : "Create & Pay Without Email")
+        : (mode === "send_invoice" ? "Create Booking & Send Invoice" : "Create Booking & Pay Now");
     }
   }
 
@@ -868,6 +922,38 @@ export function initBookingStep4() {
     notesInput.__gsvStep4NotesWired = true;
     notesInput.addEventListener("input", () => persistStep4State());
     notesInput.addEventListener("change", () => persistStep4State());
+  }
+
+  function wireNotificationHold() {
+    const wrap = $(IDS.notificationHoldWrap);
+    const input = $(IDS.notificationHold);
+    const admin = isAdminMode();
+    if (wrap) wrap.hidden = !admin;
+    if (!admin && input) input.checked = false;
+    if (admin && input) {
+      input.checked = readState()?.communications?.hold_customer_notifications === true;
+    }
+    if (!input || input.__gsvNotificationHoldWired) return;
+    input.__gsvNotificationHoldWired = true;
+    input.addEventListener("change", () => {
+      persistStep4State();
+      const btn = $(IDS.confirm);
+      if (!btn) return;
+      if (input.checked) {
+        btn.textContent = getBackendPaymentMethod() === "invoice"
+          ? "Create Order Without Email"
+          : "Create & Pay Without Email";
+      } else {
+        btn.textContent = getBackendPaymentMethod() === "invoice"
+          ? "Create Booking & Send Invoice"
+          : "Create Booking & Pay Now";
+      }
+    });
+    input.dispatchEvent(new Event("change"));
+  }
+
+  function refreshAdminControls() {
+    wireNotificationHold();
   }
 
   function wireNavButtons() {
@@ -934,6 +1020,7 @@ export function initBookingStep4() {
 
     syncStep4Summary();
     wirePaymentModeUI();
+    wireNotificationHold();
     wireNotesInput();
     wireNavButtons();
     wireConfirmButton();
@@ -955,6 +1042,7 @@ export function initBookingStep4() {
     bootStep4,
     boot: bootStep4,
     syncSummary: syncStep4Summary,
+    refreshAdminControls,
   };
 
   window.__gsvBookingPayment = {
@@ -969,6 +1057,8 @@ export function initBookingStep4() {
       setStatus(err?.message || "Could not load payment step.", "error", true);
     });
   });
+
+  document.addEventListener("gsv:booking-admin-mode", refreshAdminControls);
 
   if (document.readyState !== "loading") {
     const panel = $(IDS.panel);

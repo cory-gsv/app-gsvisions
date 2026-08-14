@@ -1,13 +1,8 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { createRequire } from "node:module";
+import { ZipArchive } from "archiver";
 import { PassThrough, Readable } from "node:stream";
 import sharp from "sharp";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
-
-const createArchive = createRequire(import.meta.url)("archiver") as (
-  format: "zip",
-  options: { zlib: { level: number } },
-) => import("archiver").Archiver;
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -56,8 +51,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       .from("media_assets")
       .select("id, original_s3_bucket, original_s3_key, original_filename, mime_type, is_published, status, sort_order, created_at")
       .eq("site_id", siteId)
+      .eq("category", "gallery")
       .not("original_s3_bucket", "is", null)
       .not("original_s3_key", "is", null)
+      .order("is_primary", { ascending: false })
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
     if (!isStaff) query = query.or("status.is.null,status.eq.ready");
@@ -74,28 +71,55 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const s3 = new S3Client({ region, credentials: { accessKeyId, secretAccessKey } });
 
     const output = new PassThrough();
-    const archive = createArchive("zip", { zlib: { level: 6 } });
+    // Photos and MLS JPEGs are already compressed. Deflating them again adds
+    // substantial CPU time while barely changing the archive size.
+    const archive = new ZipArchive({ zlib: { level: 0 } });
     archive.pipe(output);
     const used = new Map<string, number>();
 
     void (async () => {
       try {
-        for (const [index, asset] of files.entries()) {
-          const result = await s3.send(new GetObjectCommand({ Bucket: clean(asset.original_s3_bucket), Key: clean(asset.original_s3_key) }));
-          if (!result.Body) continue;
-          const originalName = safeName(asset.original_filename, `media-${index + 1}`);
-          const folder = asset.is_published === false ? "Hidden Photos/" : "";
-          if (variant === "mls") {
-            const bytes = Buffer.from(await result.Body.transformToByteArray());
-            const resized = await sharp(bytes)
-              .rotate()
-              .resize({ width: 1200, height: 1200, fit: "inside", withoutEnlargement: true })
-              .jpeg({ quality: 90, chromaSubsampling: "4:4:4" })
-              .toBuffer();
-            const base = originalName.replace(/\.[^.]+$/, "");
-            archive.append(resized, { name: uniqueName(`${folder}${base}_MLS.jpg`, used) });
-          } else {
-            archive.append(result.Body as unknown as Readable, { name: uniqueName(`${folder}${originalName}`, used) });
+        if (variant === "mls") {
+          const batchSize = 4;
+          for (let batchStart = 0; batchStart < files.length; batchStart += batchSize) {
+            const batch = await Promise.all(
+              files.slice(batchStart, batchStart + batchSize).map(async (asset, batchIndex) => {
+                const index = batchStart + batchIndex;
+                const result = await s3.send(new GetObjectCommand({ Bucket: clean(asset.original_s3_bucket), Key: clean(asset.original_s3_key) }));
+                if (!result.Body) return null;
+                const bytes = Buffer.from(await result.Body.transformToByteArray());
+                const prepared = sharp(bytes)
+                  .rotate()
+                  .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
+                  .toColourspace("srgb");
+                let quality = 92;
+                let resized = await prepared.clone().jpeg({ quality, chromaSubsampling: "4:4:4" }).toBuffer();
+                while (resized.byteLength > 4_800_000 && quality > 68) {
+                  quality -= 3;
+                  resized = await prepared.clone().jpeg({ quality, chromaSubsampling: "4:4:4" }).toBuffer();
+                }
+                return { asset, index, resized };
+              }),
+            );
+
+            // Append in saved gallery order even though each batch is prepared concurrently.
+            for (const item of batch) {
+              if (!item) continue;
+              const originalName = safeName(item.asset.original_filename, `media-${item.index + 1}`);
+              const folder = item.asset.is_published === false ? "Hidden Photos/" : "";
+              const position = String(item.index + 1).padStart(Math.max(3, String(files.length).length), "0");
+              const base = originalName.replace(/\.[^.]+$/, "");
+              archive.append(item.resized, { name: uniqueName(`${folder}${position}_${base}_MLS.jpg`, used) });
+            }
+          }
+        } else {
+          for (const [index, asset] of files.entries()) {
+            const result = await s3.send(new GetObjectCommand({ Bucket: clean(asset.original_s3_bucket), Key: clean(asset.original_s3_key) }));
+            if (!result.Body) continue;
+            const originalName = safeName(asset.original_filename, `media-${index + 1}`);
+            const folder = asset.is_published === false ? "Hidden Photos/" : "";
+            const position = String(index + 1).padStart(Math.max(3, String(files.length).length), "0");
+            archive.append(result.Body as unknown as Readable, { name: uniqueName(`${folder}${position}_${originalName}`, used) });
           }
         }
         await archive.finalize();
@@ -105,12 +129,14 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     })();
 
     const address = safeName(site.property_address || site.property_full_address || site.address_full, "property-media").replace(/\.[^.]+$/, "");
-    const suffix = variant === "mls" ? "MLS-1200px" : "Originals";
+    const suffix = variant === "mls" ? "MLS-Quality" : "Originals";
     return new Response(Readable.toWeb(output) as ReadableStream, {
       headers: {
         "Content-Type": "application/zip",
         "Content-Disposition": `attachment; filename="${address}-${suffix}.zip"`,
         "Cache-Control": "private, no-store",
+        "X-GSV-File-Count": String(files.length),
+        "X-GSV-Archive-Variant": variant,
       },
     });
   } catch (error) {

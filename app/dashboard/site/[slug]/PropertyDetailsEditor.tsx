@@ -7,6 +7,8 @@ import { authenticatedFetch } from "@/src/lib/authenticated-fetch";
 type Props = {
   siteId: string;
   canEdit?: boolean;
+  canEditAddress?: boolean;
+  canEditDescription?: boolean;
   initial: {
     property_address: string;
     property_city: string;
@@ -19,12 +21,16 @@ type Props = {
     year_built: number | null;
     listing_mls_number?: string;
     public_site_description?: string;
-    custom_domain?: string;
-    custom_domain_requested?: boolean;
   };
 };
 
-export default function PropertyDetailsEditor({ siteId, initial, canEdit = true }: Props) {
+export default function PropertyDetailsEditor({
+  siteId,
+  initial,
+  canEdit = true,
+  canEditAddress = canEdit,
+  canEditDescription = canEdit,
+}: Props) {
   const router = useRouter();
 
   const [form, setForm] = useState({
@@ -39,8 +45,6 @@ export default function PropertyDetailsEditor({ siteId, initial, canEdit = true 
     year_built: initial.year_built?.toString() || "",
     listing_mls_number: initial.listing_mls_number || "",
     public_site_description: initial.public_site_description || "",
-    custom_domain: initial.custom_domain || "",
-    custom_domain_requested: initial.custom_domain_requested ? "yes" : "",
   });
 
   const [saving, setSaving] = useState(false);
@@ -55,12 +59,30 @@ export default function PropertyDetailsEditor({ siteId, initial, canEdit = true 
       setSaving(true);
       setStatus("");
 
+      const editableDetails = {
+        beds: form.beds,
+        baths: form.baths,
+        property_sqft: form.property_sqft,
+        lot_sqft: form.lot_sqft,
+        year_built: form.year_built,
+        listing_mls_number: form.listing_mls_number,
+      };
+
       const res = await authenticatedFetch(`/api/sites/${siteId}/property-details`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...editableDetails,
+          ...(canEditAddress ? {
+            property_address: form.property_address,
+            property_city: form.property_city,
+            property_state: form.property_state,
+            property_zip: form.property_zip,
+          } : {}),
+          ...(canEditDescription ? { public_site_description: form.public_site_description } : {}),
+        }),
       });
 
       const json = await res.json().catch(() => ({}));
@@ -178,26 +200,31 @@ export default function PropertyDetailsEditor({ siteId, initial, canEdit = true 
           ["Bedrooms", "beds"],
           ["Bathrooms", "baths"],
           ["Square Feet", "property_sqft"],
-          ["Lot Size", "lot_sqft"],
+          ["Lot Size (sq. ft.)", "lot_sqft"],
           ["Year Built", "year_built"],
           ["Listing MLS #", "listing_mls_number"],
-        ].map(([label, key]) => (
+        ].map(([label, key]) => {
+          const isAddressField = ["property_address", "property_city", "property_state", "property_zip"].includes(key);
+          const fieldCanEdit = canEdit && (!isAddressField || canEditAddress);
+
+          return (
           <div key={key} style={cardStyle}>
             <div style={labelStyle}>{label}</div>
             <input
               value={(form as Record<string, string>)[key]}
               onChange={(e) => updateField(key, e.target.value)}
-              readOnly={!canEdit}
-              aria-readonly={!canEdit}
+              readOnly={!fieldCanEdit}
+              aria-readonly={!fieldCanEdit}
               style={{
                 ...inputStyle,
-                background: canEdit ? "#fff" : "transparent",
-                borderColor: canEdit ? "#dcdcdc" : "transparent",
-                padding: canEdit ? "0 14px" : 0,
+                background: fieldCanEdit ? "#fff" : "transparent",
+                borderColor: fieldCanEdit ? "#dcdcdc" : "transparent",
+                padding: fieldCanEdit ? "0 14px" : 0,
               }}
             />
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <div style={{ ...cardStyle, marginTop: "20px" }}>
@@ -205,28 +232,22 @@ export default function PropertyDetailsEditor({ siteId, initial, canEdit = true 
         <textarea
           value={form.public_site_description}
           onChange={(e) => updateField("public_site_description", e.target.value)}
-          readOnly={!canEdit}
+          readOnly={!canEditDescription}
+          aria-readonly={!canEditDescription}
           placeholder="Write a unique description of the home, neighborhood, upgrades, and lifestyle."
-          style={{ ...inputStyle, minHeight: "120px", height: "auto", padding: "14px", resize: "vertical" }}
+          style={{
+            ...inputStyle,
+            minHeight: "120px",
+            height: "auto",
+            padding: canEditDescription ? "14px" : 0,
+            resize: canEditDescription ? "vertical" : "none",
+            background: canEditDescription ? "#fff" : "transparent",
+            borderColor: canEditDescription ? "#dcdcdc" : "transparent",
+          }}
         />
         <p style={{ color: "#777", fontSize: "13px", margin: "8px 0 0" }}>Used on the public property website and in search previews. Unique copy helps each listing perform better in search.</p>
       </div>
 
-      <div style={{ ...cardStyle, marginTop: "16px" }}>
-        <div style={labelStyle}>Custom Property Domain</div>
-        <input
-          value={form.custom_domain}
-          onChange={(e) => updateField("custom_domain", e.target.value)}
-          readOnly={!canEdit}
-          placeholder="Example: 123MainStreet.com"
-          style={inputStyle}
-        />
-        {canEdit ? <label style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "12px", fontSize: "14px", color: "#39443f" }}>
-          <input type="checkbox" checked={form.custom_domain_requested === "yes"} onChange={(e) => updateField("custom_domain_requested", e.target.checked ? "yes" : "")} />
-          Client requested a custom domain purchase
-        </label> : null}
-        <p style={{ color: "#777", fontSize: "13px", margin: "8px 0 0" }}>The property site works immediately at its GSV URL. Check this when GSV should purchase and connect the requested custom domain.</p>
-      </div>
     </section>
   );
 }

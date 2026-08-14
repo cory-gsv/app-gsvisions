@@ -28,9 +28,12 @@ type Mode = "hero" | "gallery" | "floorplan";
 type Props = {
   siteId: string;
   mode: Mode;
+  view?: "manager" | "downloads";
   fallbackHeroUrl?: string | null;
   fallbackFloorPlanUrl?: string | null;
   canManage?: boolean;
+  previewLimit?: number;
+  disableLightbox?: boolean;
 };
 
 type PresignS3Response = {
@@ -377,9 +380,12 @@ function stageLabel(stage: UploadStage) {
 export default function MediaManager({
   siteId,
   mode,
+  view = "manager",
   fallbackHeroUrl,
   fallbackFloorPlanUrl,
   canManage = false,
+  previewLimit,
+  disableLightbox = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const galleryGridRef = useRef<HTMLDivElement | null>(null);
@@ -388,6 +394,11 @@ export default function MediaManager({
   const didMoveRef = useRef(false);
   const rafRef = useRef<number | null>(null);
   const latestPointerRef = useRef<{ x: number; y: number } | null>(null);
+  const reorderRef = useRef<ReorderState | null>(null);
+  const previewGalleryItemsRef = useRef<MediaAsset[] | null>(null);
+  const galleryItemsRef = useRef<MediaAsset[]>([]);
+  const baseGalleryItemsRef = useRef<MediaAsset[]>([]);
+  const selectedIdsRef = useRef<string[]>([]);
 
   const [items, setItems] = useState<MediaAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -397,6 +408,12 @@ export default function MediaManager({
   const [visibilityUpdatingId, setVisibilityUpdatingId] = useState<string | null>(null);
   const [isReordering, setReordering] = useState(false);
   const [downloadingVariant, setDownloadingVariant] = useState<"original" | "mls" | null>(null);
+  const [downloadModal, setDownloadModal] = useState<{
+    variant: "original" | "mls";
+    stage: "connecting" | "processing" | "streaming" | "complete" | "error";
+    bytesReceived?: number;
+    error?: string;
+  } | null>(null);
 
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
 
@@ -408,6 +425,10 @@ export default function MediaManager({
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [lightboxMode, setLightboxMode] = useState<"gallery" | "floorplan" | null>(null);
+
+  useEffect(() => { reorderRef.current = reorder; }, [reorder]);
+  useEffect(() => { previewGalleryItemsRef.current = previewGalleryItems; }, [previewGalleryItems]);
+  useEffect(() => { selectedIdsRef.current = selectedIds; }, [selectedIds]);
 
   async function loadItems() {
     try {
@@ -434,6 +455,7 @@ export default function MediaManager({
   async function downloadAll(variant: "original" | "mls") {
     try {
       setDownloadingVariant(variant);
+      setDownloadModal({ variant, stage: "connecting", bytesReceived: 0 });
       setStatusText("");
       const response = await authenticatedFetch(
         `/api/sites/${encodeURIComponent(siteId)}/media-download?variant=${variant}`,
@@ -443,10 +465,33 @@ export default function MediaManager({
         const json = await response.json().catch(() => ({}));
         throw new Error(json?.error || "Could not prepare media download.");
       }
-      const blob = await response.blob();
+      setDownloadModal({ variant, stage: "processing", bytesReceived: 0 });
+      let blob: Blob;
+      if (response.body) {
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let bytesReceived = 0;
+        let lastProgressUpdate = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          chunks.push(value);
+          bytesReceived += value.byteLength;
+          const now = performance.now();
+          if (now - lastProgressUpdate > 200) {
+            lastProgressUpdate = now;
+            setDownloadModal({ variant, stage: "streaming", bytesReceived });
+          }
+        }
+        setDownloadModal({ variant, stage: "streaming", bytesReceived });
+        blob = new Blob(chunks as BlobPart[], { type: "application/zip" });
+      } else {
+        blob = await response.blob();
+      }
       const disposition = response.headers.get("content-disposition") || "";
       const filename = disposition.match(/filename="([^"]+)"/i)?.[1]
-        || (variant === "mls" ? "MLS-1200px.zip" : "Originals.zip");
+        || (variant === "mls" ? "MLS-Quality.zip" : "Originals.zip");
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -455,8 +500,11 @@ export default function MediaManager({
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      setDownloadModal({ variant, stage: "complete", bytesReceived: blob.size });
     } catch (error) {
-      setStatusText(error instanceof Error ? error.message : "Could not prepare media download.");
+      const message = error instanceof Error ? error.message : "Could not prepare media download.";
+      setStatusText(message);
+      setDownloadModal({ variant, stage: "error", error: message });
     } finally {
       setDownloadingVariant(null);
     }
@@ -513,6 +561,9 @@ export default function MediaManager({
 
   const galleryItems = previewGalleryItems ?? baseGalleryItems;
 
+  useEffect(() => { galleryItemsRef.current = galleryItems; }, [galleryItems]);
+  useEffect(() => { baseGalleryItemsRef.current = baseGalleryItems; }, [baseGalleryItems]);
+
   const heroItem = useMemo(() => {
     return galleryItems.find((item) => item.is_published !== false) || null;
   }, [galleryItems]);
@@ -529,12 +580,13 @@ export default function MediaManager({
   const galleryDisplayItems = useMemo(() => {
     if (mode !== "gallery") return [];
     const pendingSorted = [...pendingUploads].sort((a, b) => a.sortOrder - b.sortOrder);
-    return [...galleryItems, ...pendingSorted].sort((a, b) => {
+    const sorted = [...galleryItems, ...pendingSorted].sort((a, b) => {
       const aOrder = Number((a as PendingUpload).sortOrder ?? (a as MediaAsset).sort_order ?? 999999);
       const bOrder = Number((b as PendingUpload).sortOrder ?? (b as MediaAsset).sort_order ?? 999999);
       return aOrder - bOrder;
     });
-  }, [mode, galleryItems, pendingUploads]);
+    return previewLimit && previewLimit > 0 ? sorted.slice(0, previewLimit) : sorted;
+  }, [mode, galleryItems, pendingUploads, previewLimit]);
 
   const lightboxItems = useMemo(() => {
     if (lightboxMode === "floorplan") return floorPlanItems;
@@ -902,6 +954,7 @@ export default function MediaManager({
 
   function beginReorder(e: React.PointerEvent<HTMLDivElement>, item: MediaAsset) {
     if (!canManage) return;
+    if (isReordering || reorderRef.current?.active) return;
     if (e.button !== 0) return;
     if (e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (dragBox?.active) return;
@@ -967,13 +1020,33 @@ export default function MediaManager({
       rafRef.current = null;
       const latest = latestPointerRef.current;
       if (!latest) return;
-      if (!reorder?.active) return;
+      const currentReorder = reorderRef.current;
+      if (!currentReorder?.active) return;
+
+      const edgeSize = Math.min(140, window.innerHeight * 0.18);
+      let scrollDelta = 0;
+      if (latest.y < edgeSize) {
+        scrollDelta = -Math.ceil(((edgeSize - latest.y) / edgeSize) * 24);
+      } else if (latest.y > window.innerHeight - edgeSize) {
+        scrollDelta = Math.ceil(((latest.y - (window.innerHeight - edgeSize)) / edgeSize) * 24);
+      }
+      if (scrollDelta) window.scrollBy(0, scrollDelta);
+
+      const visibleItems = previewGalleryItemsRef.current ?? galleryItemsRef.current;
+      const slotCenters = visibleItems.map((item) => {
+        const node = itemRefs.current[clean(item.id)];
+        const rect = node?.getBoundingClientRect();
+        return {
+          x: (rect?.left ?? 0) + (rect?.width ?? 0) / 2,
+          y: (rect?.top ?? 0) + (rect?.height ?? 0) / 2,
+        };
+      });
 
       let nearestIndex = 0;
       let nearestDistance = Number.POSITIVE_INFINITY;
 
-      for (let i = 0; i < reorder.slotCenters.length; i += 1) {
-        const c = reorder.slotCenters[i];
+      for (let i = 0; i < slotCenters.length; i += 1) {
+        const c = slotCenters[i];
         const dx = latest.x - c.x;
         const dy = latest.y - c.y;
         const dist = dx * dx + dy * dy;
@@ -983,29 +1056,23 @@ export default function MediaManager({
         }
       }
 
-      if (nearestIndex !== reorder.targetIndex) {
-        setPreviewGalleryItems(moveBlock(baseGalleryItems, reorder.draggedIds, nearestIndex));
-        setReorder((prev) =>
-          prev
-            ? {
-                ...prev,
-                pointerX: latest.x,
-                pointerY: latest.y,
-                targetIndex: nearestIndex,
-              }
-            : prev
-        );
-      } else {
-        setReorder((prev) =>
-          prev
-            ? {
-                ...prev,
-                pointerX: latest.x,
-                pointerY: latest.y,
-              }
-            : prev
-        );
+      if (nearestIndex !== currentReorder.targetIndex) {
+        const nextPreview = moveBlock(baseGalleryItemsRef.current, currentReorder.draggedIds, nearestIndex);
+        previewGalleryItemsRef.current = nextPreview;
+        setPreviewGalleryItems(nextPreview);
       }
+
+      const nextReorder = {
+        ...currentReorder,
+        pointerX: latest.x,
+        pointerY: latest.y,
+        targetIndex: nearestIndex,
+        slotCenters,
+      };
+      reorderRef.current = nextReorder;
+      setReorder(nextReorder);
+
+      if (scrollDelta) rafRef.current = window.requestAnimationFrame(processPointerFrame);
     }
 
     function queuePointerFrame() {
@@ -1015,19 +1082,21 @@ export default function MediaManager({
 
     function handlePointerMove(e: PointerEvent) {
       const pending = pendingReorderRef.current;
+      const currentReorder = reorderRef.current;
 
-      if (pending && !reorder) {
+      if (pending && !currentReorder) {
         const dx = e.clientX - pending.startClientX;
         const dy = e.clientY - pending.startClientY;
         const dist = Math.sqrt(dx * dx + dy * dy);
         if (dist <= 6) return;
+        e.preventDefault();
 
         const draggedIds =
-          selectedIds.length > 1 && selectedIds.includes(pending.id)
-            ? galleryItems
+          selectedIdsRef.current.length > 1 && selectedIdsRef.current.includes(pending.id)
+            ? galleryItemsRef.current
                 .filter((item): item is MediaAsset => "cloudinary_public_id" in item)
                 .map((item) => clean(item.id))
-                .filter((id) => selectedIds.includes(id))
+                .filter((id) => selectedIdsRef.current.includes(id))
             : [pending.id];
 
         const draggedEl = itemRefs.current[pending.id];
@@ -1035,7 +1104,7 @@ export default function MediaManager({
 
         const draggedRect = draggedEl.getBoundingClientRect();
 
-        const slotCenters = galleryItems
+        const slotCenters = galleryItemsRef.current
           .filter((item): item is MediaAsset => "cloudinary_public_id" in item)
           .map((item) => {
             const id = clean(item.id);
@@ -1047,19 +1116,19 @@ export default function MediaManager({
             };
           });
 
-        const initialIndex = galleryItems
+        const initialIndex = galleryItemsRef.current
           .filter((item): item is MediaAsset => "cloudinary_public_id" in item)
           .findIndex((item) => clean(item.id) === pending.id);
 
-        setPreviewGalleryItems(
-          moveBlock(
-            galleryItems.filter((item): item is MediaAsset => "cloudinary_public_id" in item),
-            draggedIds,
-            initialIndex
-          )
+        const nextPreview = moveBlock(
+          galleryItemsRef.current.filter((item): item is MediaAsset => "cloudinary_public_id" in item),
+          draggedIds,
+          initialIndex
         );
+        previewGalleryItemsRef.current = nextPreview;
+        setPreviewGalleryItems(nextPreview);
 
-        setReorder({
+        const nextReorder: ReorderState = {
           active: true,
           draggedIds,
           draggedId: pending.id,
@@ -1071,16 +1140,18 @@ export default function MediaManager({
           height: draggedRect.height,
           targetIndex: initialIndex,
           slotCenters,
-        });
+        };
+        reorderRef.current = nextReorder;
+        setReorder(nextReorder);
 
-        setReordering(true);
         pendingReorderRef.current = null;
         didMoveRef.current = true;
         return;
       }
 
-      if (!reorder?.active) return;
+      if (!currentReorder?.active) return;
 
+      e.preventDefault();
       latestPointerRef.current = { x: e.clientX, y: e.clientY };
       queuePointerFrame();
     }
@@ -1094,21 +1165,24 @@ export default function MediaManager({
         rafRef.current = null;
       }
 
-      if (!reorder?.active) {
+      const currentReorder = reorderRef.current;
+      if (!currentReorder?.active) {
         window.setTimeout(() => {
           didMoveRef.current = false;
         }, 0);
         return;
       }
 
-      const finalItems = previewGalleryItems ?? galleryItems;
+      const finalItems = previewGalleryItemsRef.current ?? galleryItemsRef.current;
       const changed = finalItems.some(
-        (item, index) => clean(item.id) !== clean(baseGalleryItems[index]?.id)
+        (item, index) => clean(item.id) !== clean(baseGalleryItemsRef.current[index]?.id)
       );
 
+      reorderRef.current = null;
       setReorder(null);
 
       if (changed) {
+        setReordering(true);
         void persistGalleryOrder(finalItems);
       } else {
         setPreviewGalleryItems(null);
@@ -1120,14 +1194,18 @@ export default function MediaManager({
       }, 0);
     }
 
-    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
     window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    window.addEventListener("blur", handlePointerUp);
 
     return () => {
       window.removeEventListener("pointermove", handlePointerMove);
       window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+      window.removeEventListener("blur", handlePointerUp);
     };
-  }, [reorder, previewGalleryItems, galleryItems, baseGalleryItems, selectedIds]);
+  }, []);
 
   async function deleteOneMedia(mediaId: string) {
     const res = await authenticatedFetch("/api/media/delete", {
@@ -1597,6 +1675,8 @@ if (mode === "floorplan") {
               );
             }
 
+            const isHidden = item.is_published === false;
+
             return (
               <div
                 key={id || `${getMediaUrl(item)}-${i}`}
@@ -1624,10 +1704,32 @@ if (mode === "floorplan") {
                     borderRadius: "16px",
                     border: "1px solid #ececec",
                     background: "#fff",
+                    opacity: isHidden ? 0.42 : 1,
+                    filter: isHidden ? "grayscale(.55) brightness(.72)" : "none",
+                    transition: "opacity 160ms ease, filter 160ms ease",
                   }}
                 />
 
                 <div style={orderBadgeStyle}>{orderNumber}</div>
+
+                {canManage ? (
+                  <button
+                    type="button"
+                    style={{
+                      ...visibilityButtonStyle,
+                      background: isHidden ? "rgba(23,35,31,.9)" : "rgba(23,35,31,.58)",
+                    }}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void toggleVisibility(item);
+                    }}
+                    disabled={visibilityUpdatingId === item.id}
+                    title={isHidden ? "Show floor plan on property website" : "Hide floor plan from property website"}
+                    aria-label={isHidden ? "Show floor plan on property website" : "Hide floor plan from property website"}
+                  >
+                    <VisibilityIcon hidden={isHidden} />
+                  </button>
+                ) : null}
 
                 {canManage ? (
                   <button
@@ -1667,6 +1769,79 @@ if (mode === "floorplan") {
           No floor plan added yet.
         </div>
       ) : null}
+
+      {activeLightboxItem ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Floor plan viewer"
+          onClick={closeLightbox}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0,0,0,.82)",
+            display: "grid",
+            placeItems: "center",
+            padding: "28px",
+          }}
+        >
+          <div
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              position: "relative",
+              width: "min(96vw, 1600px)",
+              height: "min(92vh, 1000px)",
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            <button
+              type="button"
+              onClick={closeLightbox}
+              style={{ ...floatingButtonStyle, position: "absolute", top: "10px", right: "10px", width: "46px", height: "46px", zIndex: 2, background: "#17231f", border: "2px solid #ffc72c", boxShadow: "0 8px 24px rgba(0,0,0,.5)" }}
+              title="Close"
+              aria-label="Close floor plan viewer"
+            >
+              <CloseIcon />
+            </button>
+
+            {lightboxItems.length > 1 ? (
+              <button
+                type="button"
+                onClick={showPrevLightbox}
+                style={{ ...floatingButtonStyle, position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", width: "52px", height: "52px", zIndex: 2, background: "#17231f", border: "2px solid #ffc72c", boxShadow: "0 8px 24px rgba(0,0,0,.5)" }}
+                title="Previous"
+                aria-label="Previous floor plan"
+              >
+                <ChevronLeftIcon />
+              </button>
+            ) : null}
+
+            <img
+              src={getMediaUrl(activeLightboxItem)}
+              alt={clean(activeLightboxItem.alt_text) || clean(activeLightboxItem.title) || "Floor plan"}
+              style={{ width: "calc(100% - 160px)", height: "calc(100% - 80px)", objectFit: "contain", display: "block", borderRadius: "16px", boxShadow: "0 20px 60px rgba(0,0,0,.35)" }}
+            />
+
+            {lightboxItems.length > 1 ? (
+              <button
+                type="button"
+                onClick={showNextLightbox}
+                style={{ ...floatingButtonStyle, position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", width: "52px", height: "52px", zIndex: 2, background: "#17231f", border: "2px solid #ffc72c", boxShadow: "0 8px 24px rgba(0,0,0,.5)" }}
+                title="Next"
+                aria-label="Next floor plan"
+              >
+                <ChevronRightIcon />
+              </button>
+            ) : null}
+
+            <div style={{ position: "absolute", left: "50%", bottom: "12px", transform: "translateX(-50%)", padding: "10px 14px", borderRadius: "999px", background: "#17231f", border: "1px solid #ffc72c", color: "#fff", fontSize: "13px", fontWeight: 700, boxShadow: "0 8px 24px rgba(0,0,0,.45)" }}>
+              {lightboxIndex! + 1} / {lightboxItems.length}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1676,49 +1851,171 @@ if (mode === "floorplan") {
       ? galleryItems.filter((item) => reorder.draggedIds.includes(clean(item.id)))
       : [];
 
+  const downloadPanel = !loading && baseGalleryItems.length ? (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "14px",
+        padding: "18px 20px",
+        border: "1px solid rgba(23,35,31,.18)",
+        background: "#f2f0e9",
+      }}
+    >
+      <div>
+        <div style={{ color: "#17231f", fontSize: "16px", fontWeight: 750 }}>Download media</div>
+        <div style={{ marginTop: "4px", color: "#66706b", fontSize: "13px" }}>
+          Originals preserve uploaded files. MLS copies are high-quality sRGB JPEGs sized to 2000px on the long edge and kept below 5 MB. Hidden photos download inside a separate Hidden Photos folder.
+        </div>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
+        <button
+          type="button"
+          onClick={() => void downloadAll("original")}
+          disabled={downloadingVariant !== null}
+          style={{ padding: "12px 18px", border: "1px solid #17231f", borderRadius: "999px", background: "transparent", color: "#17231f", font: "700 10px var(--font-geist-mono), monospace", letterSpacing: ".1em", textTransform: "uppercase", cursor: downloadingVariant ? "wait" : "pointer" }}
+        >
+          {downloadingVariant === "original" ? "Preparing…" : "Download originals"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void downloadAll("mls")}
+          disabled={downloadingVariant !== null}
+          style={{ padding: "12px 18px", border: "1px solid #ffc72c", borderRadius: "999px", background: "#ffc72c", color: "#17231f", font: "700 10px var(--font-geist-mono), monospace", letterSpacing: ".1em", textTransform: "uppercase", cursor: downloadingVariant ? "wait" : "pointer" }}
+        >
+          {downloadingVariant === "mls" ? "Preparing…" : "Download MLS Quality"}
+        </button>
+      </div>
+    </div>
+  ) : (
+    <div style={{ padding: "20px", border: "1px dashed #d8d8d8", background: "#fafafa", color: "#777" }}>
+      {loading ? "Loading downloadable media…" : "No downloadable media is available yet."}
+    </div>
+  );
+
+  const downloadIsWorking = downloadModal
+    ? ["connecting", "processing", "streaming"].includes(downloadModal.stage)
+    : false;
+  const downloadPhaseIndex = downloadModal?.stage === "connecting"
+    ? 0
+    : downloadModal?.stage === "processing"
+      ? 1
+      : downloadModal?.stage === "streaming"
+        ? 2
+        : downloadModal?.stage === "complete"
+          ? 3
+          : -1;
+  const preparedMegabytes = ((downloadModal?.bytesReceived || 0) / 1024 / 1024).toFixed(1);
+
+  const downloadProgressModal = downloadModal ? (
+    <div className="gsv-download-modal-backdrop" role="presentation">
+      <section
+        className="gsv-download-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="download-progress-title"
+        aria-describedby="download-progress-description"
+      >
+        <div className="gsv-download-modal-main">
+          <p className="gsv-download-modal-eyebrow">
+            {downloadModal.stage === "complete" ? "Download started" : downloadModal.stage === "error" ? "Download interrupted" : "Preparing your files"}
+          </p>
+          <h2 id="download-progress-title">
+            {downloadModal.stage === "complete"
+              ? "Your media is ready."
+              : downloadModal.stage === "error"
+                ? "We couldn’t prepare the ZIP."
+                : downloadModal.stage === "connecting"
+                  ? "Starting a secure download."
+                  : downloadModal.stage === "processing"
+                    ? downloadModal.variant === "mls" ? "Optimizing your MLS images." : "Collecting your originals."
+                    : "Packaging and sending your ZIP."}
+          </h2>
+          <p id="download-progress-description" className="gsv-download-modal-description">
+            {downloadModal.stage === "complete"
+              ? "The ZIP file has been sent to your browser’s Downloads folder. You can close this window and keep working."
+              : downloadModal.stage === "error"
+                ? downloadModal.error
+                : downloadModal.stage === "connecting"
+                  ? `Authorizing access to ${baseGalleryItems.length} ${baseGalleryItems.length === 1 ? "file" : "files"} and starting the archive service.`
+                  : downloadModal.stage === "processing"
+                    ? downloadModal.variant === "mls"
+                      ? `Resizing ${baseGalleryItems.length} images to 2000px, converting them to high-quality sRGB JPEGs, and preserving the saved gallery order.`
+                      : `Retrieving ${baseGalleryItems.length} full-resolution files and preserving the saved gallery order.`
+                    : `${preparedMegabytes} MB of the ZIP has been prepared and streamed securely to this browser.`}
+          </p>
+          {downloadIsWorking ? (
+            <div className="gsv-download-modal-progress" role="progressbar" aria-label="Preparing media archive">
+              <span />
+            </div>
+          ) : (
+            <div className={`gsv-download-modal-result ${downloadModal.stage === "error" ? "is-error" : "is-complete"}`} aria-live="polite">
+              <span aria-hidden="true">{downloadModal.stage === "error" ? "!" : "✓"}</span>
+              {downloadModal.stage === "error" ? "Nothing was downloaded. Please try again." : "Download started successfully"}
+            </div>
+          )}
+          {downloadModal.stage !== "error" ? (
+            <div style={{ display: "grid", gap: "7px", marginTop: "18px" }} aria-label="Download preparation steps">
+              {["Secure access", downloadModal.variant === "mls" ? "Optimize images" : "Collect originals", "Build ZIP archive", "Start browser download"].map((label, index) => (
+                <div key={label} style={{ display: "flex", alignItems: "center", gap: "9px", color: index <= downloadPhaseIndex ? "#17231f" : "#9a9f9c", fontSize: "12px", fontWeight: index === downloadPhaseIndex ? 800 : 600 }}>
+                  <span style={{ width: "18px", height: "18px", borderRadius: "50%", display: "grid", placeItems: "center", background: index < downloadPhaseIndex ? "#ffc72c" : index === downloadPhaseIndex ? "#17231f" : "#ecebe6", color: index === downloadPhaseIndex ? "#fff" : "#17231f", fontSize: "10px" }}>
+                    {index < downloadPhaseIndex ? "✓" : index + 1}
+                  </span>
+                  {label}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div className="gsv-download-modal-meta">
+            <span>{baseGalleryItems.length} {baseGalleryItems.length === 1 ? "file" : "files"}</span>
+            <span>{downloadModal.bytesReceived ? `${preparedMegabytes} MB prepared` : "ZIP archive"}</span>
+          </div>
+          {!downloadIsWorking ? (
+            <div className="gsv-download-modal-actions">
+              {downloadModal.stage === "error" ? (
+                <button type="button" onClick={() => void downloadAll(downloadModal.variant)}>Try again</button>
+              ) : null}
+              <button type="button" className="is-secondary" onClick={() => setDownloadModal(null)}>Close</button>
+            </div>
+          ) : null}
+        </div>
+        <aside className="gsv-download-modal-card" aria-label="Selected download format">
+          <p>Selected download</p>
+          <h3>{downloadModal.variant === "mls" ? "MLS-ready media" : "Original media"}</h3>
+          <div className="gsv-download-modal-rule" />
+          {downloadModal.variant === "mls" ? (
+            <ul>
+              <li>2000px long edge</li>
+              <li>High-quality sRGB JPEG</li>
+              <li>Under 5 MB per image</li>
+              <li>Saved gallery order</li>
+            </ul>
+          ) : (
+            <ul>
+              <li>Original uploaded dimensions</li>
+              <li>Original file quality</li>
+              <li>Saved gallery order</li>
+              <li>Hidden media separated</li>
+            </ul>
+          )}
+          <div className="gsv-download-modal-brand">GOLDEN STATE <strong>VISIONS</strong></div>
+        </aside>
+      </section>
+    </div>
+  ) : null;
+
+  if (view === "downloads") {
+    return <>
+      <div style={{ display: "grid", gap: "10px" }}>{downloadPanel}{statusText ? <div style={{ color: "#9f3a2d", fontSize: "13px" }}>{statusText}</div> : null}</div>
+      {downloadProgressModal}
+    </>;
+  }
+
   return (
     <>
       <div style={{ display: "grid", gap: "18px" }}>
-        {!loading && baseGalleryItems.length ? (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "14px",
-              padding: "18px 20px",
-              border: "1px solid rgba(23,35,31,.18)",
-              background: "#f2f0e9",
-            }}
-          >
-            <div>
-              <div style={{ color: "#17231f", fontSize: "16px", fontWeight: 750 }}>Download photo gallery</div>
-              <div style={{ marginTop: "4px", color: "#66706b", fontSize: "13px" }}>
-                Originals preserve uploaded files. MLS copies are JPEGs sized to 1200px on the long edge. Hidden photos download inside a separate Hidden Photos folder.
-              </div>
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-              <button
-                type="button"
-                onClick={() => void downloadAll("original")}
-                disabled={downloadingVariant !== null}
-                style={{ padding: "12px 18px", border: "1px solid #17231f", borderRadius: "999px", background: "transparent", color: "#17231f", font: "700 10px var(--font-geist-mono), monospace", letterSpacing: ".1em", textTransform: "uppercase", cursor: downloadingVariant ? "wait" : "pointer" }}
-              >
-                {downloadingVariant === "original" ? "Preparing…" : "Download originals"}
-              </button>
-              <button
-                type="button"
-                onClick={() => void downloadAll("mls")}
-                disabled={downloadingVariant !== null}
-                style={{ padding: "12px 18px", border: "1px solid #ffc72c", borderRadius: "999px", background: "#ffc72c", color: "#17231f", font: "700 10px var(--font-geist-mono), monospace", letterSpacing: ".1em", textTransform: "uppercase", cursor: downloadingVariant ? "wait" : "pointer" }}
-              >
-                {downloadingVariant === "mls" ? "Preparing…" : "Download MLS 1200px"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
         {canManage ? (
           <div
             style={dropZoneStyle}
@@ -1942,6 +2239,7 @@ if (mode === "floorplan") {
                   }}
                   onPointerDown={(e) => beginReorder(e, item)}
                   onClick={(e) => {
+                    if (disableLightbox) return;
                     const isCtrlLike = e.ctrlKey || e.metaKey;
                     const isShift = e.shiftKey;
 
@@ -1959,7 +2257,7 @@ if (mode === "floorplan") {
                     position: "relative",
                     borderRadius: "16px",
                     overflow: "hidden",
-                    cursor: canManage ? (reorder?.active ? "grabbing" : "grab") : "pointer",
+                    cursor: disableLightbox ? "default" : canManage ? (reorder?.active ? "grabbing" : "grab") : "pointer",
                     outline: isSelected ? "3px solid #e53935" : "none",
                     boxShadow: isSelected ? "0 0 0 2px rgba(229,57,53,.16)" : "none",
                     opacity: isDraggingThis ? 0.08 : 1,
@@ -1968,6 +2266,7 @@ if (mode === "floorplan") {
                       ? "transform 120ms ease, opacity 120ms ease"
                       : "box-shadow 120ms ease, outline-color 120ms ease, transform 120ms ease",
                     willChange: reorder?.active ? "transform, opacity" : "auto",
+                    touchAction: "none",
                   }}
                 >
                   <img
@@ -2137,6 +2436,9 @@ if (mode === "floorplan") {
 
       {activeLightboxItem ? (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Photo viewer"
           onClick={closeLightbox}
           style={{
             position: "fixed",
@@ -2169,8 +2471,12 @@ if (mode === "floorplan") {
                 width: "46px",
                 height: "46px",
                 zIndex: 2,
+                background: "#17231f",
+                border: "2px solid #ffc72c",
+                boxShadow: "0 8px 24px rgba(0,0,0,.5)",
               }}
               title="Close"
+              aria-label="Close photo viewer"
             >
               <CloseIcon />
             </button>
@@ -2188,8 +2494,12 @@ if (mode === "floorplan") {
                   width: "52px",
                   height: "52px",
                   zIndex: 2,
+                  background: "#17231f",
+                  border: "2px solid #ffc72c",
+                  boxShadow: "0 8px 24px rgba(0,0,0,.5)",
                 }}
                 title="Previous"
+                aria-label="Previous photo"
               >
                 <ChevronLeftIcon />
               </button>
@@ -2199,8 +2509,8 @@ if (mode === "floorplan") {
               src={getMediaUrl(activeLightboxItem)}
               alt={clean(activeLightboxItem.alt_text) || clean(activeLightboxItem.title) || "Image"}
               style={{
-                maxWidth: "100%",
-                maxHeight: "100%",
+                width: "calc(100% - 160px)",
+                height: "calc(100% - 80px)",
                 objectFit: "contain",
                 display: "block",
                 borderRadius: "16px",
@@ -2221,8 +2531,12 @@ if (mode === "floorplan") {
                   width: "52px",
                   height: "52px",
                   zIndex: 2,
+                  background: "#17231f",
+                  border: "2px solid #ffc72c",
+                  boxShadow: "0 8px 24px rgba(0,0,0,.5)",
                 }}
                 title="Next"
+                aria-label="Next photo"
               >
                 <ChevronRightIcon />
               </button>
@@ -2236,12 +2550,12 @@ if (mode === "floorplan") {
                 transform: "translateX(-50%)",
                 padding: "10px 14px",
                 borderRadius: "999px",
-                background: "rgba(17,17,17,.45)",
+                background: "#17231f",
+                border: "1px solid #ffc72c",
                 color: "#fff",
                 fontSize: "13px",
                 fontWeight: 700,
-                backdropFilter: "blur(8px)",
-                WebkitBackdropFilter: "blur(8px)",
+                boxShadow: "0 8px 24px rgba(0,0,0,.45)",
               }}
             >
               {lightboxIndex! + 1} / {lightboxItems.length}

@@ -1,6 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
+import { AuthorizationError, authorizationErrorResponse, requireUser } from "@/lib/authz";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -49,29 +48,8 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireAdmin(req);
+    const { user, profile, admin: supabase } = await requireUser(req);
     const { id } = await context.params;
-
-    const supabaseUrl =
-      process.env.NEXT_PUBLIC_SUPABASE_URL ||
-      process.env.SUPABASE_URL ||
-      "";
-
-    const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
-
-    if (!supabaseUrl || !serviceRole) {
-      return NextResponse.json(
-        { error: "Missing Supabase server env values." },
-        { status: 500 }
-      );
-    }
-
-    const supabase = createClient(supabaseUrl, serviceRole, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
 
     const body = await req.json().catch(() => ({}));
 
@@ -79,6 +57,8 @@ export async function PATCH(
       .from("sites")
       .select(`
         id,
+        client_id,
+        client_ms_id,
         name,
         site_name,
         property_address,
@@ -107,23 +87,30 @@ export async function PATCH(
       );
     }
 
+    const role = clean(profile?.role).toLowerCase();
+    const isAdmin = profile?.is_admin === true || role === "admin";
+    const isOwner = clean(existingSite.client_id) === user.id || clean(existingSite.client_ms_id) === user.id;
+    if (!isAdmin && !isOwner) {
+      throw new AuthorizationError("You do not have access to edit this property.", 403);
+    }
+
     const currentSiteData = asRecord(existingSite.site_data);
 
-    const hasProperty_address = Object.prototype.hasOwnProperty.call(body, "property_address");
-    const hasProperty_city = Object.prototype.hasOwnProperty.call(body, "property_city");
-    const hasProperty_state = Object.prototype.hasOwnProperty.call(body, "property_state");
-    const hasProperty_zip = Object.prototype.hasOwnProperty.call(body, "property_zip");
+    const hasProperty_address = isAdmin && Object.prototype.hasOwnProperty.call(body, "property_address");
+    const hasProperty_city = isAdmin && Object.prototype.hasOwnProperty.call(body, "property_city");
+    const hasProperty_state = isAdmin && Object.prototype.hasOwnProperty.call(body, "property_state");
+    const hasProperty_zip = isAdmin && Object.prototype.hasOwnProperty.call(body, "property_zip");
     const hasBeds = Object.prototype.hasOwnProperty.call(body, "beds");
     const hasBaths = Object.prototype.hasOwnProperty.call(body, "baths");
     const hasProperty_sqft = Object.prototype.hasOwnProperty.call(body, "property_sqft");
     const hasLot_sqft = Object.prototype.hasOwnProperty.call(body, "lot_sqft");
     const hasYear_built = Object.prototype.hasOwnProperty.call(body, "year_built");
     const hasListingMlsNumber = Object.prototype.hasOwnProperty.call(body, "listing_mls_number");
-    const hasVideoUrl = Object.prototype.hasOwnProperty.call(body, "video_url");
-    const hasMatterportUrl = Object.prototype.hasOwnProperty.call(body, "matterport_url");
+    const hasVideoUrl = isAdmin && Object.prototype.hasOwnProperty.call(body, "video_url");
+    const hasMatterportUrl = isAdmin && Object.prototype.hasOwnProperty.call(body, "matterport_url");
     const hasPublicSiteDescription = Object.prototype.hasOwnProperty.call(body, "public_site_description");
-    const hasCustomDomain = Object.prototype.hasOwnProperty.call(body, "custom_domain");
-    const hasCustomDomainRequested = Object.prototype.hasOwnProperty.call(body, "custom_domain_requested");
+    const hasCustomDomain = isAdmin && Object.prototype.hasOwnProperty.call(body, "custom_domain");
+    const hasCustomDomainRequested = isAdmin && Object.prototype.hasOwnProperty.call(body, "custom_domain_requested");
 
     const property_address = hasProperty_address
       ? clean(body?.property_address)

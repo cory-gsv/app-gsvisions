@@ -1,9 +1,86 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
+import { updateMicrosoftCalendarEventBody } from "@/lib/m365-calendar";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
+}
+
+function signedInteger(v: unknown): number {
+  const parsed = Number(v ?? 0);
+  return Number.isFinite(parsed) ? Math.round(parsed) : 0;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function bulletLines(values: string[]) {
+  return values.map((value) => `• ${value}`);
+}
+
+const packageIncludes: Record<string, string[]> = {
+  "standard media": ["Photoshoot", "Aerial drone photos", "2D floor plan", "One virtual twilight"],
+  "matterport media": ["Photoshoot", "Aerial drone photos", "2D floor plan", "One virtual twilight", "3D Matterport tour"],
+  "video plus": ["Photoshoot", "Cinematic video tour", "Aerial drone photography", "Aerial drone video", "2D floor plan", "One virtual twilight"],
+  signature: ["Photoshoot", "Cinematic video tour", "Aerial drone photography", "Aerial drone video", "2D floor plan", "One virtual twilight", "3D Matterport tour"],
+};
+
+const knownAddOnNames = new Set([
+  "large property",
+  "marketing kit",
+  "custom property-site domain",
+  "virtual twilight",
+  "virtual staging",
+  "photoshop decluttering",
+  "additional 2d floor plan",
+]);
+
+function buildCalendarNotes(input: {
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  propertyAddress: string;
+  packageName: string;
+  includedServices: string[];
+  selectedServices: string[];
+  addOns: string[];
+  customerNotes: string;
+  adminNotes: string;
+  durationMinutes: number;
+  travelMiles?: number;
+  travelMinutes?: number;
+  travelFee?: number;
+}) {
+  const sections = [
+    [
+      "CUSTOMER",
+      `Name: ${input.customerName || "Not provided"}`,
+      `Email: ${input.customerEmail || "Not provided"}`,
+      `Phone: ${input.customerPhone || "Not provided"}`,
+      `Property: ${input.propertyAddress || "Not provided"}`,
+    ],
+    [
+      "ORDER",
+      input.packageName ? `Package: ${input.packageName}` : "Package: Custom media plan",
+      ...(input.includedServices.length ? ["Included services:", ...bulletLines(input.includedServices)] : []),
+      ...(input.selectedServices.length ? ["Individual services:", ...bulletLines(input.selectedServices)] : []),
+      ...(input.addOns.length ? ["Add-ons:", ...bulletLines(input.addOns)] : ["Add-ons: None"]),
+    ],
+    ["CUSTOMER NOTES", input.customerNotes || "None provided"],
+    ["ADMIN NOTES", input.adminNotes || "None added"],
+    [
+      "APPOINTMENT",
+      `Onsite time: ${input.durationMinutes} minutes`,
+      input.travelMinutes || input.travelMiles || input.travelFee
+        ? `Travel: ${input.travelMiles || 0} miles · ${input.travelMinutes || 0} minutes each way · $${Number(input.travelFee || 0).toFixed(2)} fee`
+        : "",
+    ],
+  ];
+  return sections.map((section) => section.filter(Boolean).join("\n")).filter(Boolean).join("\n\n");
 }
 
 type InvoiceItem = {
@@ -37,7 +114,7 @@ function normalizeInvoiceItems(input: unknown): InvoiceItem[] {
         source: (row?.source === "booking" ? "booking" : "admin") as InvoiceItem["source"],
         product_id: clean(row?.product_id) || null,
         name: clean(row?.name) || "Untitled Item",
-        price_cents: Number(row?.price_cents ?? 0) || 0,
+        price_cents: signedInteger(row?.price_cents),
         qty: Math.max(1, Number(row?.qty ?? 1) || 1),
         editable: row?.editable !== false,
         group_id: clean(row?.group_id) || null,
@@ -108,6 +185,7 @@ export async function PATCH(
 
     const body = await req.json().catch(() => ({}));
     const invoiceItems = normalizeInvoiceItems(body?.invoice_items);
+    const adminNotes = clean(body?.admin_notes).slice(0, 4000);
 
     const packageDiscountCents = Math.max(
       0,
@@ -123,7 +201,7 @@ export async function PATCH(
 
     const { data: siteRow, error: siteLookupError } = await supabase
       .from("sites")
-      .select("id, booking_id, paid, balance_due_cents")
+      .select("id, booking_id, paid, balance_due_cents, site_data, property_full_address, address_full, property_address, property_city, property_state, property_zip")
       .eq("id", id)
       .maybeSingle();
 
@@ -140,6 +218,9 @@ export async function PATCH(
     let previousBookingTimezone = "";
     let previousPhotographerName = "";
     let previousPhotographerEmail = "";
+    let customerName = "";
+    let customerEmail = "";
+    let customerPhone = "";
 
     if (siteRow.booking_id) {
       const { data: bookingRow } = await supabase
@@ -150,7 +231,11 @@ export async function PATCH(
           scheduled_end,
           scheduled_timezone,
           photographer_name,
-          photographer_email
+          photographer_email,
+          client_first_name,
+          client_last_name,
+          client_email,
+          client_phone
         `)
         .eq("id", siteRow.booking_id)
         .maybeSingle();
@@ -164,6 +249,9 @@ export async function PATCH(
       previousBookingTimezone = clean(bookingRow?.scheduled_timezone);
       previousPhotographerName = clean(bookingRow?.photographer_name);
       previousPhotographerEmail = clean(bookingRow?.photographer_email);
+      customerName = [clean(bookingRow?.client_first_name), clean(bookingRow?.client_last_name)].filter(Boolean).join(" ");
+      customerEmail = clean(bookingRow?.client_email);
+      customerPhone = clean(bookingRow?.client_phone);
     }
 
     const previousBalanceDueCents = Math.max(
@@ -175,7 +263,23 @@ export async function PATCH(
       ? previousBookingTotalCents
       : Math.max(0, previousBookingTotalCents - previousBalanceDueCents);
 
+    const chargedPackageGroups = new Set(
+      invoiceItems
+        .filter(
+          (item) =>
+            clean(item.kind) === "package" &&
+            clean(item.group_id) &&
+            signedInteger(item.price_cents) !== 0
+        )
+        .map((item) => clean(item.group_id))
+    );
+
     const subtotalCents = invoiceItems.reduce((sum, item) => {
+      const kind = clean(item.kind);
+      if (kind === "discount") return sum;
+      if (kind !== "package" && chargedPackageGroups.has(clean(item.group_id))) {
+        return sum;
+      }
       const lineTotal =
         (Number(item.price_cents ?? 0) || 0) *
         Math.max(1, Number(item.qty ?? 1) || 1);
@@ -191,12 +295,16 @@ export async function PATCH(
 
     const isFullyPaid = balanceDueCents <= 0;
 
+    const currentSiteData = asRecord(siteRow.site_data);
+    const nextSiteData: Record<string, unknown> = { ...currentSiteData, admin_notes: adminNotes };
+
     const { error: siteUpdateError } = await supabase
       .from("sites")
       .update({
         invoice_items: invoiceItems,
         balance_due_cents: balanceDueCents,
         paid: isFullyPaid,
+        site_data: nextSiteData,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id);
@@ -269,6 +377,75 @@ export async function PATCH(
       }
     }
 
+    let calendarSync: Record<string, unknown> = { updated: false, reason: "event_id_not_available" };
+    const { data: ingestRow } = await supabase
+      .from("booking_ingest_events")
+      .select("payload")
+      .eq("site_id", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const ingestPayload = asRecord(ingestRow?.payload);
+    const calendarEventId = clean(nextSiteData.calendar_event_id) || clean(ingestPayload.fulfillment_appointment_id);
+
+    if (calendarEventId) {
+      const packageRow = invoiceItems.find((item) => clean(item.kind) === "package") || null;
+      const packageGroupId = clean(packageRow?.group_id);
+      const savedIncludedServices = packageGroupId
+        ? invoiceItems
+            .filter((item) => item.id !== packageRow?.id && clean(item.group_id) === packageGroupId && clean(item.kind) !== "discount")
+            .map((item) => clean(item.name))
+            .filter(Boolean)
+        : [];
+      const includedServices = savedIncludedServices.length
+        ? savedIncludedServices
+        : packageIncludes[clean(packageRow?.name).toLowerCase()] || [];
+      const selectedServices = invoiceItems
+        .filter((item) => {
+          const kind = clean(item.kind);
+          return ["service", "custom"].includes(kind) &&
+            (!packageGroupId || clean(item.group_id) !== packageGroupId) &&
+            !knownAddOnNames.has(clean(item.name).toLowerCase());
+        })
+        .map((item) => `${clean(item.name)}${item.qty > 1 ? ` × ${item.qty}` : ""}`)
+        .filter(Boolean);
+      const addOns = invoiceItems
+        .filter((item) => clean(item.kind) === "addon" || knownAddOnNames.has(clean(item.name).toLowerCase()))
+        .map((item) => `${clean(item.name)}${item.qty > 1 ? ` × ${item.qty}` : ""}`)
+        .filter(Boolean);
+      const travel = asRecord(ingestPayload.travel);
+      const propertyAddress = clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
+        clean(siteRow.property_address),
+        clean(siteRow.property_city),
+        [clean(siteRow.property_state), clean(siteRow.property_zip)].filter(Boolean).join(" "),
+      ].filter(Boolean).join(", ");
+      const notes = buildCalendarNotes({
+        customerName,
+        customerEmail,
+        customerPhone,
+        propertyAddress,
+        packageName: clean(packageRow?.name),
+        includedServices,
+        selectedServices,
+        addOns,
+        customerNotes: clean(nextSiteData.customer_notes) || clean(ingestPayload.customer_notes),
+        adminNotes,
+        durationMinutes: getDurationMinutes(previousBookingScheduledStart, previousBookingScheduledEnd),
+        travelMiles: Number(travel.miles || 0),
+        travelMinutes: Number(travel.driveMinutes || 0),
+        travelFee: Number(travel.fee || 0),
+      });
+      try {
+        calendarSync = await updateMicrosoftCalendarEventBody(calendarEventId, notes);
+      } catch (calendarError) {
+        calendarSync = {
+          updated: false,
+          reason: calendarError instanceof Error ? calendarError.message : "calendar_update_failed",
+        };
+        console.error("INVOICE_CALENDAR_NOTES_SYNC_FAILED", { siteId: id, calendarEventId, error: calendarSync.reason });
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       subtotal_cents: subtotalCents,
@@ -279,6 +456,7 @@ export async function PATCH(
       previous_paid_cents: previousPaidCents,
       balance_due_cents: balanceDueCents,
       invoice_items: invoiceItems,
+      calendar_sync: calendarSync,
     });
   } catch (err) {
     const authResponse = authorizationErrorResponse(err);

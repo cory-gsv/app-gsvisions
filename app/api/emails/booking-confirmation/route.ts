@@ -137,7 +137,7 @@ function getSupabaseAdmin() {
 
 export async function POST(req: Request) {
   try {
-    await requireAdmin(req);
+    const { user } = await requireAdmin(req);
     const body = await req.json().catch(() => ({}));
     const bookingId = clean(body?.bookingId);
     const siteId = clean(body?.siteId);
@@ -497,7 +497,7 @@ export async function POST(req: Request) {
                               ? `
                           <td class="gsv-button-cell" style="padding:0 6px 8px 0;">
                             <a href="${googleCalendarUrl}" class="gsv-button-link" style="${buttonStyle}">
-                              Add to Google Calendar
+                              Add to Calendar
                             </a>
                           </td>
                           `
@@ -630,12 +630,9 @@ export async function POST(req: Request) {
     if (holdError) {
       return NextResponse.json({ error: "Could not verify notification holds." }, { status: 503 });
     }
-    if (Array.isArray(activeHolds) && activeHolds.length) {
-      return NextResponse.json(
-        { ok: false, held: true, reason: clean(activeHolds[0]?.reason) || "Customer notifications are on hold." },
-        { status: 409 }
-      );
-    }
+    // This admin-only endpoint is the deliberate release action. Automated
+    // senders must continue to honor active holds; an admin clicking Send
+    // Confirmation is explicitly approving the current saved order.
 
     const idempotencyKey = `booking-confirmation:${clean(booking.id)}:${apptStart || "unscheduled"}`;
     const { data: messageId, error: claimError } = await supabase.rpc(
@@ -687,6 +684,20 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", messageId);
+
+    if (Array.isArray(activeHolds) && activeHolds.length) {
+      const { error: releaseError } = await supabase
+        .from("notification_holds")
+        .update({
+          active: false,
+          released_by: user.id,
+          released_at: new Date().toISOString(),
+        })
+        .in("id", activeHolds.map((hold) => hold.id));
+      if (releaseError) {
+        return NextResponse.json({ error: "Confirmation sent, but the notification hold could not be cleared." }, { status: 500 });
+      }
+    }
 
     return NextResponse.json({ ok: true, id: data?.id || null });
   } catch (err) {

@@ -1,7 +1,7 @@
 "use client"
 
 import "./login.css"
-import { useState, FormEvent } from "react"
+import { useEffect, useState, FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/src/lib/supabase"
 
@@ -13,6 +13,24 @@ export default function LoginPage() {
   const [status, setStatus] = useState("")
   const [statusType, setStatusType] = useState<"info" | "ok" | "error">("info")
   const [loading, setLoading] = useState(false)
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    let active = true
+
+    async function continueExistingSession() {
+      const { data, error } = await supabase.auth.getSession()
+      if (!active) return
+      if (!error && data.session) {
+        router.replace("/dashboard")
+        return
+      }
+      setCheckingSession(false)
+    }
+
+    void continueExistingSession()
+    return () => { active = false }
+  }, [router])
 
   function clean(v: string) {
     return v.trim()
@@ -72,6 +90,23 @@ export default function LoginPage() {
     }
   }
 
+  async function handleMicrosoft() {
+    if (loading) return
+    setLoading(true)
+    setMessage("Opening Microsoft 365 sign-in...", "info")
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "azure",
+      options: {
+        scopes: "openid email profile",
+        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+      },
+    })
+    if (error) {
+      setMessage(error.message || "Microsoft 365 sign-in failed.", "error")
+      setLoading(false)
+    }
+  }
+
   async function handleForgotPassword(e: React.MouseEvent<HTMLAnchorElement>) {
     e.preventDefault()
 
@@ -84,18 +119,20 @@ export default function LoginPage() {
     setLoading(true)
     setMessage("Sending reset email...", "info")
 
-    const { error } = await supabase.auth.resetPasswordForEmail(eClean, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
+    const response = await fetch("/api/auth/password-reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: eClean }),
+    }).catch(() => null)
 
     setLoading(false)
 
-    if (error) {
-      setMessage(error.message || "Could not send reset email.", "error")
+    if (!response?.ok) {
+      setMessage("Could not send the reset email. Please try again.", "error")
       return
     }
 
-    setMessage("Password reset email sent.", "ok")
+    setMessage("If an account exists for that email, a branded password reset message has been sent.", "ok")
   }
 
   return (
@@ -109,9 +146,9 @@ export default function LoginPage() {
           />
         </div>
 
-        <h1 className="gsv-auth__title">Agent Portal Login</h1>
+        <h1 className="gsv-auth__title">{checkingSession ? "Opening Your Portal" : "Agent Portal Login"}</h1>
         <p className="gsv-auth__sub">
-          Log in to view current &amp; past delivery sites.
+          {checkingSession ? "Checking your existing session…" : "Log in to view current & past delivery sites."}
         </p>
 
         <div
@@ -127,7 +164,7 @@ export default function LoginPage() {
           {status}
         </div>
 
-        <form className="gsv-auth__form" onSubmit={handleLogin} autoComplete="on">
+        {!checkingSession && <form className="gsv-auth__form" onSubmit={handleLogin} autoComplete="on">
           <label className="gsv-auth__label" htmlFor="gsv-email">
             Email Address
           </label>
@@ -184,6 +221,11 @@ export default function LoginPage() {
             Continue with Google
           </button>
 
+          <button className="gsv-auth__btn gsv-auth__btn--google" type="button" onClick={handleMicrosoft}>
+            <span className="gsv-auth__google-icon" aria-hidden="true" style={{ fontWeight: 900, color: "#00a4ef" }}>M</span>
+            Continue with Microsoft 365
+          </button>
+
           <div className="gsv-auth__links">
             <a
               className="gsv-auth__link"
@@ -192,7 +234,7 @@ export default function LoginPage() {
               Request an account
             </a>
           </div>
-        </form>
+        </form>}
       </div>
     </div>
   )

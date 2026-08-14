@@ -8,8 +8,16 @@ export function makePropertySiteSlug(address: unknown): string {
     .filter(Boolean);
   if (!parts.length) return "";
   const streetNumber = parts[0].match(/^\d+[a-zA-Z]?$/) ? parts.shift()! : "";
-  const streetName = parts[0] || "Property";
-  const combined = `${streetNumber}${streetName}` || streetName;
+  const directions = new Set([
+    "n", "s", "e", "w", "ne", "nw", "se", "sw",
+    "north", "south", "east", "west",
+    "northeast", "northwest", "southeast", "southwest",
+  ]);
+  const direction = parts.length > 1 && directions.has(parts[0].toLowerCase()) ? parts.shift()! : "";
+  const streetName = parts.join("") || "Property";
+  const combined = direction
+    ? `${streetNumber}${direction}-${streetName}`
+    : `${streetNumber}${streetName}`;
   return normalizePropertySiteSlug(combined);
 }
 

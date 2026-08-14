@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import { makePropertySiteSlug, normalizePropertySiteSlug, propertySiteUrl } from "@/lib/property-site-slug";
+import { formatLotSize } from "@/lib/property-format";
 import PropertyHeroSlideshow from "./PropertyHeroSlideshow";
 import PropertyGallery from "./PropertyGallery";
 import SiteTrafficTracker from "./SiteTrafficTracker";
@@ -219,7 +220,7 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
     { label: "Beds", display: beds == null ? "" : String(beds) },
     { label: "Baths", display: baths == null ? "" : String(baths) },
     { label: "Square feet", display: squareFeet == null ? "" : Math.round(squareFeet).toLocaleString("en-US") },
-    { label: "Lot size", display: lotSize == null ? "" : Math.round(lotSize).toLocaleString("en-US") },
+    { label: "Lot size", display: formatLotSize(lotSize) },
     { label: "Year built", display: yearBuilt == null ? "" : String(yearBuilt) },
   ].filter(({ display }) => display);
   const availableMedia = [gallery.length ? "photos" : "", video ? "video" : "", tour ? "a 3D tour" : "", floorPlans.length ? "floor plans" : ""].filter(Boolean);
@@ -259,14 +260,16 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
             {agentPhoto ? <img className="listing-agent-photo" src={agentPhoto} alt={agentName} /> : <div className="agent-placeholder">{agentName.charAt(0)}</div>}
             <div className="listing-agent-copy">
               <p className="eyebrow">Listing contact</p><h2>{agentName}</h2>
-              {brokerageName ? <p className="listing-agent-brokerage">{brokerageName}</p> : null}
               {agentPhone ? <a href={`tel:${agentPhone.replace(/[^+\d]/g, "")}`}>{agentPhone}</a> : null}
               {agentEmail ? <a href={`mailto:${agentEmail}?subject=${encodeURIComponent(`Question about ${address}`)}`}>{agentEmail}</a> : null}
               {agentLicense ? <p>License {agentLicense}</p> : null}{listingMls ? <p>Listing MLS# {listingMls}</p> : null}
               {(agentWebsite || socialLinks.length) ? <div className="agent-social-links">{agentWebsite ? <a href={agentWebsite} target="_blank" rel="noreferrer">Website ↗</a> : null}{socialLinks.map((item) => <a key={item.label} href={item.url} target="_blank" rel="noreferrer">{item.label} ↗</a>)}</div> : null}
             </div>
           </div>
-          {brokerageLogo ? <div className="brokerage-identity"><img src={brokerageLogo} alt={`${brokerageName || "Brokerage"} logo`} /></div> : null}
+          {brokerageName || brokerageLogo ? <div className="brokerage-identity">
+            {brokerageName ? <p>{brokerageName}</p> : null}
+            {brokerageLogo ? <img src={brokerageLogo} alt={`${brokerageName || "Brokerage"} logo`} /> : null}
+          </div> : null}
         </aside>
       </div>
     </section>

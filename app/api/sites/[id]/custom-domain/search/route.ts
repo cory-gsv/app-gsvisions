@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/lib/authz";
-import { getDomainQuote } from "@/lib/custom-domains";
+import { getSuggestedDomainQuotes } from "@/lib/custom-domains";
 
 export const runtime = "nodejs";
 
@@ -14,8 +14,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const isAdmin = profile?.is_admin === true || role === "admin";
     if (!isAdmin && site.client_id !== user.id && site.client_ms_id !== user.id) throw new AuthorizationError("You do not have access to this site.", 403);
     const body = await request.json().catch(() => ({}));
-    const quote = await getDomainQuote(body.domain);
-    return NextResponse.json({ domain: quote.domain, available: quote.available, priceCents: quote.retailPriceCents, currency: "usd" });
+    const quotes = await getSuggestedDomainQuotes(body.domain);
+    return NextResponse.json({
+      results: quotes.map((quote) => ({
+        domain: quote.domain,
+        available: quote.available,
+        priceCents: quote.retailPriceCents,
+        currency: "usd",
+      })),
+    });
   } catch (error) {
     const auth = authorizationErrorResponse(error);
     if (auth) return auth;

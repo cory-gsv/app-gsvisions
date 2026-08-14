@@ -19,15 +19,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!quote.available) return NextResponse.json({ error: "That domain is no longer available." }, { status: 409 });
     const stripeKey = process.env.STRIPE_SECRET_KEY || "";
     if (!stripeKey) return NextResponse.json({ error: "Domain checkout is not configured." }, { status: 503 });
-    const origin = new URL(request.url).origin;
-    const checkout = await new Stripe(stripeKey).checkout.sessions.create({
-      mode: "payment",
-      success_url: `${origin}/dashboard/site/${encodeURIComponent(site.id)}?domain_purchase=processing#site-summary`,
-      cancel_url: `${origin}/dashboard/site/${encodeURIComponent(site.id)}#site-summary`,
-      customer_email: user.email || undefined,
-      billing_address_collection: "required",
-      phone_number_collection: { enabled: true },
-      line_items: [{ quantity: 1, price_data: { currency: "usd", unit_amount: quote.retailPriceCents, product_data: { name: `Custom domain: ${quote.domain}`, description: "One-year custom-domain registration" } } }],
+    const { GSV_DOMAIN_REGISTRANT: registrant } = await import("@/lib/domain-purchase");
+    const intent = await new Stripe(stripeKey).paymentIntents.create({
+      amount: quote.retailPriceCents,
+      currency: "usd",
+      automatic_payment_methods: { enabled: true },
+      receipt_email: registrant.email,
+      description: `Custom domain: ${quote.domain} (one year)`,
       metadata: {
         purpose: "custom_domain_purchase",
         site_id: site.id,
@@ -35,9 +33,18 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         domain: quote.domain,
         wholesale_price_cents: String(quote.wholesalePriceCents),
         retail_price_cents: String(quote.retailPriceCents),
+        registrant_first_name: registrant.firstName,
+        registrant_last_name: registrant.lastName,
+        registrant_email: registrant.email,
+        registrant_phone: registrant.phone,
+        registrant_address1: registrant.address1,
+        registrant_city: registrant.city,
+        registrant_state: registrant.state,
+        registrant_postal_code: registrant.postalCode,
+        registrant_country: registrant.country,
       },
-    });
-    return NextResponse.json({ url: checkout.url });
+    }, { idempotencyKey: `domain-${site.id}-${quote.domain}-${quote.retailPriceCents}` });
+    return NextResponse.json({ clientSecret: intent.client_secret, amountCents: quote.retailPriceCents, domain: quote.domain });
   } catch (error) {
     const auth = authorizationErrorResponse(error);
     if (auth) return auth;

@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 
 const clean = (value: unknown) => String(value ?? "").trim();
 const MAX_BYTES = 10 * 1024 * 1024;
+const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     const clientId = clean(form.get("client_id"));
     const kind = clean(form.get("kind")) === "profile" ? "profile" : "brokerage";
     if (!clientId || !(file instanceof File)) return Response.json({ error: "Client and image are required." }, { status: 400 });
-    if (!file.type.startsWith("image/") || file.size < 1 || file.size > MAX_BYTES) {
+    if (!ALLOWED_TYPES.has(file.type.toLowerCase()) || file.size < 1 || file.size > MAX_BYTES) {
       return Response.json({ error: "Choose a JPG, PNG, or WebP image smaller than 10 MB." }, { status: 415 });
     }
     const { data: profile } = await admin.from("profiles").select("id").eq("id", clientId).maybeSingle();

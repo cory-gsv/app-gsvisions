@@ -14,8 +14,6 @@ export async function initClientsDashboard() {
     window.GSV_PLACEHOLDER_LOGO ||
     "https://cdn.prod.website-files.com/68f013820a2f6e56e9bbe217/68f013820a2f6e56e9bbe330_gsv_lense.png"
 
-  const DELETE_FN = clean(window.GSV_DELETE_CLIENT_FUNCTION || "admin-delete-client")
-
   function escapeHtml(str) {
     return String(str ?? "")
       .replaceAll("&", "&amp;")
@@ -212,6 +210,8 @@ export async function initClientsDashboard() {
 
   let _editingClient = null
   let _isCreateMode = false
+  let _adminCount = 0
+  let _currentUserId = ""
 
   function clientDisplayName(c) {
     const full = clean(c?.[COL.full_name])
@@ -246,6 +246,7 @@ export async function initClientsDashboard() {
           COL.email,
           COL.phone,
           COL.role,
+          "is_admin",
           COL.sms_enabled,
           COL.payment_required_at_checkout,
           COL.brokerage_name,
@@ -325,6 +326,11 @@ export async function initClientsDashboard() {
     if (!id) throw new Error("Missing client id.")
 
     const MAX = 10485760
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"])
+    const allowedExtension = /\.(jpe?g|png|webp)$/i.test(clean(file.name))
+    if (!allowedTypes.has(clean(file.type).toLowerCase()) && !allowedExtension) {
+      throw new Error("Choose a JPG, PNG, or WebP image.")
+    }
     if (file.size > MAX) {
       throw new Error(`File is too large (${Math.round(file.size / 1024 / 1024)}MB). Max is 10MB. Please resize/compress and try again.`)
     }
@@ -374,17 +380,25 @@ export async function initClientsDashboard() {
     return result.client
   }
 
-  async function deleteClientViaFunction(dash, clientId) {
+  async function deleteClient(dash, clientId) {
     const id = clean(clientId)
     if (!id) throw new Error("Missing client id.")
 
-    const { data, error } = await dash.sb.functions.invoke(DELETE_FN, {
-      body: { client_id: id }
-    })
+    const { data: sessionData, error: sessionError } = await dash.sb.auth.getSession()
+    if (sessionError) throw sessionError
+    const token = sessionData?.session?.access_token
+    if (!token) throw new Error("Your admin session has expired. Please log in again.")
 
-    if (error) throw error
-    if (data?.error) throw new Error(data.error)
-    return data || { ok: true }
+    const response = await fetch("/api/admin/clients", {
+      method: "DELETE",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ client_id: id })
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(clean(result?.error) || `Could not delete client (${response.status}).`)
+    }
+    return result
   }
 
   function setVal(sel, v) {
@@ -467,7 +481,11 @@ export async function initClientsDashboard() {
     updateModalSaveText(_isCreateMode ? "Create Client" : "Save Client")
     setEmailLocked(!_isCreateMode)
     setUploadsEnabled(true)
-    toggleDeleteButton(!_isCreateMode)
+    const role = clean(_editingClient?.role).toLowerCase()
+    const isAdmin = _editingClient?.is_admin === true || role === "admin"
+    const isCurrentUser = clean(_editingClient?.id) === _currentUserId
+    const deletionBlocked = role === "staff" || isCurrentUser || (isAdmin && _adminCount <= 1)
+    toggleDeleteButton(!_isCreateMode && !deletionBlocked)
   }
 
   function clearModalForCreate() {
@@ -758,7 +776,7 @@ export async function initClientsDashboard() {
     if (!ok) return
 
     setStatus(dash, "Deleting client…", "info")
-    await deleteClientViaFunction(dash, id)
+    await deleteClient(dash, id)
 
     _editingClient = null
     _isCreateMode = false
@@ -913,6 +931,10 @@ export async function initClientsDashboard() {
     try {
       if (!quiet) setStatus(dash, "Loading clients…", "info")
       const clients = await fetchClients(dash)
+      _currentUserId = clean(dash?.user?.id)
+      _adminCount = (clients || []).filter((client) => {
+        return client?.is_admin === true || clean(client?.role).toLowerCase() === "admin"
+      }).length
 
       const clientsById = new Map()
       ;(clients || []).forEach((c) => {

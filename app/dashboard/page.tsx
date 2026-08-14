@@ -20,7 +20,7 @@ declare global {
     GSV_PLACEHOLDER_LOGO?: string
     GSV_DELETE_CLIENT_FUNCTION?: string
     GSV_CLOUDINARY?: any
-    GSV_GCAL_SYNC_URL?: string
+    GSV_CALENDAR_API_URL?: string
     gsvAdminAccessClient?: any
     __gsvAdminAccessClient?: any
     __gsvCalendar?: any
@@ -32,7 +32,7 @@ declare global {
 const ADMIN_BACKUP_KEY = "gsv_admin_session_backup_v1"
 const ADMIN_IMP_STATE_KEY = "gsv_admin_impersonation_state_v2"
 const INACTIVITY_KEY = "gsv_dashboard_last_activity_at"
-const INACTIVITY_TIMEOUT_MS = 4 * 60 * 60 * 1000
+const INACTIVITY_TIMEOUT_MS = 12 * 60 * 60 * 1000
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -108,8 +108,7 @@ export default function DashboardPage() {
           "https://cdn.prod.website-files.com/68f013820a2f6e56e9bbe217/68f013820a2f6e56e9bbe330_gsv_lense.png"
 
         window.GSV_DELETE_CLIENT_FUNCTION = "admin-delete-client"
-        window.GSV_GCAL_SYNC_URL =
-          "https://etlquqhgwrrzgcccchxc.supabase.co/functions/v1/gcal-sync"
+        window.GSV_CALENDAR_API_URL = "/api/calendar"
 
         window.GSV_CLOUDINARY = {
           cloudName: "dqcgvorw1",
@@ -508,7 +507,7 @@ export default function DashboardPage() {
         <div className="gsv-dash__top-actions">
           <a
             className="gsv-dash__btn gsv-dash__btn--primary"
-            href="/booking?new=1"
+            href={isAdmin ? "/booking?new=1&admin_order=1" : "/booking?new=1"}
             id="gsv-new-order-btn"
           >
             Place New Order
@@ -651,7 +650,7 @@ export default function DashboardPage() {
                     Calendar
                   </div>
                   <div className="gsv-cal__sub">
-                    Syncs with Google Calendar. Blocks time for booking
+                    Syncs with Microsoft 365. Blocks time for booking
                     availability.
                   </div>
                 </div>
@@ -761,7 +760,17 @@ export default function DashboardPage() {
               </p>
             </div>
 
-            <div className="gsv-dash__search">
+            <div className="gsv-site-filters">
+              {isAdmin && (
+                <select
+                  className="gsv-dash__input"
+                  id="gsv-client-filter"
+                  aria-label="Filter sites by client"
+                  defaultValue=""
+                >
+                  <option value="">All clients</option>
+                </select>
+              )}
               <input
                 className="gsv-dash__input"
                 id="gsv-search"
@@ -865,6 +874,18 @@ export default function DashboardPage() {
                     placeholder="Search products… (name, tags, description)"
                   />
                 </div>
+                <label
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <input id="gsv-svc-show-inactive" type="checkbox" />
+                  Show archived products
+                </label>
               </div>
             </div>
 
@@ -1089,11 +1110,14 @@ export default function DashboardPage() {
               <div style={{ fontWeight: 950, marginBottom: 8 }}>
                 Wide Brokerage Logo
               </div>
+              <div className="gsv-dash__mini" style={{ marginBottom: 10 }}>
+                JPG, PNG, or WebP · 10 MB maximum. Transparent PNG or WebP recommended; ideally about 4:1 and at least 1200 × 300 px.
+              </div>
               <div className="gsv-dash__logo-row">
                 <div className="gsv-dash__logo-preview">
                   <img id="gsv-logo1-img" alt="Wide brokerage logo" />
                 </div>
-                <input id="gsv-logo1-file" type="file" accept="image/png" />
+                <input id="gsv-logo1-file" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
                 <button
                   className="gsv-dash__btn gsv-dash__btn--primary"
                   type="button"
@@ -1106,11 +1130,14 @@ export default function DashboardPage() {
               <div style={{ fontWeight: 950, margin: "14px 0 8px" }}>
                 Vertical Brokerage Logo
               </div>
+              <div className="gsv-dash__mini" style={{ marginBottom: 10 }}>
+                Optional. JPG, PNG, or WebP · 10 MB maximum. Square or vertical artwork works best; at least 600 × 600 px recommended.
+              </div>
               <div className="gsv-dash__logo-row">
                 <div className="gsv-dash__logo-preview">
                   <img id="gsv-logo2-img" alt="Vertical brokerage logo" />
                 </div>
-                <input id="gsv-logo2-file" type="file" accept="image/png" />
+                <input id="gsv-logo2-file" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
                 <button
                   className="gsv-dash__btn gsv-dash__btn--primary"
                   type="button"
@@ -1325,13 +1352,13 @@ export default function DashboardPage() {
 
             <div className="gsv-dash__card gsv-client-media-card">
               <div className="gsv-dash__card-title">Brokerage Logos</div>
-              <div className="gsv-dash__mini" style={{ marginTop: 6 }}>Transparent PNG files are recommended. Add a wide logo first and an optional vertical version second.</div>
+              <div className="gsv-dash__mini" style={{ marginTop: 6 }}>JPG, PNG, or WebP · 10 MB maximum. Add a wide logo first and an optional square or vertical version second. Transparent PNG or WebP files work best over photos and colored layouts.</div>
 
               <div className="gsv-dash__logo-row" style={{ marginTop: 10 }}>
                 <div className="gsv-dash__logo-preview">
                   <img id="gsv-cm-logo1-img" alt="Wide brokerage logo" />
                 </div>
-                <input id="gsv-cm-logo1-file" type="file" accept="image/png" />
+                <input id="gsv-cm-logo1-file" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
                 <button
                   className="gsv-dash__btn gsv-dash__btn--primary"
                   type="button"
@@ -1340,12 +1367,13 @@ export default function DashboardPage() {
                   Upload Wide Logo
                 </button>
               </div>
+              <div className="gsv-dash__mini gsv-logo-requirement">Recommended: about 4:1 and at least 1200 × 300 px.</div>
 
               <div className="gsv-dash__logo-row" style={{ marginTop: 12 }}>
                 <div className="gsv-dash__logo-preview">
                   <img id="gsv-cm-logo2-img" alt="Vertical brokerage logo" />
                 </div>
-                <input id="gsv-cm-logo2-file" type="file" accept="image/png" />
+                <input id="gsv-cm-logo2-file" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" />
                 <button
                   className="gsv-dash__btn gsv-dash__btn--primary"
                   type="button"
@@ -1354,6 +1382,7 @@ export default function DashboardPage() {
                   Upload Vertical Logo
                 </button>
               </div>
+              <div className="gsv-dash__mini gsv-logo-requirement">Recommended: square or vertical, at least 600 × 600 px.</div>
             </div>
           </div>
           <p className="gsv-client-upload-note" id="gsv-client-upload-note">Choose images now. They will upload automatically when you create the client.</p>

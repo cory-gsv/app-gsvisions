@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
+import {
+  buildMediaReadyEmailDraft,
+  type MediaReadyEmailOverrides,
+  sendMediaReadyEmail,
+} from "@/lib/media-delivery-email";
 
 const TRANSITIONS: Record<string, Set<string>> = {
   draft: new Set(["pending", "scheduled", "archived"]),
@@ -21,6 +26,32 @@ function clean(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function parseEmailOverrides(value: unknown): MediaReadyEmailOverrides | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const input = value as Record<string, unknown>;
+  const overrides: MediaReadyEmailOverrides = {};
+  if (Object.prototype.hasOwnProperty.call(input, "to")) {
+    overrides.to = (Array.isArray(input.to) ? input.to : [input.to]).map(clean).filter(Boolean);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "cc")) {
+    overrides.cc = (Array.isArray(input.cc) ? input.cc : [input.cc]).map(clean).filter(Boolean);
+  }
+  if (Object.prototype.hasOwnProperty.call(input, "subject")) overrides.subject = clean(input.subject);
+  if (Object.prototype.hasOwnProperty.call(input, "message")) overrides.message = clean(input.message);
+  return overrides;
+}
+
+function parseScheduledAt(value: unknown) {
+  const raw = clean(value);
+  if (!raw) return undefined;
+  const scheduled = new Date(raw);
+  if (!Number.isFinite(scheduled.getTime())) throw new Error("Choose a valid send date and time.");
+  const delay = scheduled.getTime() - Date.now();
+  if (delay < 60_000) throw new Error("Send Later must be at least one minute in the future.");
+  if (delay > 30 * 24 * 60 * 60 * 1000) throw new Error("Send Later can be scheduled up to 30 days in advance.");
+  return scheduled.toISOString();
+}
+
 async function findSite(admin: Awaited<ReturnType<typeof requireAdmin>>["admin"], id: string) {
   return admin
     .from("sites")
@@ -37,6 +68,11 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     if (!siteId) return NextResponse.json({ error: "Missing site id." }, { status: 400 });
     const { data: site, error } = await findSite(admin, siteId);
     if (error || !site) return NextResponse.json({ error: "Site not found." }, { status: 404 });
+    const requestUrl = new URL(request.url);
+    if (requestUrl.searchParams.get("email_preview") === "media_delivery") {
+      const draft = await buildMediaReadyEmailDraft({ admin, siteId });
+      return NextResponse.json({ ok: true, draft });
+    }
     const { data: holds, error: holdsError } = await admin
       .from("notification_holds")
       .select("id, topic, active, reason, created_at, released_at")
@@ -60,6 +96,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     if (error || !site) return NextResponse.json({ error: "Site not found." }, { status: 404 });
 
     const action = clean(body.action).toLowerCase();
+    const emailOverrides = parseEmailOverrides(body.email);
+    const scheduledAt = parseScheduledAt(body.scheduled_at);
     if (action === "set_status") {
       const current = clean(site.status).toLowerCase() || "draft";
       const next = clean(body.status).toLowerCase();
@@ -106,16 +144,25 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     }
 
     if (action === "release_media") {
-      const balance = Math.max(0, Number(site.balance_due_cents || 0));
-      if (site.paid !== true && balance > 0) {
-        return NextResponse.json({ error: "Media cannot be released while an invoice balance remains." }, { status: 409 });
-      }
+      // Validate the reviewed draft before making the media visible to the client.
+      await buildMediaReadyEmailDraft({ admin, siteId, overrides: emailOverrides });
       const { error: mediaError } = await admin.from("media_assets").update({ is_published: true, status: "ready" }).eq("site_id", siteId);
       if (mediaError) throw mediaError;
       const nextStatus = clean(site.status).toLowerCase() === "live" ? "live" : "delivered";
       const { error: siteError } = await admin.from("sites").update({ status: nextStatus, updated_at: new Date().toISOString() }).eq("id", siteId);
       if (siteError) throw siteError;
-      return NextResponse.json({ ok: true, released: true, status: nextStatus });
+      try {
+        const delivery = await sendMediaReadyEmail({ admin, siteId, overrides: emailOverrides, scheduledAt });
+        return NextResponse.json({ ok: true, released: true, status: nextStatus, delivery_email: delivery.alreadySent ? "already_sent" : scheduledAt ? "scheduled" : "sent", scheduled_at: delivery.scheduledAt });
+      } catch (emailError) {
+        console.error("MEDIA_RELEASE_EMAIL_FAILED", { siteId, emailError });
+        return NextResponse.json({ ok: true, released: true, status: nextStatus, delivery_email: "failed", warning: "Media was released, but the delivery email could not be sent. Use the manual resend action." });
+      }
+    }
+
+    if (action === "send_delivery_email") {
+      const delivery = await sendMediaReadyEmail({ admin, siteId, resend: true, overrides: emailOverrides, scheduledAt });
+      return NextResponse.json({ ok: true, delivery_email: delivery.alreadySent ? "already_sent" : scheduledAt ? "scheduled" : "sent", scheduled_at: delivery.scheduledAt });
     }
 
     return NextResponse.json({ error: "Invalid order action." }, { status: 400 });

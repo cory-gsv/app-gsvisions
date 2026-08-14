@@ -87,8 +87,17 @@ begin
       + make_interval(mins => greatest(coalesce((p_payload->>'estimated_minutes')::integer, 60), 15));
   end if;
 
-  site_slug_value := trim(both '-' from regexp_replace(lower(property_label), '[^a-z0-9]+', '-', 'g'))
-    || '-' || left(replace(new_site_id::text, '-', ''), 8);
+  site_slug_value := trim(both '-' from regexp_replace(lower(split_part(property_label, ',', 1)), '[^a-z0-9]+', '-', 'g'));
+  if site_slug_value ~ '^([0-9]+)-(n|s|e|w|ne|nw|se|sw|north|south|east|west|northeast|northwest|southeast|southwest)-.+' then
+    site_slug_value := regexp_replace(
+      site_slug_value,
+      '^([0-9]+)-(n|s|e|w|ne|nw|se|sw|north|south|east|west|northeast|northwest|southeast|southwest)-(.+)$',
+      '\1\2|||\3'
+    );
+    site_slug_value := replace(replace(site_slug_value, '-', ''), '|||', '-');
+  else
+    site_slug_value := replace(site_slug_value, '-', '');
+  end if;
 
   insert into public.bookings (
     id, status, property_address, property_city, property_state, property_zip,

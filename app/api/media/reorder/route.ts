@@ -77,22 +77,19 @@ export async function POST(req: Request) {
       }
     }
 
-    for (let i = 0; i < orderedIds.length; i += 1) {
-      const id = orderedIds[i];
-
-      const { error: updateError } = await supabase
-        .from("media_assets")
-        .update({
-          sort_order: i,
-          is_primary: i === 0,
-        })
-        .eq("id", id)
-        .eq("site_id", siteId)
-        .eq("category", "gallery");
-
-      if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 500 });
-      }
+    const updates = await Promise.all(
+      orderedIds.map((id, index) =>
+        supabase
+          .from("media_assets")
+          .update({ sort_order: index, is_primary: index === 0 })
+          .eq("id", id)
+          .eq("site_id", siteId)
+          .eq("category", "gallery")
+      )
+    );
+    const failedUpdate = updates.find((result) => result.error);
+    if (failedUpdate?.error) {
+      return NextResponse.json({ error: failedUpdate.error.message }, { status: 500 });
     }
 
     return NextResponse.json({

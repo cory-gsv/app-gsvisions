@@ -5,6 +5,31 @@ export function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   let response: NextResponse;
 
+  const isBetaRuntime = process.env.APP_ENV === "beta";
+  const betaPassword = process.env.BETA_ACCESS_PASSWORD || "";
+  const shouldProtectBeta = isBetaRuntime && host !== "sites.gsvisions.co" && host !== "localhost" && host !== "127.0.0.1";
+  if (shouldProtectBeta) {
+    const authorization = request.headers.get("authorization") || "";
+    const encoded = authorization.match(/^Basic\s+(.+)$/i)?.[1] || "";
+    let suppliedPassword = "";
+    try {
+      const decoded = atob(encoded);
+      suppliedPassword = decoded.slice(decoded.indexOf(":") + 1);
+    } catch {
+      suppliedPassword = "";
+    }
+    if (!betaPassword || suppliedPassword !== betaPassword) {
+      return new NextResponse("Protected GSV beta", {
+        status: 401,
+        headers: {
+          "WWW-Authenticate": 'Basic realm="Golden State Visions Beta", charset="UTF-8"',
+          "Cache-Control": "no-store",
+          "X-Robots-Tag": "noindex, nofollow",
+        },
+      });
+    }
+  }
+
   const platformHosts = new Set([
     "sites.gsvisions.co", "beta.gsvisions.co", "hub.gsvisions.co", "app.gsvisions.co",
     "gsvisions.co", "www.gsvisions.co", "localhost", "127.0.0.1",
@@ -27,7 +52,7 @@ export function proxy(request: NextRequest) {
     response = NextResponse.next();
   }
 
-  if (process.env.APP_ENV === "beta" && host !== "sites.gsvisions.co") {
+  if (isBetaRuntime && host !== "sites.gsvisions.co") {
     response.headers.set("X-Robots-Tag", "noindex, nofollow");
   }
   return response;

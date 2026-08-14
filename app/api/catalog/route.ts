@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
+const hiddenBookingProductSlugs = new Set([
+  "marketing-kit",
+  "property-domain",
+  "additional-floor-plan",
+]);
+
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -36,7 +42,9 @@ export async function GET() {
       version: 1,
       source: "gsv-portal",
       generated_at: new Date().toISOString(),
-      products: products || [],
+      products: (products || []).filter(
+        (product) => !product.slug || !hiddenBookingProductSlugs.has(product.slug),
+      ),
       package_items: packageItems || [],
     },
     {

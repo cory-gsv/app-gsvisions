@@ -1,23 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-const sections = [
-  ["agent", "Agent"],
+const allSections = [
   ["summary", "Site Summary"],
-  ["leads", "Lead Capture"],
-  ["invoice", "Invoice"],
+  ["invoice", "Order & Invoice"],
   ["details", "Property Details"],
-  ["gallery", "Photo Gallery"],
+  ["map", "Map & Location"],
+  ["downloads", "Download Media"],
+  ["gallery", "Media Gallery"],
   ["video", "Video"],
-  ["matterport", "3D Scanning"],
-  ["delivery", "Site Delivery"],
+  ["matterport", "3D Tour"],
   ["floorplan", "Floor Plan"],
-  ["map", "Map"],
+  ["delivery", "Media Delivery"],
+  ["leads", "Leads"],
 ] as const;
 
-export default function PropertySectionNav({ publicSiteUrl }: { publicSiteUrl?: string }) {
-  const [activeId, setActiveId] = useState("agent");
+export default function PropertySectionNav({
+  siteId,
+  publicSiteUrl,
+  showVideo = true,
+  showDelivery = false,
+  mediaLocked = false,
+  showMarketingKit = false,
+}: {
+  siteId: string;
+  publicSiteUrl?: string;
+  showVideo?: boolean;
+  showDelivery?: boolean;
+  mediaLocked?: boolean;
+  showMarketingKit?: boolean;
+}) {
+  const [activeId, setActiveId] = useState("summary");
+  const sections = useMemo(
+    () => allSections.filter(([id]) => {
+      if (id === "delivery" && !showDelivery) return false;
+      if (id === "video" && !showVideo) return false;
+      if (mediaLocked && ["downloads", "video", "matterport", "floorplan"].includes(id)) return false;
+      return true;
+    }),
+    [mediaLocked, showDelivery, showMarketingKit, showVideo]
+  );
 
   useEffect(() => {
     const hashFrame = window.requestAnimationFrame(() => {
@@ -44,12 +67,13 @@ export default function PropertySectionNav({ publicSiteUrl }: { publicSiteUrl?: 
       window.cancelAnimationFrame(hashFrame);
       observer.disconnect();
     };
-  }, []);
+  }, [sections]);
 
   return (
-    <nav style={{ display: "grid", gap: 0 }} aria-label="Property sections">
+    <nav className="gsv-property-nav" style={{ display: "grid", gap: 0 }} aria-label="Property sections">
       {publicSiteUrl ? (
         <a
+          className="gsv-property-destination-link"
           href={publicSiteUrl}
           target="_blank"
           rel="noreferrer"
@@ -62,12 +86,33 @@ export default function PropertySectionNav({ publicSiteUrl }: { publicSiteUrl?: 
             textTransform: "uppercase",
             padding: "18px",
             borderTop: 0,
-            marginBottom: "22px",
+            marginBottom: showMarketingKit ? 0 : "22px",
             background: "#17231f",
-            boxShadow: "inset 5px 0 #ffc72c",
+            boxShadow: "none",
           }}
         >
           Property Website ↗
+        </a>
+      ) : null}
+      {showMarketingKit ? (
+        <a
+          className="gsv-property-destination-link"
+          href={`/dashboard/site/${encodeURIComponent(siteId)}/marketing`}
+          style={{
+            textDecoration: "none",
+            color: "#ffc72c",
+            fontWeight: 800,
+            fontSize: "10px",
+            letterSpacing: ".1em",
+            textTransform: "uppercase",
+            padding: "18px",
+            borderTop: "1px solid rgba(255,255,255,.12)",
+            background: "#17231f",
+            boxShadow: "none",
+            marginBottom: "22px",
+          }}
+        >
+          Marketing Kit ↗
         </a>
       ) : null}
       {sections.map(([id, label]) => {

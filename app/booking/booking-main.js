@@ -40,6 +40,17 @@ export async function initBookingMain() {
   const PROPERTY_LOCAL_CACHE_KEY = "gsv_property_cache_v1"
 
   const FORCE_NEW_BOOKING_PARAM = "new"
+  const ADMIN_ORDER_PARAM = "admin_order"
+
+  function hasAdminOrderIntent() {
+    try {
+      const url = new URL(window.location.href)
+      const raw = String(url.searchParams.get(ADMIN_ORDER_PARAM) || "").trim().toLowerCase()
+      return raw === "1" || raw === "true" || raw === "yes"
+    } catch (_) {
+      return false
+    }
+  }
 
   const $ = (id) => document.getElementById(id)
   const clean = (v) => String(v ?? "").trim()
@@ -295,13 +306,9 @@ export async function initBookingMain() {
 
     if (n >= SQFT_PER_ACRE) {
       const acres = n / SQFT_PER_ACRE
-      let formatted =
-        acres < 10 ? acres.toFixed(2) :
-        acres < 100 ? acres.toFixed(1) :
-        String(Math.round(acres))
-
-      formatted = formatted.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1")
-      return `${formatted} acres`
+      const rounded = Math.round(acres * 10) / 10
+      const formatted = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
+      return `${formatted} ${rounded === 1 ? "acre" : "acres"}`
     }
     return `${Math.round(n).toLocaleString()} sq ft`
   }
@@ -524,6 +531,19 @@ export async function initBookingMain() {
   let supabase = null
   let adminMode = false
 
+  function setAdminMode(next) {
+    adminMode = next === true
+    const adminOrderFlow = adminMode && hasAdminOrderIntent()
+
+    try {
+      document.documentElement.dataset.gsvBookingAdmin = adminOrderFlow ? "true" : "false"
+      document.dispatchEvent(new CustomEvent("gsv:booking-admin-mode", {
+        detail: { isAdmin: adminMode, isAdminOrderFlow: adminOrderFlow },
+      }))
+      window.__gsvBookingStep4?.refreshAdminControls?.()
+    } catch (_) {}
+  }
+
   function showLoginUI(show) {
     if (!loginRow) return
     loginRow.style.display = show ? "" : "none"
@@ -681,7 +701,7 @@ export async function initBookingMain() {
       const user = data?.session?.user || null
 
       if (!user) {
-        adminMode = false
+        setAdminMode(false)
         showLoginUI(true)
         lockUserInfo(false)
         DBG("No logged-in user.")
@@ -692,9 +712,11 @@ export async function initBookingMain() {
       setStatus(el.continueStatus, "", "info")
 
       const profile = await fetchProfileById(supabase, user.id)
-      adminMode = await isAdminUser(user, profile)
+      setAdminMode(await isAdminUser(user, profile))
 
-      if (adminMode) {
+      if (adminMode && hasAdminOrderIntent()) {
+        const infoHeading = document.getElementById("gsv-client-info-heading")
+        if (infoHeading) infoHeading.textContent = "Client Information"
         lockUserInfo(false)
         if (typeof __adminLoader === "function") {
           await __adminLoader(supabase)
@@ -704,6 +726,8 @@ export async function initBookingMain() {
       }
 
       const emailVal = clean(profile?.email) || clean(user.email) || ""
+      const infoHeading = document.getElementById("gsv-client-info-heading")
+      if (infoHeading) infoHeading.textContent = "Your Info"
       if (el.email && !clean(el.email.value) && emailVal) el.email.value = emailVal
 
       const firstVal = clean(profile?.first_name)
@@ -725,7 +749,7 @@ export async function initBookingMain() {
       syncPropertySummaryPanels()
     } catch (err) {
       ERR("initSupabase failed:", err)
-      adminMode = false
+      setAdminMode(false)
       showLoginUI(true)
       lockUserInfo(false)
     }
@@ -1146,6 +1170,7 @@ export async function initBookingMain() {
 
     getSupabase: () => supabase,
     isAdminMode: () => adminMode,
+    isAdminOrderFlow: () => adminMode && hasAdminOrderIntent(),
     getTemplateNode,
 
     PROPERTY_CACHE_TABLE,

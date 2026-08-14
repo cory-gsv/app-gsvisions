@@ -4,9 +4,6 @@ import "./booking-confirmation.css";
 export default function BookingConfirmationPage() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const gcalSyncUrl = supabaseUrl
-    ? `${supabaseUrl.replace(/\/$/, "")}/functions/v1/gcal-sync`
-    : "";
 
   return (
     <>
@@ -17,7 +14,7 @@ export default function BookingConfirmationPage() {
           __html: `
             window.GSV_SUPABASE_URL = ${JSON.stringify(supabaseUrl)};
             window.GSV_SUPABASE_ANON_KEY = ${JSON.stringify(supabaseAnonKey)};
-            window.GSV_GCAL_SYNC_URL = ${JSON.stringify(gcalSyncUrl)};
+            window.GSV_CALENDAR_API_URL = "/api/calendar";
             window.GSV_BOOKINGS_TABLE = "bookings";
             window.GSV_SITES_TABLE = "sites";
             window.GSV_DASHBOARD_URL = "/dashboard";
