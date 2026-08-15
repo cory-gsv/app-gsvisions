@@ -19,6 +19,7 @@ type Props = {
     property_sqft: number | null;
     lot_sqft: number | null;
     year_built: number | null;
+    list_price?: string;
     listing_mls_number?: string;
     public_site_description?: string;
   };
@@ -43,6 +44,7 @@ export default function PropertyDetailsEditor({
     property_sqft: initial.property_sqft?.toString() || "",
     lot_sqft: initial.lot_sqft?.toString() || "",
     year_built: initial.year_built?.toString() || "",
+    list_price: initial.list_price || "",
     listing_mls_number: initial.listing_mls_number || "",
     public_site_description: initial.public_site_description || "",
   });
@@ -65,6 +67,7 @@ export default function PropertyDetailsEditor({
         property_sqft: form.property_sqft,
         lot_sqft: form.lot_sqft,
         year_built: form.year_built,
+        list_price: form.list_price,
         listing_mls_number: form.listing_mls_number,
       };
 
@@ -202,6 +205,7 @@ export default function PropertyDetailsEditor({
           ["Square Feet", "property_sqft"],
           ["Lot Size (sq. ft.)", "lot_sqft"],
           ["Year Built", "year_built"],
+          ["Listing Price", "list_price"],
           ["Listing MLS #", "listing_mls_number"],
         ].map(([label, key]) => {
           const isAddressField = ["property_address", "property_city", "property_state", "property_zip"].includes(key);

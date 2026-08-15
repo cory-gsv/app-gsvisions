@@ -105,6 +105,7 @@ export async function PATCH(
     const hasProperty_sqft = Object.prototype.hasOwnProperty.call(body, "property_sqft");
     const hasLot_sqft = Object.prototype.hasOwnProperty.call(body, "lot_sqft");
     const hasYear_built = Object.prototype.hasOwnProperty.call(body, "year_built");
+    const hasListPrice = Object.prototype.hasOwnProperty.call(body, "list_price");
     const hasListingMlsNumber = Object.prototype.hasOwnProperty.call(body, "listing_mls_number");
     const hasVideoUrl = isAdmin && Object.prototype.hasOwnProperty.call(body, "video_url");
     const hasMatterportUrl = isAdmin && Object.prototype.hasOwnProperty.call(body, "matterport_url");
@@ -181,6 +182,14 @@ export async function PATCH(
       const value = clean(body?.listing_mls_number);
       if (value) nextSiteData.listing_mls_number = value;
       else delete nextSiteData.listing_mls_number;
+    }
+
+    if (hasListPrice) {
+      const value = clean(body?.list_price).replace(/^\$/, "").replace(/,/g, "");
+      const amount = Number(value);
+      if (value && Number.isFinite(amount) && amount >= 0) nextSiteData.list_price = amount;
+      else if (!value) delete nextSiteData.list_price;
+      else return NextResponse.json({ error: "Listing price must be a valid amount." }, { status: 400 });
     }
 
     if (hasPublicSiteDescription) {

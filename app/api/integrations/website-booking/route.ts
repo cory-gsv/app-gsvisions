@@ -10,6 +10,14 @@ function clean(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function optionalInteger(...values: unknown[]) {
+  for (const value of values) {
+    const parsed = Number(clean(value).replace(/,/g, ""));
+    if (Number.isInteger(parsed) && parsed > 0) return parsed;
+  }
+  return null;
+}
+
 function verifySignature(rawBody: string, request: Request) {
   const secret = clean(process.env.PORTAL_INGEST_SECRET);
   const timestamp = clean(request.headers.get("x-gsv-timestamp"));
@@ -218,6 +226,7 @@ export async function POST(request: Request) {
     const property = body.property && typeof body.property === "object"
       ? body.property as Record<string, unknown>
       : {};
+    const yearBuilt = optionalInteger(property.year_built, property.yearBuilt);
     const generatedPublicSlug = makePropertySiteSlug(property.address);
     const previousPublicSlug = normalizePropertySiteSlug(siteRow?.site_slug || siteRow?.slug);
     const existingAliases = Array.isArray(currentSiteData.public_site_aliases)
@@ -239,6 +248,7 @@ export async function POST(request: Request) {
       .from("sites")
       .update({
         ...(generatedPublicSlug ? { site_slug: generatedPublicSlug } : {}),
+        ...(yearBuilt ? { year_built: yearBuilt } : {}),
         site_data: nextSiteData,
         updated_at: new Date().toISOString(),
       })

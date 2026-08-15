@@ -1194,6 +1194,7 @@ export default async function SitePage({
               property_sqft: site.property_sqft ?? site.sqft,
               lot_sqft: site.lot_sqft,
               year_built: site.year_built,
+              list_price: clean(siteData.list_price) || clean(siteData.price),
               listing_mls_number: clean(siteData.listing_mls_number) || clean(siteData.mls_number) || clean(siteData.listing_mls),
               public_site_description: clean(siteData.public_site_description),
             }}
