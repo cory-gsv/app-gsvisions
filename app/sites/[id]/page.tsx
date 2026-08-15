@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import { makePropertySiteSlug, normalizePropertySiteSlug, propertySiteUrl } from "@/lib/property-site-slug";
 import { formatLotSize } from "@/lib/property-format";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import PropertyHeroSlideshow from "./PropertyHeroSlideshow";
 import PropertyGallery from "./PropertyGallery";
 import SiteTrafficTracker from "./SiteTrafficTracker";
@@ -60,7 +61,7 @@ async function loadSite(identifier: string) {
     property_full_address, address_full, city_state_zip,
     beds, baths, sqft, property_sqft, lot_sqft, year_built,
     hero_image_url, main_photo_url, main_photo_preview_url, site_data,
-    is_published, public_site_enabled, status
+    is_published, public_site_enabled, status, paid, balance_due_cents
   `;
   const { data } = filter
     ? await db.from("sites").select(columns).or(filter).limit(1).maybeSingle()
@@ -86,6 +87,23 @@ async function loadSite(identifier: string) {
   }
   if (!resolved || ["cancelled", "canceled", "archived"].includes(clean(resolved.status).toLowerCase())) return null;
   return resolved;
+}
+
+function propertySitePaymentLocked(site: AnyRow) {
+  return site.paid !== true;
+}
+
+async function staffCanPreviewLockedSite() {
+  try {
+    const session = await createSupabaseServerClient();
+    const { data } = await session.auth.getUser();
+    if (!data.user) return false;
+    const { data: profile } = await adminClient().from("profiles").select("role, is_admin").eq("id", data.user.id).maybeSingle();
+    const role = clean(profile?.role).toLowerCase();
+    return profile?.is_admin === true || role === "admin" || role === "staff";
+  } catch {
+    return false;
+  }
 }
 
 async function loadMedia(siteId: string) {
@@ -131,6 +149,7 @@ function embedUrl(value: string, kind: "video" | "tour") {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const site = await loadSite((await params).id);
   if (!site) return { title: "Property not found | Golden State Visions" };
+  if (propertySitePaymentLocked(site)) return { title: "Property website unavailable | Golden State Visions", robots: { index: false, follow: false } };
   const data = siteData(site);
   const address = siteAddress(site);
   const place = locality(site);
@@ -155,6 +174,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function PublicPropertySite({ params }: { params: Promise<{ id: string }> }) {
   const site = await loadSite((await params).id);
   if (!site) notFound();
+  if (propertySitePaymentLocked(site) && !(await staffCanPreviewLockedSite())) notFound();
   const [media, agent] = await Promise.all([loadMedia(clean(site.id)), loadAgent(site)]);
   const data = siteData(site);
   const address = siteAddress(site);
