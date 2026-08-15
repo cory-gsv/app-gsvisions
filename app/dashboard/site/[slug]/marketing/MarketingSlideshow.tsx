@@ -17,6 +17,7 @@ type SlideshowDesign = {
   schema: "gsv-slideshow-v1";
   transition: "fade" | "zoom";
   introDuration: number;
+  outroDuration: number;
   slides: Slide[];
 };
 
@@ -24,8 +25,12 @@ type Props = {
   photos: string[];
   street: string;
   locality: string;
+  price?: string;
+  beds?: number | string | null;
+  baths?: number | string | null;
+  sqft?: number | string | null;
   brand: string;
-  brokerageLogoUrl?: string;
+  agent: { name: string; brokerage: string; phone: string; email: string; license: string; photoUrl: string; brokerageLogoUrl: string };
   siteId: string;
   demoMode?: boolean;
   savedDesign?: { revision: number; updatedAt: string; design?: Record<string, unknown> };
@@ -44,11 +49,12 @@ function initialDesign(photos: string[], raw?: Record<string, unknown>): Slidesh
     schema: "gsv-slideshow-v1",
     transition: saved?.transition === "zoom" ? "zoom" : "fade",
     introDuration: Number(saved?.introDuration) || 2.5,
+    outroDuration: Number(saved?.outroDuration) || 4,
     slides: [...ordered, ...added].slice(0, 40),
   };
 }
 
-export default function MarketingSlideshow({ photos, street, locality, brand, brokerageLogoUrl = "", siteId, demoMode = false, savedDesign }: Props) {
+export default function MarketingSlideshow({ photos, street, locality, price = "", beds, baths, sqft, brand, agent, siteId, demoMode = false, savedDesign }: Props) {
   const [design, setDesign] = useState(() => initialDesign(Array.from(new Set(photos.filter(Boolean))), savedDesign?.design));
   const activeSlides = useMemo(() => design.slides.filter((slide) => slide.included), [design.slides]);
   const [index, setIndex] = useState(0); // 0 is the animated address intro.
@@ -57,14 +63,17 @@ export default function MarketingSlideshow({ photos, street, locality, brand, br
   const [selectedUrl, setSelectedUrl] = useState(activeSlides[0]?.url || design.slides[0]?.url || "");
   const [revision, setRevision] = useState(savedDesign?.revision || 0);
   const [saveState, setSaveState] = useState<"saved" | "dirty" | "saving" | "error">(savedDesign ? "saved" : "dirty");
-  const frameCount = activeSlides.length + 1;
+  const frameCount = activeSlides.length + 2;
+  const isPhotoFrame = index > 0 && index <= activeSlides.length;
+  const isOutro = index === frameCount - 1;
+  const facts = [price ? { label: "Price", value: price.startsWith("$") ? price : `$${price}` } : null, beds != null && String(beds) ? { label: "Beds", value: String(beds) } : null, baths != null && String(baths) ? { label: "Baths", value: String(baths) } : null, sqft != null && Number(sqft) ? { label: "Sq. Ft.", value: Number(sqft).toLocaleString() } : null].filter(Boolean) as { label: string; value: string }[];
 
   useEffect(() => {
     if (!playing || frameCount < 2) return;
-    const currentDuration = index === 0 ? design.introDuration : activeSlides[index - 1]?.duration || 3;
+    const currentDuration = index === 0 ? design.introDuration : isOutro ? design.outroDuration : activeSlides[index - 1]?.duration || 3;
     const timer = window.setTimeout(() => setIndex((value) => (value + 1) % frameCount), currentDuration * 1000);
     return () => window.clearTimeout(timer);
-  }, [playing, index, frameCount, design.introDuration, activeSlides]);
+  }, [playing, index, frameCount, design.introDuration, design.outroDuration, activeSlides, isOutro]);
 
   useEffect(() => { if (index >= frameCount) setIndex(0); }, [index, frameCount]);
 
@@ -102,7 +111,7 @@ export default function MarketingSlideshow({ photos, street, locality, brand, br
     <article className={`gsv-kit-slideshow ${editing ? "is-editing" : ""}`}>
       <div className={`gsv-kit-slideshow__stage is-${design.transition}`}>
         <div className={`gsv-kit-slideshow__intro ${index === 0 ? "is-active" : ""}`}>
-          {brokerageLogoUrl ? <img src={brokerageLogoUrl} alt={`${brand} logo`} /> : <span>{brand} presents</span>}
+          {agent.brokerageLogoUrl ? <img src={agent.brokerageLogoUrl} alt={`${brand} logo`} /> : <span>{brand} presents</span>}
           <strong>{street}</strong><i /> <small>{locality}</small>
         </div>
         {activeSlides.map((slide, photoIndex) => (
@@ -115,7 +124,15 @@ export default function MarketingSlideshow({ photos, street, locality, brand, br
           />
         ))}
         {!activeSlides.length ? <div className="gsv-kit-slideshow__empty">Choose photos to build this slideshow.</div> : null}
-        {index > 0 && <><div className="gsv-kit-slideshow__shade" /><div className="gsv-kit-slideshow__brand">{brokerageLogoUrl ? <img src={brokerageLogoUrl} alt={`${brand} logo`} /> : <span>{brand}</span>}<p>Property slideshow</p></div><div className="gsv-kit-slideshow__title"><strong>{street}</strong><span>{locality}</span></div></>}
+        {isPhotoFrame && <><div className="gsv-kit-slideshow__shade" /><div className="gsv-kit-slideshow__brand">{agent.brokerageLogoUrl ? <img src={agent.brokerageLogoUrl} alt={`${brand} logo`} /> : <span>{brand}</span>}</div><div className="gsv-kit-slideshow__facts">{facts.map((fact) => <div key={fact.label}><strong>{fact.value}</strong><span>{fact.label}</span></div>)}</div></>}
+        <div className={`gsv-kit-slideshow__outro ${isOutro ? "is-active" : ""}`}>
+          <span>Presented by</span>
+          {agent.photoUrl ? <img className="gsv-kit-slideshow__agent-photo" src={agent.photoUrl} alt={agent.name} /> : <div className="gsv-kit-slideshow__agent-initial">{agent.name.slice(0, 1)}</div>}
+          <h4>{agent.name}</h4>
+          {agent.brokerageLogoUrl ? <img className="gsv-kit-slideshow__brokerage-logo" src={agent.brokerageLogoUrl} alt={`${agent.brokerage || brand} logo`} /> : agent.brokerage ? <strong>{agent.brokerage}</strong> : null}
+          <div>{agent.phone ? <small>{agent.phone}</small> : null}{agent.email ? <small>{agent.email}</small> : null}</div>
+          {(agent.license || agent.brokerage) ? <p>{agent.license ? `License ${agent.license}` : ""}{agent.license && agent.brokerage ? " · " : ""}{agent.brokerage}</p> : null}
+        </div>
         <div className="gsv-kit-slideshow__counter">{index + 1} / {frameCount}</div>
         <button type="button" className="gsv-kit-slideshow__previous" onClick={() => move(-1)} aria-label="Previous slideshow frame">←</button>
         <button type="button" className="gsv-kit-slideshow__next" onClick={() => move(1)} aria-label="Next slideshow frame">→</button>
@@ -129,6 +146,7 @@ export default function MarketingSlideshow({ photos, street, locality, brand, br
         </div> : <div className="gsv-kit-slideshow__editor">
           <div className="gsv-kit-slideshow__editor-actions"><button type="button" onClick={() => setEditing(false)}>Preview</button><button type="button" className="is-save" onClick={() => void save()} disabled={saveState === "saving"}>{saveState === "saving" ? "Saving…" : "Save slideshow"}</button></div>
           <label><span>Intro timing</span><select value={design.introDuration} onChange={(event) => mark({ ...design, introDuration: Number(event.target.value) })}><option value={2}>2 seconds</option><option value={2.5}>2.5 seconds</option><option value={3}>3 seconds</option></select></label>
+          <label><span>Closing timing</span><select value={design.outroDuration} onChange={(event) => mark({ ...design, outroDuration: Number(event.target.value) })}><option value={3}>3 seconds</option><option value={4}>4 seconds</option><option value={5}>5 seconds</option></select></label>
           <div className="gsv-kit-slideshow__filmstrip" aria-label="Slideshow photo order">{design.slides.map((slide, order) => <button type="button" key={slide.url} className={slide.url === selectedUrl ? "is-selected" : ""} onClick={() => setSelectedUrl(slide.url)}><img src={slide.url} alt="" /><b>{order + 1}</b><span>{slide.included ? "On" : "Off"}</span></button>)}</div>
           {selected && <div className="gsv-kit-slideshow__photo-tools">
             <div><button type="button" onClick={() => movePhoto(-1)}>Move left</button><button type="button" onClick={() => movePhoto(1)}>Move right</button><button type="button" onClick={() => updateSelected({ included: !selected.included })}>{selected.included ? "Remove" : "Add"}</button></div>

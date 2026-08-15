@@ -16,6 +16,10 @@ export default function MarketingKitBetaPreview() {
         street: "757 Caber Drive",
         locality: "Lincoln, CA 95648",
         details: "3 beds · 2 baths · 2,624 sq. ft.",
+        price: "$749,000",
+        beds: 3,
+        baths: 2,
+        sqft: 2624,
         heroUrl: "/demo-property.svg",
         photoUrls: ["/demo-property.svg", "/demo-property-interior.svg"],
         publicSiteUrl: "https://sites.gsvisions.co/757-caber-drive",
@@ -25,6 +29,9 @@ export default function MarketingKitBetaPreview() {
         brokerage: "California Realty",
         photoUrl: "",
         brokerageLogoUrl: "",
+        phone: "(916) 432-3373",
+        email: "agent@example.com",
+        license: "DRE 01234567",
         profileReady: true,
       }}
       designs={{ flyer: { revision: 2, updatedAt: "" }, "social-square": { revision: 1, updatedAt: "" } }}

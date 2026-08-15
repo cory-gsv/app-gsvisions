@@ -35,7 +35,7 @@ export default async function MarketingKitPage({ params }: { params: Promise<{ s
 
   const clientId = clean(site.client_id) || clean(site.client_ms_id);
   const [{ data: agent }, { data: mediaRows }, { data: designRows }, { data: trafficRows }] = await Promise.all([
-    clientId ? admin.from("profiles").select("full_name, first_name, last_name, phone, email, brokerage_name, profile_photo_url, brokerage_logo1_url, brokerage_logo2_url").eq("id", clientId).maybeSingle() : Promise.resolve({ data: null }),
+    clientId ? admin.from("profiles").select("full_name, first_name, last_name, phone, email, brokerage_name, profile_photo_url, brokerage_logo1_url, brokerage_logo2_url, mls_license").eq("id", clientId).maybeSingle() : Promise.resolve({ data: null }),
     admin.from("media_assets").select("id, cloudinary_secure_url, s3_url, category, kind, is_published, status, sort_order").eq("site_id", site.id).order("sort_order", { ascending: true }).limit(24),
     admin.from("marketing_designs").select("kind, revision, updated_at, design_json").eq("site_id", site.id),
     admin.from("site_traffic_events").select("created_at").eq("site_id", site.id).eq("event_type", "page_view").order("created_at", { ascending: false }).limit(10000),
@@ -57,7 +57,7 @@ export default async function MarketingKitPage({ params }: { params: Promise<{ s
   const now = Date.now();
   const timestamps = (Array.isArray(trafficRows) ? trafficRows : []).map((item) => new Date(clean(item.created_at)).getTime()).filter(Number.isFinite);
 
-  return <MarketingKitHub siteId={site.id} isAdmin={isAdmin} property={{ street, locality, details: detailList.join(" · ") || locality, heroUrl, photoUrls, publicSiteUrl: propertySiteUrl(publicSlug) }} agent={{ name: agentName, brokerage: clean(agent?.brokerage_name), photoUrl: clean(agent?.profile_photo_url), brokerageLogoUrl: clean(agent?.brokerage_logo1_url) || clean(agent?.brokerage_logo2_url), profileReady: Boolean(agentName !== "Your Agent" && clean(agent?.email) && clean(agent?.phone)) }} designs={designs} traffic={{ last7Days: timestamps.filter((stamp) => stamp >= now - 7 * 86400000).length, last30Days: timestamps.filter((stamp) => stamp >= now - 30 * 86400000).length, allTime: timestamps.length }} />;
+  return <MarketingKitHub siteId={site.id} isAdmin={isAdmin} property={{ street, locality, details: detailList.join(" · ") || locality, price: clean(siteData.list_price) || clean(siteData.price), beds: site.beds, baths: site.baths, sqft: site.property_sqft ?? site.sqft, heroUrl, photoUrls, publicSiteUrl: propertySiteUrl(publicSlug) }} agent={{ name: agentName, brokerage: clean(agent?.brokerage_name), phone: clean(agent?.phone), email: clean(agent?.email), license: clean(agent?.mls_license), photoUrl: clean(agent?.profile_photo_url), brokerageLogoUrl: clean(agent?.brokerage_logo1_url) || clean(agent?.brokerage_logo2_url), profileReady: Boolean(agentName !== "Your Agent" && clean(agent?.email) && clean(agent?.phone)) }} designs={designs} traffic={{ last7Days: timestamps.filter((stamp) => stamp >= now - 7 * 86400000).length, last30Days: timestamps.filter((stamp) => stamp >= now - 30 * 86400000).length, allTime: timestamps.length }} />;
 }
 
 export const metadata = { title: "Marketing Kit | Golden State Visions", robots: { index: false, follow: false } };
