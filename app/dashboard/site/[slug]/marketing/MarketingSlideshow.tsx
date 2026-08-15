@@ -1,6 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { authenticatedFetch } from "@/src/lib/authenticated-fetch";
+
+type Slide = {
+  url: string;
+  included: boolean;
+  fit: "cover" | "contain";
+  positionX: number;
+  positionY: number;
+  flipX: boolean;
+  duration: number;
+};
+
+type SlideshowDesign = {
+  schema: "gsv-slideshow-v1";
+  transition: "fade" | "zoom";
+  introDuration: number;
+  slides: Slide[];
+};
 
 type Props = {
   photos: string[];
@@ -8,54 +26,120 @@ type Props = {
   locality: string;
   brand: string;
   brokerageLogoUrl?: string;
+  siteId: string;
+  demoMode?: boolean;
+  savedDesign?: { revision: number; updatedAt: string; design?: Record<string, unknown> };
 };
 
-export default function MarketingSlideshow({ photos, street, locality, brand, brokerageLogoUrl = "" }: Props) {
-  const slides = photos.filter(Boolean).slice(0, 18);
-  const [index, setIndex] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [seconds, setSeconds] = useState(3);
-  const [transition, setTransition] = useState<"fade" | "zoom">("fade");
+function defaultSlide(url: string): Slide {
+  return { url, included: true, fit: "cover", positionX: 50, positionY: 50, flipX: false, duration: 3 };
+}
 
-  useEffect(() => {
-    if (!playing || slides.length < 2) return;
-    const timer = window.setInterval(() => setIndex((value) => (value + 1) % slides.length), seconds * 1000);
-    return () => window.clearInterval(timer);
-  }, [playing, seconds, slides.length]);
-
-  useEffect(() => {
-    if (index >= slides.length) setIndex(0);
-  }, [index, slides.length]);
-
-  const move = (amount: number) => {
-    if (!slides.length) return;
-    setIndex((value) => (value + amount + slides.length) % slides.length);
+function initialDesign(photos: string[], raw?: Record<string, unknown>): SlideshowDesign {
+  const saved = raw?.schema === "gsv-slideshow-v1" && Array.isArray(raw.slides) ? raw as unknown as SlideshowDesign : null;
+  const savedByUrl = new Map((saved?.slides || []).map((slide) => [slide.url, slide]));
+  const ordered = (saved?.slides || []).filter((slide) => photos.includes(slide.url));
+  const added = photos.filter((url) => !savedByUrl.has(url)).map(defaultSlide);
+  return {
+    schema: "gsv-slideshow-v1",
+    transition: saved?.transition === "zoom" ? "zoom" : "fade",
+    introDuration: Number(saved?.introDuration) || 2.5,
+    slides: [...ordered, ...added].slice(0, 40),
   };
+}
+
+export default function MarketingSlideshow({ photos, street, locality, brand, brokerageLogoUrl = "", siteId, demoMode = false, savedDesign }: Props) {
+  const [design, setDesign] = useState(() => initialDesign(Array.from(new Set(photos.filter(Boolean))), savedDesign?.design));
+  const activeSlides = useMemo(() => design.slides.filter((slide) => slide.included), [design.slides]);
+  const [index, setIndex] = useState(0); // 0 is the animated address intro.
+  const [playing, setPlaying] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [selectedUrl, setSelectedUrl] = useState(activeSlides[0]?.url || design.slides[0]?.url || "");
+  const [revision, setRevision] = useState(savedDesign?.revision || 0);
+  const [saveState, setSaveState] = useState<"saved" | "dirty" | "saving" | "error">(savedDesign ? "saved" : "dirty");
+  const frameCount = activeSlides.length + 1;
+
+  useEffect(() => {
+    if (!playing || frameCount < 2) return;
+    const currentDuration = index === 0 ? design.introDuration : activeSlides[index - 1]?.duration || 3;
+    const timer = window.setTimeout(() => setIndex((value) => (value + 1) % frameCount), currentDuration * 1000);
+    return () => window.clearTimeout(timer);
+  }, [playing, index, frameCount, design.introDuration, activeSlides]);
+
+  useEffect(() => { if (index >= frameCount) setIndex(0); }, [index, frameCount]);
+
+  const selected = design.slides.find((slide) => slide.url === selectedUrl) || null;
+  const mark = (next: SlideshowDesign) => { setDesign(next); setSaveState("dirty"); };
+  const updateSelected = (patch: Partial<Slide>) => {
+    if (!selected) return;
+    mark({ ...design, slides: design.slides.map((slide) => slide.url === selected.url ? { ...slide, ...patch } : slide) });
+  };
+  const movePhoto = (amount: number) => {
+    const at = design.slides.findIndex((slide) => slide.url === selectedUrl);
+    const to = Math.max(0, Math.min(design.slides.length - 1, at + amount));
+    if (at < 0 || at === to) return;
+    const slides = [...design.slides];
+    const [slide] = slides.splice(at, 1);
+    slides.splice(to, 0, slide);
+    mark({ ...design, slides });
+  };
+  const save = async () => {
+    if (demoMode) { setSaveState("saved"); return; }
+    setSaveState("saving");
+    try {
+      const response = await authenticatedFetch(`/api/sites/${encodeURIComponent(siteId)}/marketing-designs/slideshow`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ design_json: design, revision }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Could not save slideshow.");
+      setRevision(Number(result.design?.revision || revision + 1));
+      setSaveState("saved");
+    } catch { setSaveState("error"); }
+  };
+  const move = (amount: number) => setIndex((value) => (value + amount + frameCount) % frameCount);
 
   return (
-    <article className="gsv-kit-slideshow">
-      <div className={`gsv-kit-slideshow__stage is-${transition}`}>
-        {slides.length ? slides.map((photo, photoIndex) => (
-          <img className={photoIndex === index ? "is-active" : ""} key={photo} src={photo} alt={photoIndex === index ? `Slideshow photo ${photoIndex + 1} for ${street}` : ""} />
-        )) : <div className="gsv-kit-slideshow__empty">Add delivered photos to build this slideshow.</div>}
-        <div className="gsv-kit-slideshow__shade" />
-        <div className="gsv-kit-slideshow__brand">
-          {brokerageLogoUrl ? <img src={brokerageLogoUrl} alt={`${brand} logo`} /> : <span>{brand}</span>}
-          <p>Property slideshow</p>
+    <article className={`gsv-kit-slideshow ${editing ? "is-editing" : ""}`}>
+      <div className={`gsv-kit-slideshow__stage is-${design.transition}`}>
+        <div className={`gsv-kit-slideshow__intro ${index === 0 ? "is-active" : ""}`}>
+          <span>Golden State Visions presents</span><strong>{street}</strong><i /> <small>{locality}</small>
         </div>
-        <div className="gsv-kit-slideshow__title"><strong>{street}</strong><span>{locality}</span></div>
-        {slides.length ? <div className="gsv-kit-slideshow__counter">{index + 1} / {slides.length}</div> : null}
-        <button type="button" className="gsv-kit-slideshow__previous" onClick={() => move(-1)} aria-label="Previous slideshow photo">←</button>
-        <button type="button" className="gsv-kit-slideshow__next" onClick={() => move(1)} aria-label="Next slideshow photo">→</button>
+        {activeSlides.map((slide, photoIndex) => (
+          <img
+            className={photoIndex + 1 === index ? "is-active" : ""}
+            key={slide.url}
+            src={slide.url}
+            style={{ objectFit: slide.fit, objectPosition: `${slide.positionX}% ${slide.positionY}%`, transform: `${slide.flipX ? "scaleX(-1) " : ""}${photoIndex + 1 === index && design.transition === "zoom" ? "scale(1.06)" : "scale(1)"}` }}
+            alt={photoIndex + 1 === index ? `Slideshow photo ${photoIndex + 1} for ${street}` : ""}
+          />
+        ))}
+        {!activeSlides.length ? <div className="gsv-kit-slideshow__empty">Choose photos to build this slideshow.</div> : null}
+        {index > 0 && <><div className="gsv-kit-slideshow__shade" /><div className="gsv-kit-slideshow__brand">{brokerageLogoUrl ? <img src={brokerageLogoUrl} alt={`${brand} logo`} /> : <span>{brand}</span>}<p>Property slideshow</p></div><div className="gsv-kit-slideshow__title"><strong>{street}</strong><span>{locality}</span></div></>}
+        <div className="gsv-kit-slideshow__counter">{index + 1} / {frameCount}</div>
+        <button type="button" className="gsv-kit-slideshow__previous" onClick={() => move(-1)} aria-label="Previous slideshow frame">←</button>
+        <button type="button" className="gsv-kit-slideshow__next" onClick={() => move(1)} aria-label="Next slideshow frame">→</button>
       </div>
       <div className="gsv-kit-slideshow__panel">
-        <div><span>Working preview</span><h3>Listing Slideshow</h3><p>Plays the delivered photos in their current portal order with agent or brokerage branding.</p></div>
-        <div className="gsv-kit-slideshow__controls">
-          <button type="button" className="is-play" onClick={() => setPlaying((value) => !value)} disabled={!slides.length}>{playing ? "Pause" : "Play slideshow"}</button>
-          <label><span>Transition</span><select value={transition} onChange={(event) => setTransition(event.target.value as "fade" | "zoom")}><option value="fade">Fade</option><option value="zoom">Slow zoom</option></select></label>
-          <label><span>Timing</span><select value={seconds} onChange={(event) => setSeconds(Number(event.target.value))}><option value={2}>2 seconds</option><option value={3}>3 seconds</option><option value={5}>5 seconds</option></select></label>
-        </div>
-        <b>Interactive preview ready · MP4 export is the next build step</b>
+        <div><span>{editing ? "Slideshow editor" : "Working preview"}</span><h3>Listing Slideshow</h3><p>{editing ? "Choose, order, crop, fit, flip, and time every delivered photo." : "Starts with an animated property address, then plays your edited photo sequence."}</p></div>
+        {!editing ? <div className="gsv-kit-slideshow__controls">
+          <button type="button" className="is-play" onClick={() => setPlaying((value) => !value)} disabled={!activeSlides.length}>{playing ? "Pause" : "Play slideshow"}</button>
+          <button type="button" onClick={() => { setPlaying(false); setEditing(true); }}>Edit slideshow</button>
+          <label><span>Transition</span><select value={design.transition} onChange={(event) => mark({ ...design, transition: event.target.value as "fade" | "zoom" })}><option value="fade">Fade</option><option value="zoom">Slow zoom</option></select></label>
+        </div> : <div className="gsv-kit-slideshow__editor">
+          <div className="gsv-kit-slideshow__editor-actions"><button type="button" onClick={() => setEditing(false)}>Preview</button><button type="button" className="is-save" onClick={() => void save()} disabled={saveState === "saving"}>{saveState === "saving" ? "Saving…" : "Save slideshow"}</button></div>
+          <label><span>Intro timing</span><select value={design.introDuration} onChange={(event) => mark({ ...design, introDuration: Number(event.target.value) })}><option value={2}>2 seconds</option><option value={2.5}>2.5 seconds</option><option value={3}>3 seconds</option></select></label>
+          <div className="gsv-kit-slideshow__filmstrip" aria-label="Slideshow photo order">{design.slides.map((slide, order) => <button type="button" key={slide.url} className={slide.url === selectedUrl ? "is-selected" : ""} onClick={() => setSelectedUrl(slide.url)}><img src={slide.url} alt="" /><b>{order + 1}</b><span>{slide.included ? "On" : "Off"}</span></button>)}</div>
+          {selected && <div className="gsv-kit-slideshow__photo-tools">
+            <div><button type="button" onClick={() => movePhoto(-1)}>Move left</button><button type="button" onClick={() => movePhoto(1)}>Move right</button><button type="button" onClick={() => updateSelected({ included: !selected.included })}>{selected.included ? "Remove" : "Add"}</button></div>
+            <label><span>Fit</span><select value={selected.fit} onChange={(event) => updateSelected({ fit: event.target.value as "cover" | "contain" })}><option value="cover">Fill frame</option><option value="contain">Fit full photo</option></select></label>
+            <label><span>Horizontal crop</span><input type="range" min="0" max="100" value={selected.positionX} onChange={(event) => updateSelected({ positionX: Number(event.target.value) })} /></label>
+            <label><span>Vertical crop</span><input type="range" min="0" max="100" value={selected.positionY} onChange={(event) => updateSelected({ positionY: Number(event.target.value) })} /></label>
+            <label><span>Timing</span><select value={selected.duration} onChange={(event) => updateSelected({ duration: Number(event.target.value) })}><option value={2}>2 seconds</option><option value={3}>3 seconds</option><option value={5}>5 seconds</option></select></label>
+            <button type="button" onClick={() => updateSelected({ flipX: !selected.flipX })}>{selected.flipX ? "Undo horizontal flip" : "Flip horizontally"}</button>
+          </div>}
+          <small className={`gsv-kit-slideshow__save-state is-${saveState}`}>{saveState === "saved" ? `Saved · version ${revision}` : saveState === "dirty" ? "Unsaved changes" : saveState === "error" ? "Save failed — try again" : "Saving…"}</small>
+        </div>}
+        {!editing && <b>Animated address intro included · MP4 export is the next build step</b>}
       </div>
     </article>
   );

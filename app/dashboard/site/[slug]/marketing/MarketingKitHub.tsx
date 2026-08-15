@@ -23,7 +23,7 @@ type Props = {
     brokerageLogoUrl: string;
     profileReady: boolean;
   };
-  designs?: Partial<Record<"flyer" | "social-square", { revision: number; updatedAt: string }>>;
+  designs?: Partial<Record<"flyer" | "social-square" | "slideshow", { revision: number; updatedAt: string; design?: Record<string, unknown> }>>;
   traffic: {
     last7Days: number;
     last30Days: number;
@@ -162,7 +162,7 @@ export default function MarketingKitHub({ siteId, isAdmin = false, demoMode = fa
 
       <section id="video" className="gsv-kit-section gsv-kit-section--dark">
         <SectionHeading eyebrow="Automatic video" title="Listing slideshow preview" description="Preview an automatic branded slideshow using the delivered photos in their current portal order. Adjust the transition and timing, then play it here." />
-        <MarketingSlideshow photos={photos} street={property.street} locality={property.locality} brand={brand} brokerageLogoUrl={agent.brokerageLogoUrl} />
+        <MarketingSlideshow photos={photos} street={property.street} locality={property.locality} brand={brand} brokerageLogoUrl={agent.brokerageLogoUrl} siteId={siteId} savedDesign={designs?.slideshow} demoMode={demoMode} />
         <div className="gsv-kit-video-grid">
           <article><span>9:16</span><div className="gsv-kit-video-preview is-reel">{photoAt(photos, 0) ? <img src={photoAt(photos, 0)} alt="" /> : null}<i>▶</i><strong>Property Reel</strong></div><h3>Vertical Reel</h3><p>Instagram Reels, TikTok, and YouTube Shorts.</p><b>Automation planned</b></article>
           <article><span>1:1</span><div className="gsv-kit-video-preview is-square">{photoAt(photos, 1) ? <img src={photoAt(photos, 1)} alt="" /> : null}<i>▶</i><strong>Just Listed</strong></div><h3>Social Teaser</h3><p>A fast listing announcement for social feeds.</p><b>Automation planned</b></article>

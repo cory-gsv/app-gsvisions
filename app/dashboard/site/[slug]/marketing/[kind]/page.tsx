@@ -16,6 +16,7 @@ export default async function MarketingEditorPage({ params }: { params: Promise<
   if (!marketingEditorEnabled()) notFound();
   const { slug, kind } = await params;
   if (!isMarketingDesignKind(kind)) notFound();
+  if (kind === "slideshow") redirect(`/dashboard/site/${encodeURIComponent(slug)}/marketing#video`);
 
   const session = await createSupabaseServerClient();
   const { data: authData } = await session.auth.getUser();

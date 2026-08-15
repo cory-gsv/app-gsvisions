@@ -1,4 +1,4 @@
-export const MARKETING_DESIGN_KINDS = ["flyer", "social-square"] as const;
+export const MARKETING_DESIGN_KINDS = ["flyer", "social-square", "slideshow"] as const;
 
 export type MarketingDesignKind = (typeof MARKETING_DESIGN_KINDS)[number];
 
@@ -19,5 +19,5 @@ export function marketingEditorPreviewEnabled() {
 }
 
 export function marketingDesignLabel(kind: MarketingDesignKind) {
-  return kind === "flyer" ? "Printable Flyer" : "Square Social Post";
+  return kind === "flyer" ? "Printable Flyer" : kind === "slideshow" ? "Listing Slideshow" : "Square Social Post";
 }

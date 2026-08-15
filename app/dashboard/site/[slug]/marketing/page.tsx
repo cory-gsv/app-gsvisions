@@ -37,7 +37,7 @@ export default async function MarketingKitPage({ params }: { params: Promise<{ s
   const [{ data: agent }, { data: mediaRows }, { data: designRows }, { data: trafficRows }] = await Promise.all([
     clientId ? admin.from("profiles").select("full_name, first_name, last_name, phone, email, brokerage_name, profile_photo_url, brokerage_logo1_url, brokerage_logo2_url").eq("id", clientId).maybeSingle() : Promise.resolve({ data: null }),
     admin.from("media_assets").select("id, cloudinary_secure_url, s3_url, category, kind, is_published, status, sort_order").eq("site_id", site.id).order("sort_order", { ascending: true }).limit(24),
-    admin.from("marketing_designs").select("kind, revision, updated_at").eq("site_id", site.id),
+    admin.from("marketing_designs").select("kind, revision, updated_at, design_json").eq("site_id", site.id),
     admin.from("site_traffic_events").select("created_at").eq("site_id", site.id).eq("event_type", "page_view").order("created_at", { ascending: false }).limit(10000),
   ]);
 
@@ -53,7 +53,7 @@ export default async function MarketingKitPage({ params }: { params: Promise<{ s
   const detailList = [site.beds != null ? `${site.beds} beds` : "", site.baths != null ? `${site.baths} baths` : "", (site.property_sqft ?? site.sqft) ? `${Number(site.property_sqft ?? site.sqft).toLocaleString()} sq. ft.` : ""].filter(Boolean);
   const agentName = clean(agent?.full_name) || [clean(agent?.first_name), clean(agent?.last_name)].filter(Boolean).join(" ") || "Your Agent";
   const publicSlug = normalizePropertySiteSlug(site.site_slug) || normalizePropertySiteSlug(site.slug) || makePropertySiteSlug(street);
-  const designs = Object.fromEntries((Array.isArray(designRows) ? designRows : []).map((item) => [clean(item.kind), { revision: Number(item.revision || 1), updatedAt: clean(item.updated_at) }]));
+  const designs = Object.fromEntries((Array.isArray(designRows) ? designRows : []).map((item) => [clean(item.kind), { revision: Number(item.revision || 1), updatedAt: clean(item.updated_at), design: record(item.design_json) }]));
   const now = Date.now();
   const timestamps = (Array.isArray(trafficRows) ? trafficRows : []).map((item) => new Date(clean(item.created_at)).getTime()).filter(Number.isFinite);
 

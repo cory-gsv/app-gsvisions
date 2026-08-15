@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import MarketingEditorShell from "@/app/dashboard/site/[slug]/marketing/[kind]/MarketingEditorShell";
 import { isMarketingDesignKind, marketingEditorPreviewEnabled } from "@/lib/marketing-kit";
 
@@ -8,6 +8,7 @@ export default async function MarketingEditorBetaPreview({ params }: { params: P
   if (!marketingEditorPreviewEnabled()) notFound();
   const { kind } = await params;
   if (!isMarketingDesignKind(kind)) notFound();
+  if (kind === "slideshow") redirect("/beta/marketing-kit-preview#video");
   return <MarketingEditorShell
     demoMode
     isAdmin
