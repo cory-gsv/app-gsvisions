@@ -193,7 +193,7 @@ export default function LoginPage() {
 
           <div className="gsv-auth__forgot-row">
             <a href="#" onClick={handleForgotPassword} className="gsv-auth__forgot">
-              Forgot Password?
+              Forgot or never set a password?
             </a>
           </div>
 
@@ -229,9 +229,10 @@ export default function LoginPage() {
           <div className="gsv-auth__links">
             <a
               className="gsv-auth__link"
-              href="mailto:info@gsvisions.co?subject=Portal%20account%20request"
+              href="#"
+              onClick={handleForgotPassword}
             >
-              Request an account
+              Set up your portal password
             </a>
           </div>
         </form>}

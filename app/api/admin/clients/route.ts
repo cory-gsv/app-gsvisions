@@ -1,4 +1,5 @@
 import { AuthorizationError, authorizationErrorResponse, requireAdmin, requireUser } from "@/lib/authz";
+import { sendNewBookingClientInvite } from "@/lib/client-invite";
 
 export const runtime = "nodejs";
 
@@ -46,6 +47,22 @@ export async function POST(request: Request) {
     if (error) {
       await admin.auth.admin.deleteUser(authData.user.id).catch(() => undefined);
       throw error;
+    }
+
+    try {
+      await sendNewBookingClientInvite({
+        admin,
+        userId: authData.user.id,
+        email,
+        firstName: clean(body.first_name),
+        origin: new URL(request.url).origin,
+      });
+    } catch (inviteError) {
+      // A client created without a usable setup path is a broken account. Keep
+      // creation transactional so the administrator can retry cleanly.
+      await admin.from("profiles").delete().eq("id", authData.user.id);
+      await admin.auth.admin.deleteUser(authData.user.id).catch(() => undefined);
+      throw inviteError;
     }
     return Response.json({ client: data }, { status: 201 });
   } catch (error) {
