@@ -124,7 +124,7 @@ export default function MarketingSlideshow({ photos, street, locality, price = "
           />
         ))}
         {!activeSlides.length ? <div className="gsv-kit-slideshow__empty">Choose photos to build this slideshow.</div> : null}
-        {isPhotoFrame && <><div className="gsv-kit-slideshow__shade" /><div className="gsv-kit-slideshow__brand">{agent.brokerageLogoUrl ? <img src={agent.brokerageLogoUrl} alt={`${brand} logo`} /> : <span>{brand}</span>}</div><div className="gsv-kit-slideshow__facts">{facts.map((fact) => <div key={fact.label}><strong>{fact.value}</strong><span>{fact.label}</span></div>)}</div></>}
+        {isPhotoFrame && <><div className="gsv-kit-slideshow__shade" /><div className="gsv-kit-slideshow__facts">{facts.map((fact) => <div key={fact.label}><strong>{fact.value}</strong><span>{fact.label}</span></div>)}</div></>}
         <div className={`gsv-kit-slideshow__outro ${isOutro ? "is-active" : ""}`}>
           <span>Presented by</span>
           {agent.photoUrl ? <img className="gsv-kit-slideshow__agent-photo" src={agent.photoUrl} alt={agent.name} /> : <div className="gsv-kit-slideshow__agent-initial">{agent.name.slice(0, 1)}</div>}
