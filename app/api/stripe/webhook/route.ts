@@ -170,30 +170,33 @@ export async function POST(request: Request) {
         await supabase.from("stripe_webhook_events").update({ processing_error: message }).eq("event_id", event.id);
         return NextResponse.json({ error: "Custom domain processing failed." }, { status: 500 });
       }
-    } else {
-    const siteId = String(intent.metadata.site_id || "").trim();
-    const bookingId = String(intent.metadata.booking_id || "").trim() || null;
-    const invoiceAmount = Number(intent.metadata.invoice_payment_amount_cents || 0);
-    const tipCents = Number(intent.metadata.tip_cents || 0);
-    if (!siteId || !Number.isSafeInteger(invoiceAmount) || invoiceAmount <= 0) {
-      await supabase.from("stripe_webhook_events").update({ processing_error: "Invalid payment metadata." }).eq("event_id", event.id);
-      return NextResponse.json({ error: "Invalid payment metadata." }, { status: 422 });
-    }
+    } else if (intent.metadata.source === "invoice_public" || intent.metadata.invoice_payment_amount_cents) {
+      const siteId = String(intent.metadata.site_id || "").trim();
+      const bookingId = String(intent.metadata.booking_id || "").trim() || null;
+      const invoiceAmount = Number(intent.metadata.invoice_payment_amount_cents || 0);
+      const tipCents = Number(intent.metadata.tip_cents || 0);
+      if (!siteId || !Number.isSafeInteger(invoiceAmount) || invoiceAmount <= 0) {
+        await supabase.from("stripe_webhook_events").update({ processing_error: "Invalid payment metadata." }).eq("event_id", event.id);
+        return NextResponse.json({ error: "Invalid payment metadata." }, { status: 422 });
+      }
 
-    const { error } = await supabase.rpc("apply_invoice_payment", {
-      p_site_id: siteId,
-      p_booking_id: bookingId,
-      p_payment_intent_id: intent.id,
-      p_amount_cents: invoiceAmount,
-      p_tip_cents: Number.isSafeInteger(tipCents) ? tipCents : 0,
-      p_currency: intent.currency,
-      p_provider_created_at: new Date(intent.created * 1000).toISOString(),
-    });
-    if (error) {
-      await supabase.from("stripe_webhook_events").update({ processing_error: error.message }).eq("event_id", event.id);
-      return NextResponse.json({ error: "Payment processing failed." }, { status: 500 });
+      const { error } = await supabase.rpc("apply_invoice_payment", {
+        p_site_id: siteId,
+        p_booking_id: bookingId,
+        p_payment_intent_id: intent.id,
+        p_amount_cents: invoiceAmount,
+        p_tip_cents: Number.isSafeInteger(tipCents) ? tipCents : 0,
+        p_currency: intent.currency,
+        p_provider_created_at: new Date(intent.created * 1000).toISOString(),
+      });
+      if (error) {
+        await supabase.from("stripe_webhook_events").update({ processing_error: error.message }).eq("event_id", event.id);
+        return NextResponse.json({ error: "Payment processing failed." }, { status: 500 });
+      }
     }
-    }
+    // This Stripe account also processes website bookings. Those payment
+    // intents are fulfilled by gsvisions.co and must be acknowledged here
+    // without being misclassified as portal invoice payments.
   }
 
   if (event.type === "checkout.session.completed") {
