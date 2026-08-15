@@ -102,7 +102,8 @@ export default function MarketingSlideshow({ photos, street, locality, brand, br
     <article className={`gsv-kit-slideshow ${editing ? "is-editing" : ""}`}>
       <div className={`gsv-kit-slideshow__stage is-${design.transition}`}>
         <div className={`gsv-kit-slideshow__intro ${index === 0 ? "is-active" : ""}`}>
-          <span>Golden State Visions presents</span><strong>{street}</strong><i /> <small>{locality}</small>
+          {brokerageLogoUrl ? <img src={brokerageLogoUrl} alt={`${brand} logo`} /> : <span>{brand} presents</span>}
+          <strong>{street}</strong><i /> <small>{locality}</small>
         </div>
         {activeSlides.map((slide, photoIndex) => (
           <img
