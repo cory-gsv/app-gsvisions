@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { notFound, redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import PropertyDetailsEditor from "./PropertyDetailsEditor";
 import InvoiceEditor from "./InvoiceEditor";
@@ -715,6 +716,19 @@ export default async function SitePage({
     clean(site.client_id) === viewerId || clean(site.client_ms_id) === viewerId;
   if (!viewerIsAdmin && !ownsSite) redirect("/dashboard");
   if (cleanSlug !== site.id) redirect(`/dashboard/site/${site.id}`);
+
+  if (!viewerIsAdmin) {
+    const requestHeaders = await headers();
+    await adminSb.from("portal_access_events").insert({
+      user_id: viewerId,
+      site_id: site.id,
+      event_type: "site_view",
+      path: `/dashboard/site/${site.id}`,
+      user_agent: clean(requestHeaders.get("user-agent")) || null,
+      ip_address: clean(requestHeaders.get("x-forwarded-for")).split(",")[0] || null,
+      metadata: { property_address: clean(site.property_address) },
+    }).then(() => undefined);
+  }
 
   const assignedProfileId = clean(site.client_id) || clean(site.client_ms_id);
 

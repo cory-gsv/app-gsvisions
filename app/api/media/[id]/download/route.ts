@@ -68,6 +68,15 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       }),
       { expiresIn: 300 }
     );
+    await admin.from("portal_access_events").insert({
+      user_id: user.id,
+      site_id: asset.site_id,
+      event_type: "media_download",
+      path: `/api/media/${mediaId}/download`,
+      user_agent: clean(request.headers.get("user-agent")) || null,
+      ip_address: clean(request.headers.get("x-forwarded-for")).split(",")[0] || null,
+      metadata: { media_id: mediaId, filename: clean(asset.original_filename) },
+    }).then(() => undefined);
     return NextResponse.json({ url, expires_in: 300 });
   } catch (error) {
     const authResponse = authorizationErrorResponse(error);

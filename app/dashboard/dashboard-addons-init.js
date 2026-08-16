@@ -818,16 +818,15 @@ export async function initDashboardAddons() {
   }
 
   async function loadSites(sb, userId, admin) {
-    const cols = [
-      "id", S.created, S.owner_uuid, S.owner_text, S.address, S.city,
-      "property_address", "property_city", "property_state", "property_zip",
-      "property_full_address", "site_name", "name", S.thumb, S.slug, S.status,
-    ].join(",")
-    let q = sb.from(SITES_TABLE).select(cols).order(S.created, { ascending: false })
-    if (!admin) q = q.or(`${S.owner_uuid}.eq.${userId},${S.owner_text}.eq.${userId}`)
-    const res = await q
-    if (res.error) throw res.error
-    return Array.isArray(res.data) ? res.data : []
+    const session = await sb.auth.getSession()
+    const token = session?.data?.session?.access_token
+    if (!token) throw new Error("Your portal session has expired.")
+    const response = await fetch("/api/client/sites", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload?.error || "Could not load your properties.")
+    return Array.isArray(payload?.sites) ? payload.sites : []
   }
 
   async function loadSiteMediaPreviews(sb, sites) {
