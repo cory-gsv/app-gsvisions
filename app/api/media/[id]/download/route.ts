@@ -30,7 +30,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         .select("client_id, client_ms_id, paid, balance_due_cents")
         .eq("id", asset.site_id)
         .maybeSingle();
-      if (clean(site?.client_id) !== user.id && clean(site?.client_ms_id) !== user.id) {
+      const { data: coLister } = await admin.from("site_co_listers").select("site_id").eq("site_id", asset.site_id).eq("profile_id", user.id).maybeSingle();
+      if (clean(site?.client_id) !== user.id && clean(site?.client_ms_id) !== user.id && !coLister) {
         return NextResponse.json({ error: "You do not have access to this media." }, { status: 403 });
       }
 

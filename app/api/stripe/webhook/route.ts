@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { addDomainToProject, buyDomain, getDomainQuote, normalizeDomain } from "@/lib/custom-domains";
 import { completeDomainPurchase as completePaidDomainPurchase, registrantFromMetadata } from "@/lib/domain-purchase";
+import { sendPaymentReceivedEmail } from "@/lib/payment-received-email";
 
 export const runtime = "nodejs";
 
@@ -192,6 +193,22 @@ export async function POST(request: Request) {
       if (error) {
         await supabase.from("stripe_webhook_events").update({ processing_error: error.message }).eq("event_id", event.id);
         return NextResponse.json({ error: "Payment processing failed." }, { status: 500 });
+      }
+      try {
+        await sendPaymentReceivedEmail({
+          admin: supabase,
+          siteId,
+          bookingId,
+          paymentReference: intent.id,
+          amountCents: invoiceAmount,
+          tipCents: Number.isSafeInteger(tipCents) ? tipCents : 0,
+          currency: intent.currency,
+          paidAt: new Date(intent.created * 1000).toISOString(),
+        });
+      } catch (notificationError) {
+        const message = notificationError instanceof Error ? notificationError.message : "Payment notification failed.";
+        await supabase.from("stripe_webhook_events").update({ processing_error: message }).eq("event_id", event.id);
+        return NextResponse.json({ error: "Payment notification failed." }, { status: 500 });
       }
     }
     // This Stripe account also processes website bookings. Those payment

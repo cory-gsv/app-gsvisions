@@ -11,6 +11,7 @@ import PropertySectionNav from "./PropertySectionNav";
 import SiteSummaryPanel from "./SiteSummaryPanel";
 import LeadCapturePanel from "./LeadCapturePanel";
 import ClientSummaryCard from "./ClientSummaryCard";
+import CoListerManager from "./CoListerManager";
 import DeliveryEmailActions from "./DeliveryEmailActions";
 import PortalNavActions from "../../PortalNavActions";
 import "./property-workspace.css";
@@ -712,8 +713,14 @@ export default async function SitePage({
   if (!site) notFound();
 
   const viewerId = clean(authData.user.id);
+  const { data: coListerLink } = await adminSb
+    .from("site_co_listers")
+    .select("profile_id")
+    .eq("site_id", site.id)
+    .maybeSingle();
+  const coListerProfileId = clean(coListerLink?.profile_id);
   const ownsSite =
-    clean(site.client_id) === viewerId || clean(site.client_ms_id) === viewerId;
+    clean(site.client_id) === viewerId || clean(site.client_ms_id) === viewerId || coListerProfileId === viewerId;
   if (!viewerIsAdmin && !ownsSite) redirect("/dashboard");
   if (cleanSlug !== site.id) redirect(`/dashboard/site/${site.id}`);
 
@@ -762,6 +769,28 @@ export default async function SitePage({
       Array.isArray(assignedProfileData) && assignedProfileData.length
         ? (assignedProfileData[0] as Profile)
         : null;
+  }
+
+  let coListerProfile: Profile | null = null;
+  if (coListerProfileId) {
+    const { data: coListerProfileData } = await adminSb
+      .from("profiles")
+      .select("id,full_name,first_name,last_name,phone,email,profile_photo_url,brokerage_name,mls_license,brokerage_website_url,facebook_url,instagram_url,linkedin_url,twitter_url,youtube_url,is_admin,role")
+      .eq("id", coListerProfileId)
+      .maybeSingle();
+    coListerProfile = coListerProfileData as Profile | null;
+  }
+
+  let coListerOptions: Array<{ id: string; name: string; email: string }> = [];
+  if (viewerIsAdmin) {
+    const { data: optionRows } = await adminSb
+      .from("profiles")
+      .select("id,full_name,first_name,last_name,email,role,is_admin")
+      .order("full_name", { ascending: true });
+    coListerOptions = (Array.isArray(optionRows) ? optionRows : [])
+      .filter((row) => row.is_admin !== true && !["admin", "staff"].includes(clean(row.role).toLowerCase()) && clean(row.id) !== assignedProfileId)
+      .map((row) => ({ id: clean(row.id), name: clean(row.full_name) || [clean(row.first_name), clean(row.last_name)].filter(Boolean).join(" ") || clean(row.email), email: clean(row.email) }))
+      .filter((row) => row.id && row.email);
   }
 
   let booking: Booking | null = null;
@@ -1140,6 +1169,9 @@ export default async function SitePage({
                 twitter: clean(assignedProfile?.twitter_url),
                 youtube: clean(assignedProfile?.youtube_url),
               }} canEdit={!!assignedProfile?.id && (viewerIsAdmin || clean(assignedProfile.id) === viewerId)} />
+              {viewerIsAdmin ? <CoListerManager siteId={site.id} current={coListerProfile ? { id: clean(coListerProfile.id), name: getProfileName(coListerProfile), email: clean(coListerProfile.email) } : null} options={coListerOptions} /> : coListerProfile ? <ClientSummaryCard client={{
+                id: clean(coListerProfile.id), name: getProfileName(coListerProfile), firstName: clean(coListerProfile.first_name), lastName: clean(coListerProfile.last_name), photo: clean(coListerProfile.profile_photo_url), phone: clean(coListerProfile.phone), email: clean(coListerProfile.email), brokerage: clean(coListerProfile.brokerage_name), mlsLicense: clean(coListerProfile.mls_license), website: clean(coListerProfile.brokerage_website_url), facebook: clean(coListerProfile.facebook_url), instagram: clean(coListerProfile.instagram_url), linkedin: clean(coListerProfile.linkedin_url), twitter: clean(coListerProfile.twitter_url), youtube: clean(coListerProfile.youtube_url),
+              }} canEdit={clean(coListerProfile.id) === viewerId} /> : null}
             </div>
             <div className="gsv-summary-hero">
               <MediaManager

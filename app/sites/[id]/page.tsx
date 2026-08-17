@@ -123,6 +123,17 @@ async function loadAgent(site: AnyRow) {
   return data as AnyRow | null;
 }
 
+async function loadCoLister(siteId: string) {
+  const db = adminClient();
+  const { data: link } = await db.from("site_co_listers").select("profile_id").eq("site_id", siteId).maybeSingle();
+  const id = clean(link?.profile_id);
+  if (!id) return null;
+  const { data } = await db.from("profiles")
+    .select("id, full_name, first_name, last_name, phone, email, profile_photo_url, brokerage_name, brokerage_logo1_url, brokerage_logo2_url, mls_license, brokerage_website_url, facebook_url, instagram_url, linkedin_url, twitter_url, youtube_url")
+    .eq("id", id).maybeSingle();
+  return data as AnyRow | null;
+}
+
 function embedUrl(value: string, kind: "video" | "tour") {
   if (!value) return "";
   try {
@@ -175,7 +186,7 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
   const site = await loadSite((await params).id);
   if (!site) notFound();
   if (propertySitePaymentLocked(site) && !(await staffCanPreviewLockedSite())) notFound();
-  const [media, agent] = await Promise.all([loadMedia(clean(site.id)), loadAgent(site)]);
+  const [media, agent, coLister] = await Promise.all([loadMedia(clean(site.id)), loadAgent(site), loadCoLister(clean(site.id))]);
   const data = siteData(site);
   const address = siteAddress(site);
   const place = locality(site);
@@ -201,6 +212,13 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
     { label: "X / Twitter", url: clean(data.agent_twitter_url) || clean(data.twitter_url) || clean(agent?.twitter_url) },
     { label: "YouTube", url: clean(data.agent_youtube_url) || clean(data.youtube_url) || clean(agent?.youtube_url) },
   ].filter((item) => item.url);
+  const coListerName = clean(coLister?.full_name) || [clean(coLister?.first_name), clean(coLister?.last_name)].filter(Boolean).join(" ");
+  const coListerPhone = clean(coLister?.phone);
+  const coListerEmail = clean(coLister?.email);
+  const coListerPhoto = clean(coLister?.profile_photo_url);
+  const coListerLicense = clean(coLister?.mls_license);
+  const coListerBrokerage = clean(coLister?.brokerage_name);
+  const coListerBrokerageLogo = clean(coLister?.brokerage_logo1_url) || clean(coLister?.brokerage_logo2_url);
   const description = clean(data.public_site_description) || clean(data.description);
   const listingMls = clean(data.listing_mls_number) || clean(data.mls_number) || clean(data.listing_mls);
   const listingStatus = clean(data.listing_status).replace(/_/g, " ") || "Property showcase";
@@ -286,9 +304,22 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
               {(agentWebsite || socialLinks.length) ? <div className="agent-social-links">{agentWebsite ? <a href={agentWebsite} target="_blank" rel="noreferrer">Website ↗</a> : null}{socialLinks.map((item) => <a key={item.label} href={item.url} target="_blank" rel="noreferrer">{item.label} ↗</a>)}</div> : null}
             </div>
           </div>
+          {coListerName ? <div className="listing-agent-main">
+            {coListerPhoto ? <img className="listing-agent-photo" src={coListerPhoto} alt={coListerName} /> : <div className="agent-placeholder">{coListerName.charAt(0)}</div>}
+            <div className="listing-agent-copy">
+              <p className="eyebrow">Co-listing contact</p><h2>{coListerName}</h2>
+              {coListerPhone ? <a href={`tel:${coListerPhone.replace(/[^+\d]/g, "")}`}>{coListerPhone}</a> : null}
+              {coListerEmail ? <a href={`mailto:${coListerEmail}?subject=${encodeURIComponent(`Question about ${address}`)}`}>{coListerEmail}</a> : null}
+              {coListerLicense ? <p>License {coListerLicense}</p> : null}
+            </div>
+          </div> : null}
           {brokerageName || brokerageLogo ? <div className="brokerage-identity">
             {brokerageName ? <p>{brokerageName}</p> : null}
             {brokerageLogo ? <img src={brokerageLogo} alt={`${brokerageName || "Brokerage"} logo`} /> : null}
+          </div> : null}
+          {coListerName && (coListerBrokerage || coListerBrokerageLogo) ? <div className="brokerage-identity">
+            {coListerBrokerage ? <p>{coListerBrokerage}</p> : null}
+            {coListerBrokerageLogo ? <img src={coListerBrokerageLogo} alt={`${coListerBrokerage || "Co-lister brokerage"} logo`} /> : null}
           </div> : null}
         </aside>
       </div>

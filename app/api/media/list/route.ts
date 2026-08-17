@@ -53,15 +53,21 @@ export async function GET(req: NextRequest) {
         .from("sites")
         .select("id, client_id, client_ms_id, paid, balance_due_cents")
         .in("id", siteIds);
+      const { data: coListerRows, error: coListerError } = await admin
+        .from("site_co_listers")
+        .select("site_id")
+        .eq("profile_id", user.id)
+        .in("site_id", siteIds);
+      const coListerSiteIds = new Set((coListerRows || []).map((row) => clean(row.site_id)));
       const allowedIds = new Set(
         (Array.isArray(sites) ? sites : [])
           .filter(
             (site) =>
-              clean(site?.client_id) === user.id || clean(site?.client_ms_id) === user.id
+              clean(site?.client_id) === user.id || clean(site?.client_ms_id) === user.id || coListerSiteIds.has(clean(site?.id))
           )
           .map((site) => clean(site?.id))
       );
-      if (sitesError || siteIds.some((id) => !allowedIds.has(id))) {
+      if (sitesError || coListerError || siteIds.some((id) => !allowedIds.has(id))) {
         return NextResponse.json({ error: "You do not have access to this media." }, { status: 403 });
       }
 
