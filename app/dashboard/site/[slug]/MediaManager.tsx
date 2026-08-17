@@ -304,7 +304,7 @@ function uploadS3WithProgress(
       onProgress(pct);
     };
 
-    xhr.onerror = () => reject(new Error("Original upload to S3 failed."));
+    xhr.onerror = () => reject(new Error("Original upload to S3 failed because the connection was interrupted."));
     xhr.onabort = () => reject(new Error("Original upload to S3 cancelled."));
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -312,11 +312,32 @@ function uploadS3WithProgress(
         resolve();
         return;
       }
-      reject(new Error("Original upload to S3 failed."));
+      reject(new Error(`Original upload to S3 failed (${xhr.status || "network error"}).`));
     };
 
     xhr.send(file);
   });
+}
+
+async function uploadS3WithRetry(
+  file: File,
+  uploadUrl: string,
+  onProgress: (pct: number) => void,
+  attempts = 3
+) {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await uploadS3WithProgress(file, uploadUrl, onProgress);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt >= attempts) break;
+      onProgress(0);
+      await new Promise((resolve) => window.setTimeout(resolve, attempt * 900));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Original upload to S3 failed after three attempts.");
 }
 
 function TrashIcon() {
@@ -746,7 +767,7 @@ export default function MediaManager({
 
     const originalS3 = await getS3Presign(originalFile, category);
 
-    await uploadS3WithProgress(originalFile, originalS3.upload_url, (pct) => {
+    await uploadS3WithRetry(originalFile, originalS3.upload_url, (pct) => {
       const mapped = 62 + Math.round((pct / 100) * 30);
       updatePendingUpload(tempId, { stage: "s3", progress: Math.min(92, mapped) });
     });
