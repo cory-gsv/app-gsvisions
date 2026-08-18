@@ -9,6 +9,23 @@ import "./marketing-kit.css";
 function clean(value: unknown) { return String(value ?? "").trim(); }
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function mediaUrl(value: Record<string, unknown>) { return clean(value.cloudinary_secure_url) || clean(value.s3_url); }
+function designMap(rows: Array<Record<string, unknown>>) {
+  const designs: Record<string, { revision: number; updatedAt: string; design: Record<string, unknown> }> = {};
+  for (const item of rows) {
+    const kind = clean(item.kind);
+    const raw = record(item.design_json);
+    const meta = { revision: Number(item.revision || 1), updatedAt: clean(item.updated_at) };
+    if (kind === "flyer" && raw.schema === "gsv-print-bundle-v1") {
+      for (const printKind of ["flyer", "brochure"] as const) {
+        const design = record(raw[printKind]);
+        if (Object.keys(design).length) designs[printKind] = { ...meta, design };
+      }
+    } else {
+      designs[kind] = { ...meta, design: raw };
+    }
+  }
+  return designs;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +48,8 @@ export default async function MarketingKitPage({ params }: { params: Promise<{ s
   const role = clean(profile.role).toLowerCase();
   const isAdmin = profile.is_admin === true || role === "admin";
   const ownsSite = clean(site.client_id) === authData.user.id || clean(site.client_ms_id) === authData.user.id;
-  if (!(isAdmin || (marketingEditorAllowsClientAccess() && (role === "staff" || ownsSite)))) redirect("/dashboard");
+  const { data: coListerAccess } = await admin.from("site_co_listers").select("site_id").eq("site_id", site.id).eq("profile_id", authData.user.id).maybeSingle();
+  if (!(isAdmin || (marketingEditorAllowsClientAccess() && (role === "staff" || ownsSite || Boolean(coListerAccess))))) redirect("/dashboard");
 
   const clientId = clean(site.client_id) || clean(site.client_ms_id);
   const [{ data: agent }, { data: mediaRows }, { data: designRows }, { data: trafficRows }] = await Promise.all([
@@ -53,7 +71,7 @@ export default async function MarketingKitPage({ params }: { params: Promise<{ s
   const detailList = [site.beds != null ? `${site.beds} beds` : "", site.baths != null ? `${site.baths} baths` : "", (site.property_sqft ?? site.sqft) ? `${Number(site.property_sqft ?? site.sqft).toLocaleString()} sq. ft.` : ""].filter(Boolean);
   const agentName = clean(agent?.full_name) || [clean(agent?.first_name), clean(agent?.last_name)].filter(Boolean).join(" ") || "Your Agent";
   const publicSlug = normalizePropertySiteSlug(site.site_slug) || normalizePropertySiteSlug(site.slug) || makePropertySiteSlug(street);
-  const designs = Object.fromEntries((Array.isArray(designRows) ? designRows : []).map((item) => [clean(item.kind), { revision: Number(item.revision || 1), updatedAt: clean(item.updated_at), design: record(item.design_json) }]));
+  const designs = designMap((Array.isArray(designRows) ? designRows : []) as Array<Record<string, unknown>>);
   const now = Date.now();
   const timestamps = (Array.isArray(trafficRows) ? trafficRows : []).map((item) => new Date(clean(item.created_at)).getTime()).filter(Number.isFinite);
 

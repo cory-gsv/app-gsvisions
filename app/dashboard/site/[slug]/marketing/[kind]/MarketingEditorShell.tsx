@@ -11,7 +11,7 @@ export type MarketingEditorProps = {
   demoMode?: boolean;
   isAdmin?: boolean;
   siteId: string;
-  kind: "flyer" | "social-square";
+  kind: "flyer" | "brochure" | "social-square";
   property: {
     street: string;
     locality: string;
@@ -28,6 +28,7 @@ export type MarketingEditorProps = {
     brokerage: string;
     photoUrl: string;
     brokerageLogoUrl: string;
+    license?: string;
   };
   media: Array<{ id: string; url: string; title: string }>;
 };

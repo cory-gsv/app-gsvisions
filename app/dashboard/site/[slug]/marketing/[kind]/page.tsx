@@ -34,12 +34,13 @@ export default async function MarketingEditorPage({ params }: { params: Promise<
   if (!profile || !site) notFound();
   const role = clean(profile.role).toLowerCase();
   const isAdmin = profile.is_admin === true || role === "admin";
-  const permitted = isAdmin || (marketingEditorAllowsClientAccess() && (role === "staff" || clean(site.client_id) === authData.user.id || clean(site.client_ms_id) === authData.user.id));
+  const { data: coListerAccess } = await admin.from("site_co_listers").select("site_id").eq("site_id", site.id).eq("profile_id", authData.user.id).maybeSingle();
+  const permitted = isAdmin || (marketingEditorAllowsClientAccess() && (role === "staff" || clean(site.client_id) === authData.user.id || clean(site.client_ms_id) === authData.user.id || Boolean(coListerAccess)));
   if (!permitted) redirect("/dashboard");
 
   const clientId = clean(site.client_id) || clean(site.client_ms_id);
   const [{ data: agent }, { data: mediaRows }] = await Promise.all([
-    clientId ? admin.from("profiles").select("full_name, first_name, last_name, phone, email, brokerage_name, profile_photo_url, brokerage_logo1_url, brokerage_logo2_url").eq("id", clientId).maybeSingle() : Promise.resolve({ data: null }),
+    clientId ? admin.from("profiles").select("full_name, first_name, last_name, phone, email, brokerage_name, profile_photo_url, brokerage_logo1_url, brokerage_logo2_url, mls_license").eq("id", clientId).maybeSingle() : Promise.resolve({ data: null }),
     admin.from("media_assets").select("id, title, alt_text, cloudinary_secure_url, s3_url, category, kind, is_published, status, sort_order").eq("site_id", site.id).order("sort_order", { ascending: true }),
   ]);
 
@@ -72,6 +73,7 @@ export default async function MarketingEditorPage({ params }: { params: Promise<
         brokerage: clean(agent?.brokerage_name),
         photoUrl: clean(agent?.profile_photo_url),
         brokerageLogoUrl: clean(agent?.brokerage_logo1_url) || clean(agent?.brokerage_logo2_url),
+        license: clean(agent?.mls_license),
       }}
       media={media}
     />

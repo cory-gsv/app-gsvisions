@@ -30,7 +30,7 @@ type Props = {
     license: string;
     profileReady: boolean;
   };
-  designs?: Partial<Record<"flyer" | "social-square" | "slideshow", { revision: number; updatedAt: string; design?: Record<string, unknown> }>>;
+  designs?: Partial<Record<"flyer" | "brochure" | "social-square" | "slideshow", { revision: number; updatedAt: string; design?: Record<string, unknown> }>>;
   traffic: {
     last7Days: number;
     last30Days: number;
@@ -43,7 +43,7 @@ type KitCard = {
   format: string;
   ratio: "portrait" | "story" | "landscape" | "square" | "wide";
   status: AssetStatus;
-  kind?: "flyer" | "social-square";
+  kind?: "flyer" | "brochure" | "social-square";
   note: string;
   badge?: string;
 };
@@ -58,7 +58,7 @@ const socialCards: KitCard[] = [
 
 const printCards: KitCard[] = [
   { title: "Property Flyer", format: "US Letter · PDF + PNG", ratio: "portrait", status: "ready", kind: "flyer", note: "Editable and print-ready", badge: "Editable" },
-  { title: "Two-page Brochure", format: "US Letter · PDF", ratio: "portrait", status: "planned", note: "Front-and-back layout", badge: "Planned" },
+  { title: "Two-page Brochure", format: "2-page US Letter · PDF + PNG", ratio: "portrait", status: "ready", kind: "brochure", note: "Editable property and agent presentation", badge: "Editable" },
   { title: "Four-page Booklet", format: "Print-ready PDF", ratio: "portrait", status: "planned", note: "Premium listing presentation", badge: "Planned" },
 ];
 
@@ -104,7 +104,7 @@ function SectionHeading({ eyebrow, title, description }: { eyebrow: string; titl
 export default function MarketingKitHub({ siteId, isAdmin = false, demoMode = false, property, agent, designs, traffic }: Props) {
   const photos = property.photoUrls.length ? property.photoUrls : property.heroUrl ? [property.heroUrl] : [];
   const brand = agent.brokerage || agent.name || "Agent branding";
-  const readyCount = 4;
+  const readyCount = 5;
   return (
     <main className="gsv-kit-hub">
       <header className="gsv-kit-topbar">
@@ -161,7 +161,7 @@ export default function MarketingKitHub({ siteId, isAdmin = false, demoMode = fa
       </section>
 
       <section id="print" className="gsv-kit-section gsv-kit-section--paper">
-        <SectionHeading eyebrow="Print-ready collateral" title="Flyers, brochures & booklets" description="The most-requested printable assets are now at the top of the kit. Customize the flyer today; the two-page brochure is next in the editor build queue." />
+        <SectionHeading eyebrow="Print-ready collateral" title="Flyers, brochures & booklets" description="Customize a one-page property flyer or build a polished two-page brochure with property photography, listing facts, and agent information." />
         <div className="gsv-kit-grid gsv-kit-grid--print">
           {printCards.map((card) => <KitCardView key={card.title} card={card} photos={photos} street={property.street} brand={brand} siteId={siteId} demoMode={demoMode} designs={designs} />)}
         </div>

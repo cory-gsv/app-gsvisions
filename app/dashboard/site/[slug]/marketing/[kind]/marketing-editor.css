@@ -31,6 +31,8 @@
 .gsv-owned-toolbar__selection { flex:0 0 auto;padding:5px 7px;border-radius:3px;background:#17231f;color:#ffc72c;font-size:9px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap; }
 .gsv-owned-workspace { min-width:0;min-height:0;display:grid;place-items:center;padding:30px;overflow:auto;background:#dedede;box-sizing:border-box; }
 .gsv-owned-sheet { flex:0 0 auto;background:#fff;box-shadow:0 14px 48px rgba(0,0,0,.22); }
+.gsv-owned-sheet.is-brochure { position:relative; }
+.gsv-owned-sheet.is-brochure::after { content:"Page 2";position:absolute;z-index:3;left:-58px;right:-58px;top:50%;height:2px;background:#a7a49c;color:#555;font-size:9px;font-weight:900;letter-spacing:.1em;line-height:2px;text-align:left;text-indent:4px;text-transform:uppercase;pointer-events:none;box-shadow:0 -5px 12px rgba(0,0,0,.12),0 5px 12px rgba(0,0,0,.12); }
 .gsv-owned-sheet canvas { display:block; }
 .gsv-mkt-media { min-width:0;overflow:auto;padding:22px 18px;background:#f5f1e7;border-left:1px solid #cfcac0; }
 .gsv-mkt-media__intro>span { color:#987000;font-size:9px;font-weight:900;letter-spacing:.15em;text-transform:uppercase; }

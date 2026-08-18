@@ -54,6 +54,14 @@ function safeFileName(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "property";
 }
 
+function formatPrice(value: string) {
+  const trimmed = String(value || "").trim();
+  const number = Number(trimmed.replace(/[$,\s]/g, ""));
+  return Number.isFinite(number) && number > 0
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(number)
+    : trimmed;
+}
+
 function text(attrs: Partial<DesignElement>): DesignElement {
   return { id: uid(), type: "text", x: 0, y: 0, width: 200, height: 40, fill: PRIMARY, fontSize: 24, lineHeight: 1.15, draggable: true, removable: true, ...attrs };
 }
@@ -94,12 +102,52 @@ function addAgentBranding(elements: DesignElement[], props: MarketingEditorProps
 
 function createTemplate(props: MarketingEditorProps): GsvDesign {
   const isFlyer = props.kind === "flyer";
-  const width = isFlyer ? 816 : 1080;
-  const height = isFlyer ? 1056 : 1080;
+  const isBrochure = props.kind === "brochure";
+  const width = isFlyer || isBrochure ? 816 : 1080;
+  const height = isBrochure ? 2112 : isFlyer ? 1056 : 1080;
   const hero = props.media[0]?.url || "";
   const details = [props.property.beds != null ? `${props.property.beds} Beds` : "", props.property.baths != null ? `${props.property.baths} Baths` : "", props.property.sqft ? `${Number(props.property.sqft).toLocaleString()} Sq. Ft.` : ""].filter(Boolean).join("   ·   ") || "Property details";
+  const price = formatPrice(props.property.price);
   const elements: DesignElement[] = [];
-  if (isFlyer) {
+  if (isBrochure) {
+    const pageTwo = 1056;
+    elements.push(rect("page-one-background", { x: 0, y: 0, width, height: pageTwo, fill: "#f6f4ef", removable: false }));
+    if (hero) elements.push(image("hero-image", hero, { x: 0, y: 0, width, height: 594, fit: "cover", removable: false }));
+    else elements.push(rect("hero-placeholder", { x: 0, y: 0, width, height: 594, fill: "#d8d5cb", removable: false }));
+    elements.push(rect("photo-overlay", { x: 0, y: 355, width, height: 239, fill: "#111714", opacity: .58, removable: false }));
+    elements.push(text({ role: "collection-label", x: 48, y: 42, width: 280, height: 28, text: "PROPERTY BROCHURE", fontSize: 12, fontWeight: "700", letterSpacing: 3, fill: "#ffffff", draggable: false }));
+    elements.push(text({ role: "property-street", x: 48, y: 416, width: 720, height: 70, text: props.property.street, fontSize: 43, fontWeight: "700", fill: "#ffffff" }));
+    elements.push(text({ role: "property-locality", x: 50, y: 494, width: 470, height: 34, text: props.property.locality, fontSize: 20, fill: "#e6e8e6" }));
+    elements.push(text({ role: "property-price", x: 536, y: 485, width: 232, height: 45, text: price, fontSize: 27, fontWeight: "700", fill: "#ffffff", align: "right" }));
+    elements.push(rect("accent-bar", { x: 0, y: 594, width, height: 12, fill: "#b7a46e", removable: false }));
+    elements.push(rect("fact-band", { x: 0, y: 606, width, height: 112, fill: "#242824", removable: false }));
+    elements.push(text({ role: "property-details", x: 55, y: 641, width: 706, height: 44, text: details.toUpperCase(), fontSize: 19, fontWeight: "700", letterSpacing: 1.3, fill: "#ffffff", align: "center" }));
+    elements.push(text({ role: "property-description", x: 48, y: 765, width: 440, height: 182, text: props.property.description, fontSize: 16, lineHeight: 1.48, fill: "#353c38" }));
+    const pageOnePhotos = [props.media[1], props.media[2]].filter(Boolean);
+    if (pageOnePhotos[0]) elements.push(image("brochure-photo", pageOnePhotos[0].url, { x: 522, y: 756, width: 246, height: 128, fit: "cover" }));
+    if (pageOnePhotos[1]) elements.push(image("brochure-photo", pageOnePhotos[1].url, { x: 522, y: 898, width: 246, height: 110, fit: "cover" }));
+    elements.push(rect("agent-footer", { x: 0, y: 1018, width, height: 38, fill: "#b7a46e", removable: false }));
+    elements.push(text({ role: "agent-footer-text", x: 42, y: 1031, width: 732, height: 14, text: [props.agent.name, props.agent.brokerage, props.agent.phone].filter(Boolean).join("  ·  "), fontSize: 9, fontWeight: "700", letterSpacing: .8, fill: "#202420", align: "center", draggable: false }));
+
+    elements.push(rect("page-two-background", { x: 0, y: pageTwo, width, height: pageTwo, fill: "#ffffff", removable: false }));
+    elements.push(rect("header-background", { x: 0, y: pageTwo, width, height: 112, fill: "#242824", removable: false }));
+    elements.push(text({ role: "page-two-title", x: 48, y: pageTwo + 38, width: 520, height: 42, text: "Explore the property", fontSize: 31, fontWeight: "700", fill: "#ffffff" }));
+    elements.push(text({ role: "page-two-address", x: 570, y: pageTwo + 45, width: 198, height: 34, text: props.property.street, fontSize: 13, fill: "#d9d3c2", align: "right" }));
+    const galleryPhotos = [props.media[3] || props.media[1], props.media[4] || props.media[2], props.media[5] || props.media[0]].filter(Boolean);
+    if (galleryPhotos[0]) elements.push(image("brochure-photo", galleryPhotos[0].url, { x: 42, y: pageTwo + 150, width: 466, height: 324, fit: "cover" }));
+    if (galleryPhotos[1]) elements.push(image("brochure-photo", galleryPhotos[1].url, { x: 526, y: pageTwo + 150, width: 248, height: 154, fit: "cover" }));
+    if (galleryPhotos[2]) elements.push(image("brochure-photo", galleryPhotos[2].url, { x: 526, y: pageTwo + 320, width: 248, height: 154, fit: "cover" }));
+    elements.push(text({ role: "property-highlights", x: 42, y: pageTwo + 520, width: 732, height: 44, text: "PROPERTY HIGHLIGHTS", fontSize: 13, fontWeight: "700", letterSpacing: 2.5, fill: "#8a7540" }));
+    elements.push(rect("accent-rule", { x: 42, y: pageTwo + 562, width: 732, height: 2, fill: "#b7a46e", removable: false }));
+    elements.push(text({ role: "property-description-two", x: 42, y: pageTwo + 592, width: 732, height: 150, text: props.property.description, fontSize: 16, lineHeight: 1.5, fill: "#353c38" }));
+    elements.push(rect("agent-panel", { x: 0, y: pageTwo + 770, width, height: 286, fill: "#ece8df", removable: false }));
+    if (props.agent.photoUrl) elements.push(image("agent-photo", props.agent.photoUrl, { x: 48, y: pageTwo + 804, width: 168, height: 204, fit: "cover" }));
+    else elements.push(text({ role: "agent-initials", x: 48, y: pageTwo + 875, width: 168, height: 54, text: props.agent.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(), fontSize: 42, fontWeight: "700", fill: "#5f6964", align: "center" }));
+    elements.push(text({ role: "agent-label", x: 252, y: pageTwo + 808, width: 470, height: 22, text: "YOUR LISTING PROFESSIONAL", fontSize: 11, fontWeight: "700", letterSpacing: 2.2, fill: "#8a7540" }));
+    elements.push(text({ role: "agent-name", x: 252, y: pageTwo + 846, width: 470, height: 48, text: props.agent.name, fontSize: 34, fontWeight: "700", fill: "#202420" }));
+    elements.push(text({ role: "agent-contact", x: 252, y: pageTwo + 904, width: 470, height: 90, text: [props.agent.brokerage, props.agent.license ? `License ${props.agent.license}` : "", props.agent.phone, props.agent.email].filter(Boolean).join("\n"), fontSize: 13, lineHeight: 1.42, fill: "#4f5853" }));
+    if (props.agent.brokerageLogoUrl) elements.push(image("brokerage-logo", props.agent.brokerageLogoUrl, { x: 622, y: pageTwo + 938, width: 152, height: 62, fit: "contain" }));
+  } else if (isFlyer) {
     elements.push(rect("header-background", { x: 0, y: 0, width, height: 88, fill: PRIMARY }));
     elements.push(text({ role: "collection-label", x: 620, y: 30, width: 155, height: 30, text: "PROPERTY COLLECTION", fontSize: 11, letterSpacing: 2, align: "right", fill: ACCENT, draggable: false }));
     if (hero) elements.push(image("hero-image", hero, { x: 0, y: 88, width, height: 520, fit: "contain" }));
@@ -107,7 +155,7 @@ function createTemplate(props: MarketingEditorProps): GsvDesign {
     elements.push(rect("photo-overlay", { x: 0, y: 568, width, height: 40, fill: PRIMARY, opacity: .86 }));
     elements.push(text({ role: "property-street", x: 44, y: 638, width: 535, height: 60, text: props.property.street, fontSize: 40, fontWeight: "700" }));
     elements.push(text({ role: "property-locality", x: 46, y: 702, width: 520, height: 30, text: props.property.locality, fontSize: 20, fill: "#64706b" }));
-    elements.push(text({ role: "property-price", x: 600, y: 645, width: 170, height: 50, text: props.property.price, fontSize: 26, fontWeight: "700", align: "right" }));
+    elements.push(text({ role: "property-price", x: 600, y: 645, width: 170, height: 50, text: price, fontSize: 26, fontWeight: "700", align: "right" }));
     elements.push(rect("accent-bar", { x: 44, y: 760, width: 728, height: 2, fill: ACCENT }));
     elements.push(text({ role: "property-details", x: 44, y: 784, width: 728, height: 48, text: details, fontSize: 18, fontWeight: "700", align: "center", fill: ACCENT }));
     elements.push(text({ role: "property-description", x: 44, y: 850, width: 450, height: 104, text: props.property.description, fontSize: 16, lineHeight: 1.45, fill: "#48534f" }));
@@ -123,9 +171,9 @@ function createTemplate(props: MarketingEditorProps): GsvDesign {
     elements.push(text({ role: "property-street", x: 66, y: 754, width: 900, height: 80, text: props.property.street, fontSize: 58, fontWeight: "700", fill: "#ffffff" }));
     elements.push(text({ role: "property-locality", x: 68, y: 844, width: 700, height: 45, text: props.property.locality, fontSize: 26, fill: "#d9dfdc" }));
     elements.push(text({ role: "property-details", x: 68, y: 916, width: 700, height: 40, text: details, fontSize: 24, fontWeight: "700", fill: ACCENT }));
-    elements.push(text({ role: "property-price", x: 790, y: 846, width: 225, height: 50, text: props.property.price, fontSize: 28, fontWeight: "700", fill: "#ffffff", align: "right" }));
+    elements.push(text({ role: "property-price", x: 790, y: 846, width: 225, height: 50, text: price, fontSize: 28, fontWeight: "700", fill: "#ffffff", align: "right" }));
   }
-  addAgentBranding(elements, props, isFlyer);
+  if (!isBrochure) addAgentBranding(elements, props, isFlyer);
   return { schema: "gsv-design-v1", width, height, kind: props.kind, background: "#f5f1e7", elements };
 }
 
@@ -257,7 +305,7 @@ export default function MarketingEditor(props: MarketingEditorProps) {
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const historyRef = useRef<GsvDesign[]>([clone(initial)]);
   const historyIndex = useRef(0);
-  const fileBase = `${safeFileName(props.property.street)}-${props.kind === "flyer" ? "flyer" : "social-post"}`;
+  const fileBase = `${safeFileName(props.property.street)}-${props.kind === "flyer" ? "flyer" : props.kind === "brochure" ? "brochure" : "social-post"}`;
   const selected = design.elements.find((element) => element.id === selectedId) || null;
 
   const replaceDesign = useCallback((next: GsvDesign, dirty = true, pushHistory = true) => {
@@ -337,7 +385,11 @@ export default function MarketingEditor(props: MarketingEditorProps) {
   const ensureOverlay = (opacity: number) => {
     const existing = design.elements.find((element) => element.role === "photo-overlay");
     if (existing) { updateElement(existing.id, { opacity, visible: opacity > 0 }); return; }
-    const overlay = props.kind === "flyer" ? rect("photo-overlay", { x: 0, y: 568, width: design.width, height: 40, fill: OVERLAY, opacity }) : rect("photo-overlay", { x: 0, y: 0, width: design.width, height: design.height, fill: OVERLAY, opacity });
+    const overlay = props.kind === "flyer"
+      ? rect("photo-overlay", { x: 0, y: 568, width: design.width, height: 40, fill: OVERLAY, opacity })
+      : props.kind === "brochure"
+        ? rect("photo-overlay", { x: 0, y: 355, width: design.width, height: 239, fill: OVERLAY, opacity })
+        : rect("photo-overlay", { x: 0, y: 0, width: design.width, height: design.height, fill: OVERLAY, opacity });
     const heroIndex = Math.max(0, design.elements.findIndex((element) => element.role === "hero-image"));
     const elements = [...design.elements]; elements.splice(heroIndex + 1, 0, overlay);
     replaceDesign({ ...design, elements });
@@ -361,8 +413,8 @@ export default function MarketingEditor(props: MarketingEditorProps) {
   const moveLayer = (direction: -1 | 1) => { if (!selected) return; const index = design.elements.findIndex((element) => element.id === selected.id); const nextIndex = Math.max(0, Math.min(design.elements.length - 1, index + direction)); if (index === nextIndex) return; const elements = [...design.elements]; const [item] = elements.splice(index, 1); elements.splice(nextIndex, 0, item); replaceDesign({ ...design, elements }); };
   const addText = () => { const item = text({ x: design.width * .25, y: design.height * .45, width: design.width * .5, height: 60, text: "Add your text", fontSize: 32, fontWeight: "700", fill: PRIMARY, align: "center" }); replaceDesign({ ...design, elements: [...design.elements, item] }); setSelectedId(item.id); };
   const addMediaImage = (item: MarketingEditorProps["media"][number], point?: { x: number; y: number }) => {
-    const width = props.kind === "flyer" ? 180 : 240;
-    const height = props.kind === "flyer" ? 120 : 160;
+    const width = props.kind === "flyer" || props.kind === "brochure" ? 180 : 240;
+    const height = props.kind === "flyer" || props.kind === "brochure" ? 120 : 160;
     const mediaImage = image("media-thumbnail", item.url, {
       x: Math.max(0, Math.min(design.width - width, (point?.x ?? design.width / 2) - width / 2)),
       y: Math.max(0, Math.min(design.height - height, (point?.y ?? design.height / 2) - height / 2)),
@@ -377,7 +429,11 @@ export default function MarketingEditor(props: MarketingEditorProps) {
   const resetHeroBounds = () => {
     const hero = design.elements.find((element) => element.role === "hero-image");
     if (!hero) return;
-    updateElement(hero.id, props.kind === "flyer" ? { x: 0, y: 88, width: design.width, height: 520, rotation: 0 } : { x: 0, y: 0, width: design.width, height: design.height, rotation: 0 });
+    updateElement(hero.id, props.kind === "flyer"
+      ? { x: 0, y: 88, width: design.width, height: 520, rotation: 0 }
+      : props.kind === "brochure"
+        ? { x: 0, y: 0, width: design.width, height: 594, rotation: 0 }
+        : { x: 0, y: 0, width: design.width, height: design.height, rotation: 0 });
   };
   const reset = () => { if (!window.confirm("Reset this asset to the original agent-branded template? Your current edits will be replaced after you save.")) return; const next = createTemplate(props); replaceDesign(next); setSelectedId(null); setMessage("Template reset · save to keep it"); };
 
@@ -393,27 +449,49 @@ export default function MarketingEditor(props: MarketingEditorProps) {
     try {
       setSelectedId(null);
       await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      const uri = stageRef.current?.toDataURL({ pixelRatio: 2 / scale }) || "";
       const { jsPDF } = await import("jspdf");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [design.width, design.height], hotfixes: ["px_scaling"] });
-      pdf.addImage(uri, "PNG", 0, 0, design.width, design.height); pdf.save(`${fileBase}.pdf`);
+      const pdfPageHeight = props.kind === "brochure" ? design.height / 2 : design.height;
+      const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: [design.width, pdfPageHeight], hotfixes: ["px_scaling"] });
+      if (props.kind === "brochure") {
+        const rendered = stageRef.current?.toCanvas({ pixelRatio: 2 / scale });
+        if (!rendered) throw new Error("The brochure canvas is not available.");
+        const pageHeight = design.height / 2;
+        const crop = document.createElement("canvas");
+        crop.width = design.width * 2;
+        crop.height = pageHeight * 2;
+        const context = crop.getContext("2d");
+        if (!context) throw new Error("The brochure export canvas is not available.");
+        const renderPage = (page: number) => {
+          context.clearRect(0, 0, crop.width, crop.height);
+          context.drawImage(rendered, 0, page * crop.height, crop.width, crop.height, 0, 0, crop.width, crop.height);
+          return crop.toDataURL("image/png");
+        };
+        pdf.addImage(renderPage(0), "PNG", 0, 0, design.width, pageHeight);
+        pdf.addPage([design.width, pageHeight], "portrait");
+        pdf.addImage(renderPage(1), "PNG", 0, 0, design.width, pageHeight);
+      } else {
+        const uri = stageRef.current?.toDataURL({ pixelRatio: 2 / scale }) || "";
+        pdf.addImage(uri, "PNG", 0, 0, design.width, design.height);
+      }
+      pdf.save(`${fileBase}.pdf`);
     } catch { setSaveState("error"); setMessage("PDF export failed. Please try PNG or check the source images."); }
   };
 
-  const fit = Math.min((viewport.width - 70) / design.width, (viewport.height - 70) / design.height, 1);
+  const previewHeight = props.kind === "brochure" ? design.height / 2 : design.height;
+  const fit = Math.min((viewport.width - 70) / design.width, (viewport.height - 70) / previewHeight, 1);
   const scale = Math.max(.1, fit * zoom / 100);
 
   return <main className="gsv-mkt-editor">
     <header className="gsv-mkt-editor__header">
       <div className="gsv-mkt-editor__identity">
         <Link href={props.demoMode ? "/beta/marketing-kit-preview" : `/dashboard/site/${encodeURIComponent(props.siteId)}/marketing`} onClick={(event) => { if (["dirty", "saving"].includes(saveState) && !window.confirm("Leave without saving your latest design changes?")) event.preventDefault(); }} aria-label="Return to marketing kit">←</Link>
-        <div><span>Marketing Kit</span><strong>{props.kind === "flyer" ? "Printable Flyer" : "Square Social Post"}</strong></div>
+        <div><span>Marketing Kit</span><strong>{props.kind === "flyer" ? "Printable Flyer" : props.kind === "brochure" ? "Two-page Brochure" : "Square Social Post"}</strong></div>
       </div>
       <PortalNavActions isAdmin={props.isAdmin} className="gsv-mkt-editor__portal-actions" />
       <div className="gsv-mkt-editor__actions">
         <span className={`gsv-mkt-editor__status is-${saveState}`}>{message}</span>
         <button type="button" className="is-secondary" onClick={reset}>Reset</button>
-        {props.kind === "flyer" ? <button type="button" className="is-secondary" onClick={exportPdf}>Download PDF</button> : null}
+        {props.kind === "flyer" || props.kind === "brochure" ? <button type="button" className="is-secondary" onClick={exportPdf}>Download PDF</button> : null}
         <button type="button" className="is-secondary" onClick={exportPng}>Download PNG</button>
         <button type="button" className="is-primary" onClick={save} disabled={saveState === "saving" || saveState === "loading"}>{saveState === "saving" ? "Saving…" : "Save design"}</button>
       </div>
@@ -452,7 +530,7 @@ export default function MarketingEditor(props: MarketingEditorProps) {
           const bounds = stageNode.getBoundingClientRect();
           addMediaImage(item, { x: (event.clientX - bounds.left) / scale, y: (event.clientY - bounds.top) / scale });
         }}>
-          <div className="gsv-owned-sheet" style={{ width: design.width * scale, height: design.height * scale }}>
+          <div className={`gsv-owned-sheet ${props.kind === "brochure" ? "is-brochure" : ""}`} style={{ width: design.width * scale, height: design.height * scale }}>
             <Stage ref={stageRef} width={design.width * scale} height={design.height * scale} scaleX={scale} scaleY={scale} onMouseDown={(event) => { if (event.target === event.target.getStage()) setSelectedId(null); }}>
               <Layer>
                 <Rect x={0} y={0} width={design.width} height={design.height} fill={design.background} listening={false} />
@@ -468,8 +546,8 @@ export default function MarketingEditor(props: MarketingEditorProps) {
         <section className="gsv-mkt-styles">
           <div className="gsv-mkt-media__intro"><span>Design controls</span><strong>Colors & overlay</strong><p>Apply colors across the template or select an individual object for its own controls.</p></div>
           <div className="gsv-mkt-styles__colors">
-            <label><input type="color" value={roleColor(["content-panel", "header-background", "agent-footer"], PRIMARY)} onChange={(event) => updateRoles(["content-panel", "header-background", "agent-footer"], { fill: event.target.value })} /><span>Primary</span></label>
-            <label><input type="color" value={roleColor(["accent-bar", "property-details", "collection-label"], ACCENT)} onChange={(event) => updateRoles(["accent-bar", "property-details", "collection-label"], { fill: event.target.value })} /><span>Accent</span></label>
+            <label><input type="color" value={roleColor(["content-panel", "header-background", "fact-band", "agent-footer"], PRIMARY)} onChange={(event) => updateRoles(["content-panel", "header-background", "fact-band", "agent-footer"], { fill: event.target.value })} /><span>Primary</span></label>
+            <label><input type="color" value={roleColor(["accent-bar", "accent-rule", "property-details", "collection-label", "agent-label"], ACCENT)} onChange={(event) => updateRoles(["accent-bar", "accent-rule", "property-details", "collection-label", "agent-label"], { fill: event.target.value })} /><span>Accent</span></label>
             <label><input type="color" value={roleColor(["photo-overlay"], OVERLAY)} onChange={(event) => updateRoles(["photo-overlay"], { fill: event.target.value })} /><span>Overlay</span></label>
           </div>
           <label className="gsv-mkt-styles__range"><span>Image dimming</span><input type="range" min="0" max="90" step="5" value={Math.round((design.elements.find((element) => element.role === "photo-overlay")?.opacity || 0) * 100)} onChange={(event) => ensureOverlay(Number(event.target.value) / 100)} /><small>0% removes the overlay</small></label>
