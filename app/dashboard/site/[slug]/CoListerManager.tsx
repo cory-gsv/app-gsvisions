@@ -28,9 +28,9 @@ export default function CoListerManager({ siteId, current, options }: { siteId: 
     finally { setSaving(false); }
   }
 
-  return <div style={{ position: "relative", minWidth: 0 }}>
-    <button type="button" onClick={() => { setEditing((value) => !value); setMessage(""); }} style={{ display: "grid", gridTemplateColumns: current?.photo ? "52px minmax(0,1fr)" : "minmax(0,1fr)", gap: 10, alignItems: "center", width: "100%", minHeight: 72, padding: 9, border: "1px solid rgba(255,255,255,.25)", background: "rgba(255,255,255,.08)", color: "#fff", textAlign: "left", cursor: "pointer" }}>
-      {current?.photo ? <img src={current.photo} alt="" style={{ width: 52, height: 52, objectFit: "cover", background: "#e5e2d8" }} /> : null}
+  return <div style={{ position: "relative", minWidth: 0, height: "100%" }}>
+    <button type="button" onClick={() => { setEditing((value) => !value); setMessage(""); }} style={{ display: "grid", gridTemplateColumns: current?.photo ? "64px minmax(0,1fr)" : "minmax(0,1fr)", gap: 12, alignItems: "center", width: "100%", height: "100%", minHeight: 84, padding: 10, border: "1px solid rgba(255,255,255,.25)", background: "rgba(255,255,255,.08)", color: "#fff", textAlign: "left", cursor: "pointer" }}>
+      {current?.photo ? <img src={current.photo} alt="" style={{ width: 64, height: 64, objectFit: "cover", background: "#e5e2d8" }} /> : null}
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "block", color: "#ffc72c", fontSize: 9, fontWeight: 900, letterSpacing: ".12em", textTransform: "uppercase", marginBottom: 5 }}>Co-lister</span>
         <strong style={{ display: "block", fontSize: 13, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{current?.name || "Add co-lister"}</strong>

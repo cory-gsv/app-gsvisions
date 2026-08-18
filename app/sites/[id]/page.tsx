@@ -250,6 +250,12 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
   const baths = positiveNumber(site.baths);
   const squareFeet = positiveNumber(site.property_sqft || site.sqft);
   const lotSize = positiveNumber(site.lot_sqft);
+  const listPrice = positiveNumber(data.list_price || data.price);
+  const formattedListPrice = listPrice == null ? "" : new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(listPrice);
   const rawYearBuilt = positiveNumber(site.year_built);
   const yearBuilt = rawYearBuilt && Number.isInteger(rawYearBuilt) && rawYearBuilt >= 1700 && rawYearBuilt <= new Date().getFullYear() + 2
     ? rawYearBuilt
@@ -272,9 +278,10 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
       <div><a href="#details">Details</a>{video ? <a href="#video">Video</a> : null}{gallery.length ? <a href="#gallery">Gallery</a> : null}{tour ? <a href="#tour">3D Scanning</a> : null}{floorPlans.length ? <a href="#floor-plans">Floor plans</a> : null}<a href="#contact">Contact</a><a href="#map">Map</a></div>
     </nav>
 
-    <PropertyHeroSlideshow images={heroImages} address={streetAddress} place={place} agentName={agentName} agentPhoto={clean(agent?.profile_photo_url)} brokerage={clean(agent?.brokerage_name)} phone={agentPhone} license={clean(agent?.mls_license)} listingMls={listingMls} status={listingStatus} />
+    <PropertyHeroSlideshow images={heroImages} address={streetAddress} place={place} agentName={agentName} agentPhoto={clean(agent?.profile_photo_url)} brokerage={clean(agent?.brokerage_name)} phone={agentPhone} license={clean(agent?.mls_license)} listingMls={listingMls} status={listingStatus} coLister={coListerName ? { name: coListerName, photo: coListerPhoto, brokerage: coListerBrokerage, phone: coListerPhone, license: coListerLicense } : undefined} />
 
     <div className="property-facts-wrap">
+      {formattedListPrice ? <div className="property-list-price"><span>Offered at</span><strong>{formattedListPrice}</strong></div> : null}
       {stats.length ? <dl className="property-fact-band">{stats.map(({ label, display }) => <div key={label}><dt>{label}</dt><dd>{display}</dd></div>)}</dl> : null}
       <div className="property-local-links"><a href={schoolsUrl} target="_blank" rel="noreferrer">Schools ↗</a><a href={neighborhoodUrl} target="_blank" rel="noreferrer">Neighborhood ↗</a></div>
     </div>

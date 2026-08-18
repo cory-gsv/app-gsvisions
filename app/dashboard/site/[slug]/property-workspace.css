@@ -382,6 +382,8 @@
 }
 
 .gsv-summary-contacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
+.gsv-summary-contacts > * { height: 100%; }
+.gsv-summary-contacts .gsv-client-card { max-width: none !important; min-height: 84px; height: 100%; }
 
 .gsv-client-card {
   transition: border-color .16s ease, background .16s ease, transform .16s ease;

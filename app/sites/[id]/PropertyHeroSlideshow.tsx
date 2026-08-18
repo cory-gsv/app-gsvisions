@@ -13,9 +13,16 @@ type Props = {
   license?: string;
   listingMls?: string;
   status?: string;
+  coLister?: {
+    name: string;
+    photo?: string;
+    brokerage?: string;
+    phone?: string;
+    license?: string;
+  };
 };
 
-export default function PropertyHeroSlideshow({ images, address, place, agentName, agentPhoto, brokerage, phone, license, listingMls, status = "Property showcase" }: Props) {
+export default function PropertyHeroSlideshow({ images, address, place, agentName, agentPhoto, brokerage, phone, license, listingMls, status = "Property showcase", coLister }: Props) {
   const [active, setActive] = useState(0);
 
   useEffect(() => {
@@ -33,9 +40,15 @@ export default function PropertyHeroSlideshow({ images, address, place, agentNam
       </div>
       <div className="hero-shade" />
       <div className="vertical-address">{address}{place ? <><i />{place}</> : null}</div>
-      <div className="hero-agent">
-        {agentPhoto ? <img src={agentPhoto} alt="" /> : <span>{agentName.charAt(0)}</span>}
-        <div><strong>{agentName}</strong>{brokerage ? <small>{brokerage}</small> : null}{phone ? <small>{phone}</small> : null}{license ? <small>LIC. {license}</small> : null}{listingMls ? <small>MLS# {listingMls}</small> : null}</div>
+      <div className="hero-agents" aria-label="Listing agents">
+        <div className="hero-agent">
+          {agentPhoto ? <img src={agentPhoto} alt={agentName} /> : <span>{agentName.charAt(0)}</span>}
+          <div><strong>{agentName}</strong>{brokerage ? <small>{brokerage}</small> : null}{phone ? <small>{phone}</small> : null}{license ? <small>LIC. {license}</small> : null}{listingMls ? <small>MLS# {listingMls}</small> : null}</div>
+        </div>
+        {coLister ? <div className="hero-agent">
+          {coLister.photo ? <img src={coLister.photo} alt={coLister.name} /> : <span>{coLister.name.charAt(0)}</span>}
+          <div><strong>{coLister.name}</strong>{coLister.brokerage ? <small>{coLister.brokerage}</small> : null}{coLister.phone ? <small>{coLister.phone}</small> : null}{coLister.license ? <small>LIC. {coLister.license}</small> : null}</div>
+        </div> : null}
       </div>
       <div className="hero-status">{status}</div>
       {images.length > 1 ? <div className="hero-progress" aria-label="Slideshow position">{images.map((_, index) => <button key={index} aria-label={`Show photo ${index + 1}`} aria-current={index === active} onClick={() => setActive(index)} />)}</div> : null}
