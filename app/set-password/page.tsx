@@ -12,15 +12,25 @@ export default function SetPasswordPage() {
   const [status, setStatus] = useState("Verifying your secure link…");
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [tokenHash, setTokenHash] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) {
-        setStatus("This password setup link is invalid or has expired. Request a new password email from the login page.");
+      if (data.session) {
+        setReady(true);
+        setStatus("");
         return;
       }
-      setReady(true);
-      setStatus("");
+      const params = new URLSearchParams(window.location.search);
+      const recoveryToken = String(params.get("token_hash") || "").trim();
+      if (recoveryToken && params.get("type") === "recovery") {
+        setTokenHash(recoveryToken);
+        setReady(true);
+        setStatus("");
+        window.history.replaceState({}, "", "/set-password");
+        return;
+      }
+      setStatus("This password setup link is invalid or has expired. Request a new password email from the login page.");
     });
   }, []);
 
@@ -30,6 +40,17 @@ export default function SetPasswordPage() {
     if (password !== confirm) return setStatus("Passwords do not match.");
     setLoading(true);
     setStatus("Setting your password…");
+    if (tokenHash) {
+      const { error: verifyError } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: "recovery",
+      });
+      if (verifyError) {
+        setStatus("This secure link has expired or was already used. Request a new password email from the login page.");
+        setLoading(false);
+        return;
+      }
+    }
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
       setStatus(error.message || "Could not set your password.");

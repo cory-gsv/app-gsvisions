@@ -33,10 +33,13 @@ export async function sendNewBookingClientInvite(args: {
   const tokenHash = clean(data.properties?.hashed_token);
   if (!tokenHash) throw new Error("Supabase did not create a password setup token.");
 
-  const setupUrl = new URL("/auth/callback", origin);
+  // Do not verify a one-time recovery token in a GET callback. Corporate email
+  // security scanners commonly open links before the recipient, consuming the
+  // token and leaving the real browser in a login loop. The password form
+  // verifies it only when the recipient submits a new password.
+  const setupUrl = new URL("/set-password", origin);
   setupUrl.searchParams.set("token_hash", tokenHash);
   setupUrl.searchParams.set("type", "recovery");
-  setupUrl.searchParams.set("next", "/set-password");
 
   const apiKey = clean(process.env.RESEND_API_KEY);
   if (!apiKey) throw new Error("Email delivery is not configured.");
@@ -73,10 +76,9 @@ export async function sendPasswordResetEmail(args: {
   const tokenHash = clean(data.properties?.hashed_token);
   if (!tokenHash) throw new Error("Supabase did not create a password reset token.");
 
-  const resetUrl = new URL("/auth/callback", origin);
+  const resetUrl = new URL("/set-password", origin);
   resetUrl.searchParams.set("token_hash", tokenHash);
   resetUrl.searchParams.set("type", "recovery");
-  resetUrl.searchParams.set("next", "/set-password");
 
   const apiKey = clean(process.env.RESEND_API_KEY);
   if (!apiKey) throw new Error("Email delivery is not configured.");
