@@ -24,6 +24,7 @@ type DesignElement = {
   cornerRadius?: number;
   text?: string;
   fontSize?: number;
+  fontFamily?: string;
   fontWeight?: string;
   fontStyle?: string;
   align?: "left" | "center" | "right";
@@ -111,42 +112,82 @@ function createTemplate(props: MarketingEditorProps): GsvDesign {
   const elements: DesignElement[] = [];
   if (isBrochure) {
     const pageTwo = 1056;
-    elements.push(rect("page-one-background", { x: 0, y: 0, width, height: pageTwo, fill: "#f6f4ef", removable: false }));
-    if (hero) elements.push(image("hero-image", hero, { x: 0, y: 0, width, height: 594, fit: "cover", removable: false }));
-    else elements.push(rect("hero-placeholder", { x: 0, y: 0, width, height: 594, fill: "#d8d5cb", removable: false }));
-    elements.push(rect("photo-overlay", { x: 0, y: 355, width, height: 239, fill: "#111714", opacity: .58, removable: false }));
-    elements.push(text({ role: "collection-label", x: 48, y: 42, width: 280, height: 28, text: "PROPERTY BROCHURE", fontSize: 12, fontWeight: "700", letterSpacing: 3, fill: "#ffffff", draggable: false }));
-    elements.push(text({ role: "property-street", x: 48, y: 416, width: 720, height: 70, text: props.property.street, fontSize: 43, fontWeight: "700", fill: "#ffffff" }));
-    elements.push(text({ role: "property-locality", x: 50, y: 494, width: 470, height: 34, text: props.property.locality, fontSize: 20, fill: "#e6e8e6" }));
-    elements.push(text({ role: "property-price", x: 536, y: 485, width: 232, height: 45, text: price, fontSize: 27, fontWeight: "700", fill: "#ffffff", align: "right" }));
-    elements.push(rect("accent-bar", { x: 0, y: 594, width, height: 12, fill: "#b7a46e", removable: false }));
-    elements.push(rect("fact-band", { x: 0, y: 606, width, height: 112, fill: "#242824", removable: false }));
-    elements.push(text({ role: "property-details", x: 55, y: 641, width: 706, height: 44, text: details.toUpperCase(), fontSize: 19, fontWeight: "700", letterSpacing: 1.3, fill: "#ffffff", align: "center" }));
-    elements.push(text({ role: "property-description", x: 48, y: 765, width: 440, height: 182, text: props.property.description, fontSize: 16, lineHeight: 1.48, fill: "#353c38" }));
-    const pageOnePhotos = [props.media[1], props.media[2]].filter(Boolean);
-    if (pageOnePhotos[0]) elements.push(image("brochure-photo", pageOnePhotos[0].url, { x: 522, y: 756, width: 246, height: 128, fit: "cover" }));
-    if (pageOnePhotos[1]) elements.push(image("brochure-photo", pageOnePhotos[1].url, { x: 522, y: 898, width: 246, height: 110, fit: "cover" }));
-    elements.push(rect("agent-footer", { x: 0, y: 1018, width, height: 38, fill: "#b7a46e", removable: false }));
-    elements.push(text({ role: "agent-footer-text", x: 42, y: 1031, width: 732, height: 14, text: [props.agent.name, props.agent.brokerage, props.agent.phone].filter(Boolean).join("  ·  "), fontSize: 9, fontWeight: "700", letterSpacing: .8, fill: "#202420", align: "center", draggable: false }));
+    const charcoal = "#292827";
+    const gold = "#b8a675";
+    const warmWhite = "#fbfaf7";
+    const pageOnePhotos = [props.media[1] || props.media[0], props.media[2] || props.media[1], props.media[3] || props.media[0]].filter(Boolean);
+    const agentDetails = [props.agent.brokerage, props.agent.license ? `License ${props.agent.license}` : "", props.agent.phone, props.agent.email].filter(Boolean).join("\n");
 
+    // Page one follows the reference brochure's layered listing layout: hero,
+    // circular detail photos, dark information band, feature strip, and agent card.
+    elements.push(rect("page-one-background", { x: 0, y: 0, width, height: pageTwo, fill: warmWhite, removable: false }));
+    if (hero) elements.push(image("hero-image", hero, { x: 0, y: 0, width, height: 390, fit: "cover", removable: false }));
+    else elements.push(rect("hero-placeholder", { x: 0, y: 0, width, height: 390, fill: "#d8d5cb", removable: false }));
+    elements.push(rect("photo-overlay", { x: 0, y: 0, width, height: 390, fill: "#111111", opacity: .12, removable: false }));
+    elements.push(rect("showcase-badge", { x: 592, y: 24, width: 188, height: 48, fill: charcoal, opacity: .88, cornerRadius: 8 }));
+    elements.push(text({ role: "collection-label", x: 600, y: 41, width: 172, height: 18, text: "PROPERTY SHOWCASE", fontSize: 9, fontWeight: "700", letterSpacing: 1.2, fill: "#ffffff", align: "center" }));
+    elements.push(rect("listing-band", { x: 0, y: 390, width, height: 190, fill: charcoal, removable: false }));
+    elements.push(text({ role: "listing-headline", x: 260, y: 350, width: 515, height: 64, text: "FOR SALE", fontFamily: "Arial", fontSize: 58, fontWeight: "400", fill: "#ffffff", align: "right", letterSpacing: 2 }));
+    elements.push(rect("headline-rule-dark", { x: 252, y: 416, width: 514, height: 5, fill: "#111111", removable: false }));
+    elements.push(rect("headline-rule-light", { x: 252, y: 430, width: 514, height: 3, fill: "#ffffff", removable: false }));
+    elements.push(text({ role: "property-street", x: 258, y: 453, width: 508, height: 45, text: props.property.street, fontSize: 28, fontWeight: "400", fill: "#ffffff", align: "left" }));
+    elements.push(text({ role: "property-locality", x: 260, y: 502, width: 310, height: 30, text: props.property.locality, fontSize: 17, fill: "#f1efe8" }));
+    elements.push(text({ role: "property-price", x: 545, y: 492, width: 220, height: 48, text: price, fontSize: 32, fontWeight: "400", fill: "#ffffff", align: "right" }));
+    if (pageOnePhotos[0]) {
+      elements.push(rect("inset-photo-border", { x: 17, y: 315, width: 220, height: 220, fill: "#ffffff", cornerRadius: 110 }));
+      elements.push(image("brochure-photo", pageOnePhotos[0].url, { x: 22, y: 320, width: 210, height: 210, fit: "cover", cornerRadius: 105 }));
+    }
+    elements.push(rect("feature-band", { x: 0, y: 580, width, height: 72, fill: gold, removable: false }));
+    elements.push(text({ role: "feature-label", x: 244, y: 598, width: 110, height: 28, text: "FEATURES", fontSize: 15, fontWeight: "700", fill: charcoal, align: "center" }));
+    elements.push(rect("feature-divider-1", { x: 360, y: 590, width: 1, height: 50, fill: "#766b4c", opacity: .7 }));
+    elements.push(text({ role: "feature-beds", x: 370, y: 593, width: 118, height: 44, text: props.property.beds != null ? `${props.property.beds}\nBEDS` : "-\nBEDS", fontSize: 16, lineHeight: 1.15, fontWeight: "700", fill: charcoal, align: "center" }));
+    elements.push(rect("feature-divider-2", { x: 490, y: 590, width: 1, height: 50, fill: "#766b4c", opacity: .7 }));
+    elements.push(text({ role: "feature-baths", x: 500, y: 593, width: 118, height: 44, text: props.property.baths != null ? `${props.property.baths}\nBATHS` : "-\nBATHS", fontSize: 16, lineHeight: 1.15, fontWeight: "700", fill: charcoal, align: "center" }));
+    elements.push(rect("feature-divider-3", { x: 620, y: 590, width: 1, height: 50, fill: "#766b4c", opacity: .7 }));
+    elements.push(text({ role: "feature-sqft", x: 630, y: 593, width: 145, height: 44, text: props.property.sqft ? `${Number(props.property.sqft).toLocaleString()}\nSQ. FT.` : "-\nSQ. FT.", fontSize: 16, lineHeight: 1.15, fontWeight: "700", fill: charcoal, align: "center" }));
+    elements.push(rect("left-rail", { x: 0, y: 652, width: 244, height: 404, fill: "#f1eee4", removable: false }));
+    elements.push(text({ role: "rail-pattern", x: 18, y: 692, width: 205, height: 320, text: "HOME\nHOME\nHOME\nHOME\nHOME\nHOME", fontFamily: "Times New Roman", fontSize: 38, lineHeight: 1.25, letterSpacing: 5, fill: gold, opacity: .42, align: "center" }));
+    if (pageOnePhotos[1]) {
+      elements.push(rect("detail-photo-border", { x: 28, y: 678, width: 188, height: 188, fill: "#ffffff", cornerRadius: 94 }));
+      elements.push(image("brochure-photo", pageOnePhotos[1].url, { x: 33, y: 683, width: 178, height: 178, fit: "cover", cornerRadius: 89 }));
+    }
+    if (pageOnePhotos[2]) {
+      elements.push(rect("detail-photo-border", { x: 28, y: 852, width: 188, height: 188, fill: "#ffffff", cornerRadius: 94 }));
+      elements.push(image("brochure-photo", pageOnePhotos[2].url, { x: 33, y: 857, width: 178, height: 178, fit: "cover", cornerRadius: 89 }));
+    }
+    elements.push(text({ role: "property-highlights", x: 282, y: 684, width: 486, height: 30, text: "PROPERTY HIGHLIGHTS", fontSize: 17, fontWeight: "700", fill: charcoal, letterSpacing: 1.3 }));
+    elements.push(rect("highlights-rule", { x: 282, y: 720, width: 486, height: 2, fill: gold }));
+    elements.push(text({ role: "property-description", x: 282, y: 744, width: 486, height: 112, text: props.property.description, fontSize: 15, lineHeight: 1.35, fill: "#363534" }));
+    elements.push(text({ role: "property-facts-copy", x: 282, y: 866, width: 486, height: 65, text: details, fontSize: 15, fontWeight: "700", fill: charcoal, align: "left" }));
+    elements.push(rect("agent-card", { x: 272, y: 932, width: 512, height: 104, fill: gold, removable: false }));
+    if (props.agent.photoUrl) elements.push(image("agent-photo", props.agent.photoUrl, { x: 290, y: 944, width: 78, height: 80, fit: "cover" }));
+    elements.push(text({ role: "agent-name", x: 386, y: 946, width: 235, height: 28, text: props.agent.name, fontSize: 19, fontWeight: "700", fill: charcoal }));
+    elements.push(text({ role: "agent-contact", x: 386, y: 976, width: 245, height: 52, text: agentDetails, fontSize: 9, lineHeight: 1.2, fill: charcoal }));
+    if (props.agent.brokerageLogoUrl) elements.push(image("brokerage-logo", props.agent.brokerageLogoUrl, { x: 642, y: 949, width: 122, height: 68, fit: "contain" }));
+
+    // Page two mirrors the reference's agent-led profile page while keeping the
+    // copy and images neutral, editable, and appropriate for any brokerage.
     elements.push(rect("page-two-background", { x: 0, y: pageTwo, width, height: pageTwo, fill: "#ffffff", removable: false }));
-    elements.push(rect("header-background", { x: 0, y: pageTwo, width, height: 112, fill: "#242824", removable: false }));
-    elements.push(text({ role: "page-two-title", x: 48, y: pageTwo + 38, width: 520, height: 42, text: "Explore the property", fontSize: 31, fontWeight: "700", fill: "#ffffff" }));
-    elements.push(text({ role: "page-two-address", x: 570, y: pageTwo + 45, width: 198, height: 34, text: props.property.street, fontSize: 13, fill: "#d9d3c2", align: "right" }));
-    const galleryPhotos = [props.media[3] || props.media[1], props.media[4] || props.media[2], props.media[5] || props.media[0]].filter(Boolean);
-    if (galleryPhotos[0]) elements.push(image("brochure-photo", galleryPhotos[0].url, { x: 42, y: pageTwo + 150, width: 466, height: 324, fit: "cover" }));
-    if (galleryPhotos[1]) elements.push(image("brochure-photo", galleryPhotos[1].url, { x: 526, y: pageTwo + 150, width: 248, height: 154, fit: "cover" }));
-    if (galleryPhotos[2]) elements.push(image("brochure-photo", galleryPhotos[2].url, { x: 526, y: pageTwo + 320, width: 248, height: 154, fit: "cover" }));
-    elements.push(text({ role: "property-highlights", x: 42, y: pageTwo + 520, width: 732, height: 44, text: "PROPERTY HIGHLIGHTS", fontSize: 13, fontWeight: "700", letterSpacing: 2.5, fill: "#8a7540" }));
-    elements.push(rect("accent-rule", { x: 42, y: pageTwo + 562, width: 732, height: 2, fill: "#b7a46e", removable: false }));
-    elements.push(text({ role: "property-description-two", x: 42, y: pageTwo + 592, width: 732, height: 150, text: props.property.description, fontSize: 16, lineHeight: 1.5, fill: "#353c38" }));
-    elements.push(rect("agent-panel", { x: 0, y: pageTwo + 770, width, height: 286, fill: "#ece8df", removable: false }));
-    if (props.agent.photoUrl) elements.push(image("agent-photo", props.agent.photoUrl, { x: 48, y: pageTwo + 804, width: 168, height: 204, fit: "cover" }));
-    else elements.push(text({ role: "agent-initials", x: 48, y: pageTwo + 875, width: 168, height: 54, text: props.agent.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(), fontSize: 42, fontWeight: "700", fill: "#5f6964", align: "center" }));
-    elements.push(text({ role: "agent-label", x: 252, y: pageTwo + 808, width: 470, height: 22, text: "YOUR LISTING PROFESSIONAL", fontSize: 11, fontWeight: "700", letterSpacing: 2.2, fill: "#8a7540" }));
-    elements.push(text({ role: "agent-name", x: 252, y: pageTwo + 846, width: 470, height: 48, text: props.agent.name, fontSize: 34, fontWeight: "700", fill: "#202420" }));
-    elements.push(text({ role: "agent-contact", x: 252, y: pageTwo + 904, width: 470, height: 90, text: [props.agent.brokerage, props.agent.license ? `License ${props.agent.license}` : "", props.agent.phone, props.agent.email].filter(Boolean).join("\n"), fontSize: 13, lineHeight: 1.42, fill: "#4f5853" }));
-    if (props.agent.brokerageLogoUrl) elements.push(image("brokerage-logo", props.agent.brokerageLogoUrl, { x: 622, y: pageTwo + 938, width: 152, height: 62, fit: "contain" }));
+    if (hero) elements.push(image("page-two-hero", hero, { x: 0, y: pageTwo, width, height: 236, fit: "cover" }));
+    elements.push(rect("page-two-overlay", { x: 0, y: pageTwo, width, height: 236, fill: "#151515", opacity: .48, removable: false }));
+    elements.push(text({ role: "page-two-kicker", x: 70, y: pageTwo + 68, width: 676, height: 80, text: "A PLACE TO CALL HOME", fontFamily: "Times New Roman", fontStyle: "italic", fontSize: 48, fill: "#ffffff", align: "center", letterSpacing: 2 }));
+    elements.push(text({ role: "page-two-address", x: 110, y: pageTwo + 156, width: 596, height: 30, text: `${props.property.street}  ·  ${props.property.locality}`, fontSize: 14, fontWeight: "700", fill: "#ffffff", align: "center", letterSpacing: 1.2 }));
+    elements.push(rect("agent-profile-dark", { x: 0, y: pageTwo + 236, width: 338, height: 650, fill: charcoal, removable: false }));
+    if (props.agent.photoUrl) elements.push(image("agent-photo", props.agent.photoUrl, { x: 24, y: pageTwo + 284, width: 290, height: 400, fit: "cover" }));
+    else elements.push(text({ role: "agent-initials", x: 24, y: pageTwo + 430, width: 290, height: 72, text: props.agent.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(), fontSize: 58, fontWeight: "700", fill: "#ffffff", align: "center" }));
+    elements.push(text({ role: "agent-name-two", x: 24, y: pageTwo + 710, width: 290, height: 42, text: props.agent.name, fontSize: 27, fontWeight: "700", fill: "#ffffff", align: "center" }));
+    elements.push(text({ role: "agent-title", x: 24, y: pageTwo + 760, width: 290, height: 54, text: ["REALTOR", props.agent.license ? `LICENSE ${props.agent.license}` : ""].filter(Boolean).join("  ·  "), fontSize: 13, fill: "#e6dfcd", align: "center", letterSpacing: 1.2 }));
+    elements.push(text({ role: "agent-intro-script", x: 388, y: pageTwo + 278, width: 378, height: 54, text: "Welcome", fontFamily: "Times New Roman", fontStyle: "italic", fontSize: 42, fill: charcoal }));
+    elements.push(text({ role: "agent-heading", x: 388, y: pageTwo + 340, width: 378, height: 30, text: "YOUR LISTING PROFESSIONAL", fontSize: 18, fontWeight: "700", letterSpacing: 1, fill: charcoal }));
+    elements.push(text({ role: "agent-profile-copy", x: 388, y: pageTwo + 402, width: 360, height: 100, text: `Contact ${props.agent.name} for property details, showing information, and knowledgeable guidance throughout your real estate journey.`, fontSize: 15, lineHeight: 1.45, fill: "#333333" }));
+    elements.push(text({ role: "property-about-label", x: 388, y: pageTwo + 530, width: 360, height: 26, text: "ABOUT THIS PROPERTY", fontSize: 15, fontWeight: "700", letterSpacing: 1.4, fill: gold }));
+    elements.push(rect("property-about-rule", { x: 388, y: pageTwo + 563, width: 360, height: 2, fill: gold }));
+    elements.push(text({ role: "property-description-two", x: 388, y: pageTwo + 586, width: 360, height: 176, text: props.property.description, fontSize: 14, lineHeight: 1.42, fill: "#333333" }));
+    elements.push(text({ role: "agent-values", x: 378, y: pageTwo + 808, width: 388, height: 44, text: "LOCAL KNOWLEDGE  ·  CLEAR COMMUNICATION  ·  TRUSTED GUIDANCE", fontFamily: "Times New Roman", fontStyle: "italic", fontSize: 15, fill: charcoal, align: "center" }));
+    elements.push(rect("contact-footer", { x: 0, y: pageTwo + 886, width, height: 170, fill: charcoal, removable: false }));
+    elements.push(text({ role: "agent-contact-two", x: 34, y: pageTwo + 925, width: 460, height: 92, text: [props.agent.phone, props.agent.email, props.agent.brokerage].filter(Boolean).join("\n"), fontSize: 16, fontWeight: "700", lineHeight: 1.45, fill: "#ffffff" }));
+    if (props.agent.brokerageLogoUrl) elements.push(image("brokerage-logo", props.agent.brokerageLogoUrl, { x: 550, y: pageTwo + 920, width: 220, height: 92, fit: "contain" }));
+    else elements.push(text({ role: "brokerage-name", x: 520, y: pageTwo + 942, width: 250, height: 50, text: props.agent.brokerage || "BROKERAGE", fontSize: 24, fontWeight: "700", fill: gold, align: "right" }));
   } else if (isFlyer) {
     elements.push(rect("header-background", { x: 0, y: 0, width, height: 88, fill: PRIMARY }));
     elements.push(text({ role: "collection-label", x: 620, y: 30, width: 155, height: 30, text: "PROPERTY COLLECTION", fontSize: 11, letterSpacing: 2, align: "right", fill: ACCENT, draggable: false }));
@@ -280,7 +321,7 @@ function CanvasImage({ element, selected, onSelect, onCommit }: { element: Desig
   if (!loaded || element.visible === false) return null;
   const fit = element.fit || (element.role === "brokerage-logo" ? "contain" : "cover");
   const contained = fit === "contain" ? sizeForContain(loaded, element.width, element.height) : null;
-  return <KonvaImage id={element.id} image={loaded} {...(fit === "cover" ? cropForCover(loaded, element.width, element.height) : {})} x={element.x - (contained?.offsetX || 0)} y={element.y - (contained?.offsetY || 0)} width={contained?.renderedWidth || element.width} height={contained?.renderedHeight || element.height} rotation={element.rotation || 0} opacity={element.opacity ?? 1} draggable={element.draggable !== false} onClick={onSelect} onTap={onSelect} onDragEnd={(event) => onCommit({ x: event.target.x() + (contained?.offsetX || 0), y: event.target.y() + (contained?.offsetY || 0) })} onTransformEnd={(event) => { const node = event.target; const scaleX = node.scaleX(), scaleY = node.scaleY(); node.scaleX(1); node.scaleY(1); onCommit({ x: node.x() + (contained?.offsetX || 0), y: node.y() + (contained?.offsetY || 0), width: Math.max(20, node.width() * scaleX), height: Math.max(20, node.height() * scaleY), rotation: node.rotation() }); }} stroke={selected ? ACCENT : undefined} strokeWidth={selected ? 2 : 0} />;
+  return <KonvaImage id={element.id} image={loaded} {...(fit === "cover" ? cropForCover(loaded, element.width, element.height) : {})} x={element.x - (contained?.offsetX || 0)} y={element.y - (contained?.offsetY || 0)} width={contained?.renderedWidth || element.width} height={contained?.renderedHeight || element.height} rotation={element.rotation || 0} opacity={element.opacity ?? 1} cornerRadius={element.cornerRadius || 0} draggable={element.draggable !== false} onClick={onSelect} onTap={onSelect} onDragEnd={(event) => onCommit({ x: event.target.x() + (contained?.offsetX || 0), y: event.target.y() + (contained?.offsetY || 0) })} onTransformEnd={(event) => { const node = event.target; const scaleX = node.scaleX(), scaleY = node.scaleY(); node.scaleX(1); node.scaleY(1); onCommit({ x: node.x() + (contained?.offsetX || 0), y: node.y() + (contained?.offsetY || 0), width: Math.max(20, node.width() * scaleX), height: Math.max(20, node.height() * scaleY), rotation: node.rotation() }); }} stroke={selected ? ACCENT : undefined} strokeWidth={selected ? 2 : 0} />;
 }
 
 function CanvasElementView({ element, selected, onSelect, onCommit }: { element: DesignElement; selected: boolean; onSelect: () => void; onCommit: (patch: Partial<DesignElement>) => void }) {
@@ -288,7 +329,7 @@ function CanvasElementView({ element, selected, onSelect, onCommit }: { element:
   if (element.visible === false) return null;
   const common = { id: element.id, x: element.x, y: element.y, width: element.width, height: element.height, rotation: element.rotation || 0, opacity: element.opacity ?? 1, draggable: element.draggable !== false, onClick: onSelect, onTap: onSelect, onDragEnd: (event: Konva.KonvaEventObject<DragEvent>) => onCommit({ x: event.target.x(), y: event.target.y() }), onTransformEnd: (event: Konva.KonvaEventObject<Event>) => { const node = event.target; const scaleX = node.scaleX(), scaleY = node.scaleY(); node.scaleX(1); node.scaleY(1); onCommit(element.type === "text" ? { x: node.x(), y: node.y(), width: Math.max(40, node.width() * scaleX), height: Math.max(20, node.height() * scaleY), fontSize: Math.max(8, (element.fontSize || 24) * scaleY), rotation: node.rotation() } : { x: node.x(), y: node.y(), width: Math.max(5, node.width() * scaleX), height: Math.max(5, node.height() * scaleY), rotation: node.rotation() }); } };
   if (element.type === "rect") return <Rect {...common} listening={element.role !== "photo-overlay"} fill={element.fill} cornerRadius={element.cornerRadius || 0} stroke={selected ? ACCENT : undefined} strokeWidth={selected ? 2 : 0} />;
-  return <Text {...common} text={element.text || ""} fill={element.fill} fontFamily="Arial" fontSize={element.fontSize || 24} fontStyle={`${element.fontStyle === "italic" ? "italic " : ""}${Number(element.fontWeight) >= 600 || element.fontWeight === "bold" ? "bold" : "normal"}`} align={element.align || "left"} lineHeight={element.lineHeight || 1.15} letterSpacing={element.letterSpacing || 0} wrap="word" />;
+  return <Text {...common} text={element.text || ""} fill={element.fill} fontFamily={element.fontFamily || "Arial"} fontSize={element.fontSize || 24} fontStyle={`${element.fontStyle === "italic" ? "italic " : ""}${Number(element.fontWeight) >= 600 || element.fontWeight === "bold" ? "bold" : "normal"}`} align={element.align || "left"} lineHeight={element.lineHeight || 1.15} letterSpacing={element.letterSpacing || 0} wrap="word" />;
 }
 
 export default function MarketingEditor(props: MarketingEditorProps) {
