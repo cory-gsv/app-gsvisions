@@ -376,10 +376,12 @@
 
 .gsv-summary-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(430px, 540px);
   gap: 24px;
   align-items: center;
 }
+
+.gsv-summary-contacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: stretch; }
 
 .gsv-client-card {
   transition: border-color .16s ease, background .16s ease, transform .16s ease;
@@ -1054,6 +1056,8 @@
   .gsv-client-card {
     max-width: none !important;
   }
+
+  .gsv-summary-contacts { grid-template-columns: minmax(0, 1fr); }
 
   .gsv-client-fields {
     grid-template-columns: minmax(0, 1fr);

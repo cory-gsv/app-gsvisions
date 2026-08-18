@@ -269,7 +269,7 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
   return <main className="property-site">
     <SiteTrafficTracker siteId={clean(site.id)} />
     <nav className="property-nav" aria-label="Property navigation">
-      <div><a href="#details">Details</a>{gallery.length ? <a href="#gallery">Gallery</a> : null}{video ? <a href="#video">Video</a> : null}{tour ? <a href="#tour">3D Scanning</a> : null}{floorPlans.length ? <a href="#floor-plans">Floor plans</a> : null}<a href="#contact">Contact</a><a href="#map">Map</a></div>
+      <div><a href="#details">Details</a>{video ? <a href="#video">Video</a> : null}{gallery.length ? <a href="#gallery">Gallery</a> : null}{tour ? <a href="#tour">3D Scanning</a> : null}{floorPlans.length ? <a href="#floor-plans">Floor plans</a> : null}<a href="#contact">Contact</a><a href="#map">Map</a></div>
     </nav>
 
     <PropertyHeroSlideshow images={heroImages} address={streetAddress} place={place} agentName={agentName} agentPhoto={clean(agent?.profile_photo_url)} brokerage={clean(agent?.brokerage_name)} phone={agentPhone} license={clean(agent?.mls_license)} listingMls={listingMls} status={listingStatus} />
@@ -285,8 +285,8 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
       <div><p className="eyebrow">The property</p><h2>{address}</h2><p className="property-description">{description || fallbackDescription}</p></div>
     </section>
 
-    {gallery.length ? <section id="gallery" className="property-section property-gallery"><div className="section-heading"><p className="eyebrow">Explore</p><h2>Photo gallery</h2></div><PropertyGallery siteId={clean(site.id)} images={gallery.map((asset, index) => ({ id: asset.id, url: asset.url, alt: clean(asset.alt_text) || `${address} property photo ${index + 1}` }))} /></section> : null}
     {video ? <section id="video" className="property-section media-section"><div className="section-heading"><p className="eyebrow">Watch</p><h2>Property video</h2></div><iframe src={video} title={`Property video for ${address}`} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen /></section> : null}
+    {gallery.length ? <section id="gallery" className="property-section property-gallery"><div className="section-heading"><p className="eyebrow">Explore</p><h2>Photo gallery</h2></div><PropertyGallery siteId={clean(site.id)} images={gallery.map((asset, index) => ({ id: asset.id, url: asset.url, alt: clean(asset.alt_text) || `${address} property photo ${index + 1}` }))} /></section> : null}
     {tour ? <section id="tour" className="property-section media-section"><div className="section-heading"><p className="eyebrow">Walk through</p><h2>3D scanning tour</h2></div><iframe src={tour} title={`3D tour of ${address}`} allow="fullscreen; xr-spatial-tracking" allowFullScreen /></section> : null}
     {floorPlans.length ? <section id="floor-plans" className="property-section"><div className="section-heading"><p className="eyebrow">Layout</p><h2>Floor plans</h2></div><div className="floor-plan-grid">{floorPlans.map((asset, index) => <img key={asset.id} src={asset.url} alt={clean(asset.alt_text) || `${address} floor plan ${index + 1}`} loading="lazy" />)}</div></section> : null}
 

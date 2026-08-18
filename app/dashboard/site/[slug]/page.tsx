@@ -785,11 +785,11 @@ export default async function SitePage({
   if (viewerIsAdmin) {
     const { data: optionRows } = await adminSb
       .from("profiles")
-      .select("id,full_name,first_name,last_name,email,role,is_admin")
+      .select("id,full_name,first_name,last_name,email,profile_photo_url,role,is_admin")
       .order("full_name", { ascending: true });
     coListerOptions = (Array.isArray(optionRows) ? optionRows : [])
       .filter((row) => row.is_admin !== true && !["admin", "staff"].includes(clean(row.role).toLowerCase()) && clean(row.id) !== assignedProfileId)
-      .map((row) => ({ id: clean(row.id), name: clean(row.full_name) || [clean(row.first_name), clean(row.last_name)].filter(Boolean).join(" ") || clean(row.email), email: clean(row.email) }))
+      .map((row) => ({ id: clean(row.id), name: clean(row.full_name) || [clean(row.first_name), clean(row.last_name)].filter(Boolean).join(" ") || clean(row.email), email: clean(row.email), photo: clean(row.profile_photo_url) }))
       .filter((row) => row.id && row.email);
   }
 
@@ -1152,7 +1152,7 @@ export default async function SitePage({
                 <div style={{ marginTop: 7, fontSize: "clamp(25px, 3vw, 42px)", lineHeight: 1.05, fontWeight: 800 }}>{streetAddress || address}</div>
                 <div style={{ marginTop: 8, color: "rgba(255,255,255,.72)", fontSize: 14 }}>{cityStateZip}{cityStateZip ? " · " : ""}Site ID: {site.id.slice(0, 8)}</div>
               </div>
-              <ClientSummaryCard client={{
+              <div className="gsv-summary-contacts"><ClientSummaryCard client={{
                 id: clean(assignedProfile?.id),
                 name: agentName,
                 firstName: clean(assignedProfile?.first_name),
@@ -1169,9 +1169,9 @@ export default async function SitePage({
                 twitter: clean(assignedProfile?.twitter_url),
                 youtube: clean(assignedProfile?.youtube_url),
               }} canEdit={!!assignedProfile?.id && (viewerIsAdmin || clean(assignedProfile.id) === viewerId)} />
-              {viewerIsAdmin ? <CoListerManager siteId={site.id} current={coListerProfile ? { id: clean(coListerProfile.id), name: getProfileName(coListerProfile), email: clean(coListerProfile.email) } : null} options={coListerOptions} /> : coListerProfile ? <ClientSummaryCard client={{
+              {viewerIsAdmin ? <CoListerManager siteId={site.id} current={coListerProfile ? { id: clean(coListerProfile.id), name: getProfileName(coListerProfile), email: clean(coListerProfile.email), photo: clean(coListerProfile.profile_photo_url) } : null} options={coListerOptions} /> : coListerProfile ? <ClientSummaryCard client={{
                 id: clean(coListerProfile.id), name: getProfileName(coListerProfile), firstName: clean(coListerProfile.first_name), lastName: clean(coListerProfile.last_name), photo: clean(coListerProfile.profile_photo_url), phone: clean(coListerProfile.phone), email: clean(coListerProfile.email), brokerage: clean(coListerProfile.brokerage_name), mlsLicense: clean(coListerProfile.mls_license), website: clean(coListerProfile.brokerage_website_url), facebook: clean(coListerProfile.facebook_url), instagram: clean(coListerProfile.instagram_url), linkedin: clean(coListerProfile.linkedin_url), twitter: clean(coListerProfile.twitter_url), youtube: clean(coListerProfile.youtube_url),
-              }} canEdit={clean(coListerProfile.id) === viewerId} /> : null}
+              }} canEdit={clean(coListerProfile.id) === viewerId} /> : null}</div>
             </div>
             <div className="gsv-summary-hero">
               <MediaManager
