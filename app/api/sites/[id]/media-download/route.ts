@@ -205,15 +205,23 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       }
     }
 
+    // Route large browser downloads through AWS edge locations. This avoids
+    // slow direct paths to the bucket and gives browsers enough time to retry
+    // or resume multi-gigabyte archives.
+    const downloadS3 = new S3Client({
+      region,
+      credentials: { accessKeyId, secretAccessKey },
+      useAccelerateEndpoint: true,
+    });
     const downloadUrl = await getSignedUrl(
-      s3,
+      downloadS3,
       new GetObjectCommand({
         Bucket: archiveBucket,
         Key: archiveKey,
         ResponseContentType: "application/zip",
         ResponseContentDisposition: `attachment; filename="${filename.replace(/["\\\r\n]/g, "_")}"`,
       }),
-      { expiresIn: 900 },
+      { expiresIn: 14_400 },
     );
     await admin.from("portal_access_events").insert({
       user_id: user.id,
@@ -225,7 +233,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       metadata: { variant, filename, file_count: files.length },
     }).then(() => undefined);
     return Response.json(
-      { ok: true, url: downloadUrl, filename, file_count: files.length, expires_in: 900 },
+      { ok: true, url: downloadUrl, filename, file_count: files.length, expires_in: 14_400 },
       { headers: { "Cache-Control": "private, no-store" } },
     );
   } catch (error) {
