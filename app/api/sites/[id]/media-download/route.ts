@@ -1,6 +1,9 @@
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ZipArchive } from "archiver";
-import { PassThrough, Readable } from "node:stream";
+import { createHash } from "node:crypto";
+import { PassThrough } from "node:stream";
 import sharp from "sharp";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
 
@@ -24,6 +27,21 @@ function uniqueName(name: string, used: Map<string, number>) {
   return dot > 0 ? `${name.slice(0, dot)}-${count + 1}${name.slice(dot)}` : `${name}-${count + 1}`;
 }
 
+async function getObjectBytes(s3: S3Client, bucket: string, key: string, attempts = 3) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const result = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+      if (!result.Body) throw new Error("S3 returned an empty file body.");
+      return Buffer.from(await result.Body.transformToByteArray());
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, attempt * 300));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Could not read an original file from S3.");
+}
+
 export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { user, profile, admin } = await requireUser(request);
@@ -40,7 +58,11 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
 
     const role = clean(profile?.role).toLowerCase();
     const isStaff = profile?.is_admin === true || role === "admin" || role === "staff";
-    if (!isStaff && clean(site.client_id) !== user.id && clean(site.client_ms_id) !== user.id) {
+    const { data: coListerAccess, error: coListerError } = !isStaff
+      ? await admin.from("site_co_listers").select("site_id").eq("site_id", siteId).eq("profile_id", user.id).maybeSingle()
+      : { data: null, error: null };
+    if (coListerError) throw new Error(coListerError.message);
+    if (!isStaff && clean(site.client_id) !== user.id && clean(site.client_ms_id) !== user.id && !coListerAccess) {
       return Response.json({ error: "You do not have access to this media." }, { status: 403 });
     }
     if (!isStaff && site.paid !== true && Math.max(0, Number(site.balance_due_cents || 0)) > 0) {
@@ -70,14 +92,58 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     if (!region || !accessKeyId || !secretAccessKey) throw new Error("Missing S3 server env values.");
     const s3 = new S3Client({ region, credentials: { accessKeyId, secretAccessKey } });
 
-    const output = new PassThrough();
-    // Photos and MLS JPEGs are already compressed. Deflating them again adds
-    // substantial CPU time while barely changing the archive size.
-    const archive = new ZipArchive({ zlib: { level: 0 } });
-    archive.pipe(output);
-    const used = new Map<string, number>();
+    const address = safeName(site.property_address || site.property_full_address || site.address_full, "property-media").replace(/\.[^.]+$/, "");
+    const suffix = variant === "mls" ? "MLS-Quality" : "Originals";
+    const filename = `${address}-${suffix}.zip`;
+    const archiveBucket = clean(files[0]?.original_s3_bucket);
+    const archiveKey = `gsv-downloads/sites/${siteId}/${variant}.zip`;
+    const sourceSignature = createHash("sha256").update(JSON.stringify(files.map((asset) => [
+      asset.id,
+      asset.original_s3_bucket,
+      asset.original_s3_key,
+      asset.original_filename,
+      asset.is_published,
+      asset.status,
+      asset.sort_order,
+      variant,
+    ]))).digest("hex");
+    let archiveIsCurrent = false;
+    try {
+      const cached = await s3.send(new HeadObjectCommand({ Bucket: archiveBucket, Key: archiveKey }));
+      archiveIsCurrent = clean(cached.Metadata?.source_signature) === sourceSignature;
+    } catch (error) {
+      const statusCode = Number((error as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode || 0);
+      if (statusCode !== 404) console.warn("Could not inspect cached media archive", error);
+    }
 
-    void (async () => {
+    if (!archiveIsCurrent) {
+      const output = new PassThrough();
+      // Photos and MLS JPEGs are already compressed. Deflating them again adds
+      // substantial CPU time while barely changing the archive size.
+      const archive = new ZipArchive({ zlib: { level: 0 } });
+      archive.pipe(output);
+      const used = new Map<string, number>();
+      const upload = new Upload({
+        client: s3,
+        params: {
+          Bucket: archiveBucket,
+          Key: archiveKey,
+          Body: output,
+          ContentType: "application/zip",
+          ContentDisposition: `attachment; filename="${filename.replace(/["\\\r\n]/g, "_")}"`,
+          CacheControl: "private, no-store",
+          Metadata: { site_id: siteId, variant, file_count: String(files.length), source_signature: sourceSignature },
+        },
+        queueSize: 4,
+        partSize: 10 * 1024 * 1024,
+        leavePartsOnError: false,
+      });
+      let uploadFailure: unknown = null;
+      const uploadDone = upload.done().catch((error) => {
+        uploadFailure = error;
+        output.destroy(error instanceof Error ? error : new Error("Archive upload failed."));
+      });
+
       try {
         if (variant === "mls") {
           const batchSize = 4;
@@ -85,9 +151,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
             const batch = await Promise.all(
               files.slice(batchStart, batchStart + batchSize).map(async (asset, batchIndex) => {
                 const index = batchStart + batchIndex;
-                const result = await s3.send(new GetObjectCommand({ Bucket: clean(asset.original_s3_bucket), Key: clean(asset.original_s3_key) }));
-                if (!result.Body) return null;
-                const bytes = Buffer.from(await result.Body.transformToByteArray());
+                const bytes = await getObjectBytes(s3, clean(asset.original_s3_bucket), clean(asset.original_s3_key));
                 const prepared = sharp(bytes)
                   .rotate()
                   .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
@@ -113,32 +177,57 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
             }
           }
         } else {
-          for (const [index, asset] of files.entries()) {
-            const result = await s3.send(new GetObjectCommand({ Bucket: clean(asset.original_s3_bucket), Key: clean(asset.original_s3_key) }));
-            if (!result.Body) continue;
-            const originalName = safeName(asset.original_filename, `media-${index + 1}`);
-            const folder = asset.is_published === false ? "Hidden Photos/" : "";
-            const position = String(index + 1).padStart(Math.max(3, String(files.length).length), "0");
-            archive.append(result.Body as unknown as Readable, { name: uniqueName(`${folder}${position}_${originalName}`, used) });
+          const batchSize = 6;
+          for (let batchStart = 0; batchStart < files.length; batchStart += batchSize) {
+            const batch = await Promise.all(
+              files.slice(batchStart, batchStart + batchSize).map(async (asset, batchIndex) => ({
+                asset,
+                index: batchStart + batchIndex,
+                bytes: await getObjectBytes(s3, clean(asset.original_s3_bucket), clean(asset.original_s3_key)),
+              })),
+            );
+            for (const item of batch) {
+              const originalName = safeName(item.asset.original_filename, `media-${item.index + 1}`);
+              const folder = item.asset.is_published === false ? "Hidden Photos/" : "";
+              const position = String(item.index + 1).padStart(Math.max(3, String(files.length).length), "0");
+              archive.append(item.bytes, { name: uniqueName(`${folder}${position}_${originalName}`, used) });
+            }
           }
         }
         await archive.finalize();
+        await uploadDone;
+        if (uploadFailure) throw uploadFailure;
       } catch (error) {
+        archive.abort();
         output.destroy(error instanceof Error ? error : new Error("Archive generation failed."));
+        await upload.abort().catch(() => undefined);
+        throw error;
       }
-    })();
+    }
 
-    const address = safeName(site.property_address || site.property_full_address || site.address_full, "property-media").replace(/\.[^.]+$/, "");
-    const suffix = variant === "mls" ? "MLS-Quality" : "Originals";
-    return new Response(Readable.toWeb(output) as ReadableStream, {
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${address}-${suffix}.zip"`,
-        "Cache-Control": "private, no-store",
-        "X-GSV-File-Count": String(files.length),
-        "X-GSV-Archive-Variant": variant,
-      },
-    });
+    const downloadUrl = await getSignedUrl(
+      s3,
+      new GetObjectCommand({
+        Bucket: archiveBucket,
+        Key: archiveKey,
+        ResponseContentType: "application/zip",
+        ResponseContentDisposition: `attachment; filename="${filename.replace(/["\\\r\n]/g, "_")}"`,
+      }),
+      { expiresIn: 900 },
+    );
+    await admin.from("portal_access_events").insert({
+      user_id: user.id,
+      site_id: siteId,
+      event_type: "media_archive_download",
+      path: `/api/sites/${siteId}/media-download`,
+      user_agent: clean(request.headers.get("user-agent")) || null,
+      ip_address: clean(request.headers.get("x-forwarded-for")).split(",")[0] || null,
+      metadata: { variant, filename, file_count: files.length },
+    }).then(() => undefined);
+    return Response.json(
+      { ok: true, url: downloadUrl, filename, file_count: files.length, expires_in: 900 },
+      { headers: { "Cache-Control": "private, no-store" } },
+    );
   } catch (error) {
     const authResponse = authorizationErrorResponse(error);
     if (authResponse) return authResponse;

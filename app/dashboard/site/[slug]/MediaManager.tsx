@@ -478,15 +478,31 @@ export default function MediaManager({
       setDownloadingVariant(variant);
       setDownloadModal({ variant, stage: "connecting", bytesReceived: 0 });
       setStatusText("");
-      const response = await authenticatedFetch(
+      const responsePromise = authenticatedFetch(
         `/api/sites/${encodeURIComponent(siteId)}/media-download?variant=${variant}`,
         { cache: "no-store" },
       );
+      setDownloadModal({ variant, stage: "processing", bytesReceived: 0 });
+      const response = await responsePromise;
+      const contentType = (response.headers.get("content-type") || "").toLowerCase();
       if (!response.ok) {
         const json = await response.json().catch(() => ({}));
         throw new Error(json?.error || "Could not prepare media download.");
       }
-      setDownloadModal({ variant, stage: "processing", bytesReceived: 0 });
+      if (contentType.includes("application/json")) {
+        const json = await response.json().catch(() => ({}));
+        const directUrl = clean(json?.url);
+        if (!directUrl) throw new Error(json?.error || "The media archive did not return a download link.");
+        const anchor = document.createElement("a");
+        anchor.href = directUrl;
+        anchor.download = clean(json?.filename) || (variant === "mls" ? "MLS-Quality.zip" : "Originals.zip");
+        anchor.rel = "noopener";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        setDownloadModal({ variant, stage: "complete" });
+        return;
+      }
       let blob: Blob;
       if (response.body) {
         const reader = response.body.getReader();
@@ -520,7 +536,9 @@ export default function MediaManager({
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
-      URL.revokeObjectURL(url);
+      // Windows browsers may not start consuming a Blob URL until after the
+      // click handler returns. Revoking it immediately can truncate the ZIP.
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       setDownloadModal({ variant, stage: "complete", bytesReceived: blob.size });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not prepare media download.";
