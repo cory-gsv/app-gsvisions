@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
 import { updateMicrosoftCalendarEventBody } from "@/lib/m365-calendar";
+import { cancelScheduledAppointmentChangeEmail, scheduleAppointmentChangeEmail } from "@/lib/appointment-change-email";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -221,6 +222,7 @@ export async function PATCH(
     let customerName = "";
     let customerEmail = "";
     let customerPhone = "";
+    let appointmentEmailScheduledFor = "";
 
     if (siteRow.booking_id) {
       const { data: bookingRow } = await supabase
@@ -375,6 +377,35 @@ export async function PATCH(
           { status: 500 }
         );
       }
+
+      if (nextScheduledStart && nextScheduledStart !== previousBookingScheduledStart && customerEmail) {
+        const pendingEmail = await scheduleAppointmentChangeEmail({
+          previousEmailId: clean(currentSiteData.appointment_change_email_id),
+          bookingId: clean(siteRow.booking_id),
+          siteId: id,
+          recipientEmail: customerEmail,
+          recipientName: customerName,
+          propertyAddress: clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
+            clean(siteRow.property_address),
+            clean(siteRow.property_city),
+            [clean(siteRow.property_state), clean(siteRow.property_zip)].filter(Boolean).join(" "),
+          ].filter(Boolean).join(", "),
+          scheduledStart: nextScheduledStart,
+          scheduledEnd: nextScheduledEnd,
+        });
+        appointmentEmailScheduledFor = pendingEmail.scheduledFor;
+        nextSiteData.appointment_change_email_id = pendingEmail.emailId;
+        nextSiteData.appointment_change_email_scheduled_for = pendingEmail.scheduledFor;
+        nextSiteData.appointment_change_email_start = nextScheduledStart;
+        const { error: appointmentEmailStateError } = await supabase
+          .from("sites")
+          .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
+          .eq("id", id);
+        if (appointmentEmailStateError) {
+          await cancelScheduledAppointmentChangeEmail(pendingEmail.emailId);
+          return NextResponse.json({ error: "The appointment changed, but its delayed confirmation could not be recorded." }, { status: 500 });
+        }
+      }
     }
 
     let calendarSync: Record<string, unknown> = { updated: false, reason: "event_id_not_available" };
@@ -456,6 +487,7 @@ export async function PATCH(
       previous_paid_cents: previousPaidCents,
       balance_due_cents: balanceDueCents,
       invoice_items: invoiceItems,
+      appointment_email_scheduled_for: appointmentEmailScheduledFor || null,
       calendar_sync: calendarSync,
     });
   } catch (err) {

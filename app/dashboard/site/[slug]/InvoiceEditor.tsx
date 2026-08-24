@@ -912,7 +912,9 @@ export default function InvoiceEditor({
 
     lastSavedPayloadRef.current = payloadString;
     setSaveState("saved");
-    setSaveMessage(showSavedMessage ? "Saved" : "");
+    setSaveMessage(showSavedMessage
+      ? (clean(json?.appointment_email_scheduled_for) ? "Saved · client email sends in about 5 min" : "Saved")
+      : "");
     router.refresh();
 
     return json;
