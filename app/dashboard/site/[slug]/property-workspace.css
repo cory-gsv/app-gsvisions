@@ -43,6 +43,12 @@
   gap: clamp(28px, 4vw, 64px);
 }
 
+.gsv-property-nav-mobile-bar,
+.gsv-property-nav-backdrop,
+.gsv-property-nav-drawer-heading {
+  display: none;
+}
+
 .gsv-delivery-email-list {
   display: grid;
   gap: 14px;
@@ -986,48 +992,161 @@
   .gsv-property-sidebar {
     position: sticky !important;
     top: 0 !important;
-    z-index: 50;
+    z-index: 70;
     width: calc(100% + 40px);
     max-width: calc(100% + 40px);
     box-sizing: border-box;
     max-height: none !important;
     margin: 0 -20px;
-    padding: 0 20px !important;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    overscroll-behavior-x: contain;
-    scrollbar-width: thin;
-    scrollbar-color: #9da49f transparent;
+    padding: 0 !important;
+    overflow: visible !important;
     border: 0 !important;
     background: #f2f0e9 !important;
     box-shadow: 0 8px 18px rgba(23, 35, 31, .08) !important;
   }
 
-  .gsv-property-sidebar::-webkit-scrollbar { height: 6px; }
-  .gsv-property-sidebar::-webkit-scrollbar-thumb {
+  .gsv-property-nav-mobile-bar {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 7px 20px;
+    border-top: 1px solid rgba(23, 35, 31, .12);
+    border-bottom: 1px solid rgba(23, 35, 31, .18);
+    background: rgba(247, 245, 238, .97);
+    backdrop-filter: blur(14px);
+  }
+
+  .gsv-property-nav-mobile-bar > button {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 13px;
+    border: 0;
     border-radius: 999px;
-    background: #9da49f;
+    background: #17231f;
+    color: #fff;
+    cursor: pointer;
+    font: 800 9px/1 var(--font-geist-mono), monospace;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .gsv-property-nav-mobile-bar > strong {
+    min-width: 0;
+    overflow: hidden;
+    color: #52605a;
+    font: 800 9px/1.2 var(--font-geist-mono), monospace;
+    letter-spacing: .08em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .gsv-property-nav-menu-icon {
+    width: 16px;
+    display: grid;
+    gap: 3px;
+  }
+
+  .gsv-property-nav-menu-icon i {
+    height: 1px;
+    display: block;
+    background: #ffc72c;
+  }
+
+  .gsv-property-nav-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: block;
+    border: 0;
+    background: rgba(9, 17, 14, .5);
+    cursor: pointer;
+    backdrop-filter: blur(2px);
   }
 
   .gsv-property-nav {
-    display: flex !important;
-    width: max-content;
-    min-width: 100%;
-    align-items: stretch;
+    width: min(360px, calc(100vw - 52px));
+    min-width: 0;
+    max-height: 100dvh;
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 90;
+    display: grid !important;
+    align-content: start;
+    overflow-y: auto;
+    visibility: hidden;
+    background: #f7f5ee;
+    box-shadow: 22px 0 58px rgba(9, 17, 14, .3);
+    transform: translateX(-105%);
+    transition: transform .24s ease, visibility .24s step-end;
+  }
+
+  .gsv-property-nav.is-open {
+    visibility: visible;
+    transform: translateX(0);
+    transition: transform .24s ease, visibility 0s;
+  }
+
+  .gsv-property-nav-drawer-heading {
+    min-height: 82px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 18px 20px;
+    background: #17231f;
+    color: #fff;
+  }
+
+  .gsv-property-nav-drawer-heading div {
+    min-width: 0;
+    display: grid;
+    gap: 7px;
+  }
+
+  .gsv-property-nav-drawer-heading span {
+    color: #ffc72c;
+    font: 800 8px/1 var(--font-geist-mono), monospace;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  .gsv-property-nav-drawer-heading strong {
+    overflow: hidden;
+    font-size: 18px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .gsv-property-nav-drawer-heading > button {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border: 1px solid rgba(255, 255, 255, .3);
+    border-radius: 50%;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    font-size: 24px;
+    line-height: 1;
   }
 
   .gsv-property-nav > a {
-    flex: 0 0 auto;
-    min-height: 48px;
-    display: inline-flex;
+    width: 100%;
+    min-height: 52px;
+    display: flex;
     align-items: center;
     box-sizing: border-box;
     margin: 0 !important;
-    padding: 12px 15px !important;
+    padding: 15px 20px !important;
     border-top: 0 !important;
     border-bottom: 1px solid rgba(23, 35, 31, .12) !important;
     white-space: nowrap;
-    scroll-snap-align: start;
   }
 
   .gsv-property-nav > a:first-child {
@@ -1036,11 +1155,15 @@
 }
 
 @media (max-width: 700px) {
+  .gsv-property-nav {
+    width: min(340px, calc(100vw - 42px));
+  }
+
   .gsv-property-nav > a {
-    min-height: 42px;
-    padding: 9px 11px !important;
-    font-size: 8px !important;
-    letter-spacing: .07em !important;
+    min-height: 50px;
+    padding: 14px 18px !important;
+    font-size: 9px !important;
+    letter-spacing: .08em !important;
   }
 
   .gsv-scheduler-popover {

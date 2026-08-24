@@ -32,6 +32,7 @@ export default function PropertySectionNav({
   showMarketingKit?: boolean;
 }) {
   const [activeId, setActiveId] = useState("summary");
+  const [menuOpen, setMenuOpen] = useState(false);
   const sections = useMemo(
     () => allSections.filter(([id]) => {
       if (id === "delivery" && !showDelivery) return false;
@@ -69,14 +70,39 @@ export default function PropertySectionNav({
     };
   }, [sections]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [menuOpen]);
+
+  const activeLabel = sections.find(([id]) => id === activeId)?.[1] || "Site Summary";
+
   return (
-    <nav className="gsv-property-nav" style={{ display: "grid", gap: 0 }} aria-label="Property sections">
+    <>
+      <div className="gsv-property-nav-mobile-bar">
+        <button type="button" aria-expanded={menuOpen} aria-controls="gsv-property-section-menu" onClick={() => setMenuOpen(true)}>
+          <span className="gsv-property-nav-menu-icon" aria-hidden="true"><i /><i /><i /></span>
+          <span>Sections</span>
+        </button>
+        <strong>{activeLabel}</strong>
+      </div>
+      {menuOpen ? <button type="button" className="gsv-property-nav-backdrop" aria-label="Close section menu" onClick={() => setMenuOpen(false)} /> : null}
+      <nav id="gsv-property-section-menu" className={`gsv-property-nav ${menuOpen ? "is-open" : ""}`} style={{ display: "grid", gap: 0 }} aria-label="Property sections">
+        <div className="gsv-property-nav-drawer-heading">
+          <div><span>Property workspace</span><strong>{activeLabel}</strong></div>
+          <button type="button" aria-label="Close section menu" onClick={() => setMenuOpen(false)}>×</button>
+        </div>
       {publicSiteUrl ? (
         <a
           className="gsv-property-destination-link"
           href={publicSiteUrl}
           target="_blank"
           rel="noreferrer"
+          onClick={() => setMenuOpen(false)}
           style={{
             textDecoration: "none",
             color: "#ffc72c",
@@ -98,6 +124,7 @@ export default function PropertySectionNav({
         <a
           className="gsv-property-destination-link"
           href={`/dashboard/site/${encodeURIComponent(siteId)}/marketing`}
+          onClick={() => setMenuOpen(false)}
           style={{
             textDecoration: "none",
             color: "#ffc72c",
@@ -122,7 +149,7 @@ export default function PropertySectionNav({
             key={id}
             href={`#${id}`}
             aria-current={active ? "location" : undefined}
-            onClick={() => setActiveId(id)}
+            onClick={() => { setActiveId(id); setMenuOpen(false); }}
             style={{
               textDecoration: "none",
               color: active ? "#17231f" : "#52605a",
@@ -143,6 +170,7 @@ export default function PropertySectionNav({
           </a>
         );
       })}
-    </nav>
+      </nav>
+    </>
   );
 }
