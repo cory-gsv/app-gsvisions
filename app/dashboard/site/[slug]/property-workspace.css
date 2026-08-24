@@ -987,14 +987,26 @@
     position: sticky !important;
     top: 0 !important;
     z-index: 50;
+    width: calc(100% + 40px);
+    max-width: calc(100% + 40px);
+    box-sizing: border-box;
     max-height: none !important;
     margin: 0 -20px;
     padding: 0 20px !important;
     overflow-x: auto !important;
     overflow-y: hidden !important;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #9da49f transparent;
     border: 0 !important;
     background: #f2f0e9 !important;
     box-shadow: 0 8px 18px rgba(23, 35, 31, .08) !important;
+  }
+
+  .gsv-property-sidebar::-webkit-scrollbar { height: 6px; }
+  .gsv-property-sidebar::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: #9da49f;
   }
 
   .gsv-property-nav {
@@ -1009,18 +1021,28 @@
     min-height: 48px;
     display: inline-flex;
     align-items: center;
+    box-sizing: border-box;
+    margin: 0 !important;
     padding: 12px 15px !important;
     border-top: 0 !important;
     border-bottom: 1px solid rgba(23, 35, 31, .12) !important;
     white-space: nowrap;
+    scroll-snap-align: start;
   }
 
   .gsv-property-nav > a:first-child {
-    margin: 0 10px 0 0 !important;
+    margin: 0 !important;
   }
 }
 
 @media (max-width: 700px) {
+  .gsv-property-nav > a {
+    min-height: 42px;
+    padding: 9px 11px !important;
+    font-size: 8px !important;
+    letter-spacing: .07em !important;
+  }
+
   .gsv-scheduler-popover {
     right: 8px !important;
     bottom: 8px !important;
