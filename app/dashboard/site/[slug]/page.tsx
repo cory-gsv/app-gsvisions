@@ -859,12 +859,12 @@ export default async function SitePage({
     .map((row) => {
       const r = row as Record<string, unknown>;
       const id = clean(r.id);
-      const name =
-        clean(r.full_name) ||
-        [clean(r.first_name), clean(r.last_name)].filter(Boolean).join(" ") ||
-        clean(r.email) ||
-        "Admin";
       const email = clean(r.email);
+      const name =
+        (email.toLowerCase() === "cory@gsvisions.com" ? "Cory" : clean(r.full_name)) ||
+        [clean(r.first_name), clean(r.last_name)].filter(Boolean).join(" ") ||
+        email ||
+        "Admin";
 
       return { id, name, email };
     })
@@ -1050,7 +1050,16 @@ export default async function SitePage({
   const mlsLicense = clean(assignedProfile?.mls_license) || "Not added";
   const agentPhoto = clean(assignedProfile?.profile_photo_url) || "";
 
-  const savedInvoiceItems = normalizeSavedInvoiceItems(site.invoice_items);
+  const coryAdmin = adminUsers.find((admin) => admin.email.toLowerCase() === "cory@gsvisions.com") || null;
+  const savedInvoiceItems = normalizeSavedInvoiceItems(site.invoice_items).map((item) => ({
+    ...item,
+    assigned_to: clean(item.assigned_to_id) === clean(coryAdmin?.id) || clean(item.assigned_to).toLowerCase() === "cory beck"
+      ? "Cory"
+      : clean(item.assigned_to) || (coryAdmin ? "Cory" : ""),
+    assigned_to_id: clean(item.assigned_to_id) || coryAdmin?.id || null,
+    appt_start: clean(item.appt_start) || clean(booking?.scheduled_start),
+    appt_end: clean(item.appt_end) || clean(booking?.scheduled_end),
+  }));
   const initialInvoiceItems =
     savedInvoiceItems.length > 0
       ? savedInvoiceItems

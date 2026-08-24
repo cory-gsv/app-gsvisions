@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { sendNewBookingClientInvite } from "@/lib/client-invite";
 import { makePropertySiteSlug, normalizePropertySiteSlug } from "@/lib/property-site-slug";
+import { m365CalendarEmail } from "@/lib/m365-calendar";
 
 export const runtime = "nodejs";
 
@@ -130,6 +131,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid external booking reference." }, { status: 400 });
   }
   const admin = adminClient();
+  const { data: assignedAdmin } = await admin
+    .from("profiles")
+    .select("id,email")
+    .eq("email", m365CalendarEmail.toLowerCase())
+    .maybeSingle();
+  const assignedAdminId = clean(assignedAdmin?.id);
+  const assignedAdminEmail = clean(assignedAdmin?.email) || m365CalendarEmail;
   const customer = body.customer && typeof body.customer === "object"
     ? body.customer as Record<string, unknown>
     : {};
@@ -140,7 +148,20 @@ export async function POST(request: Request) {
     console.error("WEBSITE_CUSTOMER_RESOLUTION_FAILED", { reference, error: error instanceof Error ? error.message : "Unknown error" });
     return NextResponse.json({ error: "Could not resolve the portal customer." }, { status: 500 });
   }
-  const payload = { ...body, customer: { ...customer, client_id: customerId } };
+  const incomingLines = Array.isArray(body.lines) ? body.lines : [];
+  const assignedLines = incomingLines.map((line) => {
+    if (!line || typeof line !== "object" || Array.isArray(line)) return line;
+    return {
+      ...(line as Record<string, unknown>),
+      assigned_to: "Cory",
+      assigned_to_id: assignedAdminId || null,
+    };
+  });
+  const payload = {
+    ...body,
+    customer: { ...customer, client_id: customerId },
+    lines: assignedLines,
+  };
   const appointment = body.appointment && typeof body.appointment === "object"
     ? body.appointment as Record<string, unknown>
     : {};
@@ -169,6 +190,44 @@ export async function POST(request: Request) {
     : {};
   const siteId = clean(result.site_id);
   const bookingId = clean(result.booking_id);
+  if (bookingId) {
+    const { data: bookingSchedule, error: scheduleError } = await admin
+      .from("bookings")
+      .select("scheduled_start,scheduled_end")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (scheduleError) {
+      console.error("WEBSITE_BOOKING_SCHEDULE_LOOKUP_FAILED", { reference, bookingId, error: scheduleError.message });
+      return NextResponse.json({ error: "The order was created, but its appointment could not be loaded." }, { status: 500 });
+    }
+    const { error: assignmentError } = await admin.from("bookings").update({
+      photographer_name: "Cory",
+      photographer_email: assignedAdminEmail,
+      updated_at: new Date().toISOString(),
+    }).eq("id", bookingId);
+    if (assignmentError) {
+      console.error("WEBSITE_BOOKING_ASSIGNMENT_FAILED", { reference, bookingId, error: assignmentError.message });
+      return NextResponse.json({ error: "The order was created, but could not be assigned." }, { status: 500 });
+    }
+    if (siteId) {
+      const scheduledLines = assignedLines.map((line) => {
+        if (!line || typeof line !== "object" || Array.isArray(line)) return line;
+        return {
+          ...(line as Record<string, unknown>),
+          appt_start: clean(bookingSchedule?.scheduled_start) || null,
+          appt_end: clean(bookingSchedule?.scheduled_end) || null,
+        };
+      });
+      const { error: invoiceAssignmentError } = await admin
+        .from("sites")
+        .update({ invoice_items: scheduledLines, updated_at: new Date().toISOString() })
+        .eq("id", siteId);
+      if (invoiceAssignmentError) {
+        console.error("WEBSITE_INVOICE_ASSIGNMENT_FAILED", { reference, siteId, error: invoiceAssignmentError.message });
+        return NextResponse.json({ error: "The order was created, but its services could not be assigned." }, { status: 500 });
+      }
+    }
+  }
   if (isUnscheduled) {
     const [bookingUpdate, siteUpdate, eventUpdate] = await Promise.all([
       bookingId
