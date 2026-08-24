@@ -860,8 +860,9 @@ export default async function SitePage({
       const r = row as Record<string, unknown>;
       const id = clean(r.id);
       const email = clean(r.email);
+      const profileName = clean(r.full_name);
       const name =
-        (email.toLowerCase() === "cory@gsvisions.com" ? "Cory" : clean(r.full_name)) ||
+        (email.toLowerCase() === "cory@gsvisions.com" || /^cory beck(?: \(admin\))?$/i.test(profileName) ? "Cory" : profileName) ||
         [clean(r.first_name), clean(r.last_name)].filter(Boolean).join(" ") ||
         email ||
         "Admin";
@@ -1050,7 +1051,7 @@ export default async function SitePage({
   const mlsLicense = clean(assignedProfile?.mls_license) || "Not added";
   const agentPhoto = clean(assignedProfile?.profile_photo_url) || "";
 
-  const coryAdmin = adminUsers.find((admin) => admin.email.toLowerCase() === "cory@gsvisions.com") || null;
+  const coryAdmin = adminUsers.find((admin) => admin.name === "Cory") || null;
   const savedInvoiceItems = normalizeSavedInvoiceItems(site.invoice_items).map((item) => ({
     ...item,
     assigned_to: clean(item.assigned_to_id) === clean(coryAdmin?.id) || clean(item.assigned_to).toLowerCase() === "cory beck"

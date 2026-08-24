@@ -131,11 +131,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid external booking reference." }, { status: 400 });
   }
   const admin = adminClient();
-  const { data: assignedAdmin } = await admin
+  const { data: calendarAdmin } = await admin
     .from("profiles")
     .select("id,email")
     .eq("email", m365CalendarEmail.toLowerCase())
     .maybeSingle();
+  const { data: namedAdmin } = calendarAdmin?.id
+    ? { data: null }
+    : await admin
+        .from("profiles")
+        .select("id,email")
+        .ilike("full_name", "Cory%")
+        .limit(1)
+        .maybeSingle();
+  const assignedAdmin = calendarAdmin || namedAdmin;
   const assignedAdminId = clean(assignedAdmin?.id);
   const assignedAdminEmail = clean(assignedAdmin?.email) || m365CalendarEmail;
   const customer = body.customer && typeof body.customer === "object"
