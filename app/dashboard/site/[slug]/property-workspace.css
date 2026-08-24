@@ -739,8 +739,8 @@
 
 .gsv-scheduler-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
-  min-height: 390px;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  min-height: 470px;
 }
 
 .gsv-month-calendar {
@@ -886,10 +886,11 @@
   min-height: 0;
   flex: 1 1 auto;
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-content: start;
   gap: 7px;
-  max-height: 330px;
-  overflow-y: auto;
+  max-height: none;
+  overflow: visible;
   padding: 1px 5px 8px;
   scrollbar-color: #a8adaa transparent;
 }

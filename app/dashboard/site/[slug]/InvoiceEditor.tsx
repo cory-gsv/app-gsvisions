@@ -330,12 +330,12 @@ function AppointmentPicker({
     function positionPopover() {
       const anchor = rootRef.current?.getBoundingClientRect();
       if (!anchor) return;
-      const width = Math.min(590, window.innerWidth - 24);
+      const width = Math.min(820, window.innerWidth - 24);
       const left = Math.max(12, Math.min(anchor.right - width, window.innerWidth - width - 12));
       const spaceBelow = window.innerHeight - anchor.bottom;
-      const top = spaceBelow >= 470
+      const top = spaceBelow >= 540
         ? anchor.bottom + 8
-        : Math.max(12, anchor.top - 468);
+        : Math.max(12, anchor.top - 538);
       setPopoverStyle({ width, left, top });
     }
 
