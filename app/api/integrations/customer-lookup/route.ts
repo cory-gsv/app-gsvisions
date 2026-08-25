@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { assistantCcEmails } from "@/lib/portal-access";
 
 export const runtime = "nodejs";
 
@@ -77,9 +78,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ customers }, { headers: { "Cache-Control": "no-store" } });
     }
 
-    let query = adminClient()
+    const admin = adminClient();
+    let query = admin
       .from("profiles")
-      .select("email,first_name,last_name,full_name,phone");
+      .select("id,email,first_name,last_name,full_name,phone");
     query = profileId ? query.eq("id", profileId) : query.ilike("email", email);
     const { data, error } = await query.maybeSingle();
     if (error) throw error;
@@ -87,6 +89,7 @@ export async function POST(request: Request) {
     const name = data
       ? clean(data.full_name) || [clean(data.first_name), clean(data.last_name)].filter(Boolean).join(" ")
       : "";
+    const assistantCc = data ? await assistantCcEmails(admin, clean(data.id)) : [];
 
     return NextResponse.json({
       customer: data
@@ -96,6 +99,7 @@ export async function POST(request: Request) {
             phone: clean(data.phone),
           }
         : null,
+      assistant_cc_emails: assistantCc,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("CUSTOMER_LOOKUP_FAILED", error instanceof Error ? error.message : "Unknown error");
