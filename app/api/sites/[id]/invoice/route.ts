@@ -203,7 +203,7 @@ export async function PATCH(
 
     const { data: siteRow, error: siteLookupError } = await supabase
       .from("sites")
-      .select("id, booking_id, client_id, client_ms_id, paid, balance_due_cents, invoice_public_token, site_data, property_full_address, address_full, property_address, property_city, property_state, property_zip")
+      .select("id, booking_id, client_id, client_ms_id, paid, balance_due_cents, invoice_public_token, sqft, property_sqft, site_data, property_full_address, address_full, property_address, property_city, property_state, property_zip")
       .eq("id", id)
       .maybeSingle();
 
@@ -565,6 +565,10 @@ export async function PATCH(
         scheduledEnd: nextAppointmentEnd || pendingAppointmentEnd,
         balanceCents: balanceDueCents,
         invoiceToken: clean(siteRow.invoice_public_token),
+        invoiceItems,
+        packageName: clean(packageRow?.name),
+        squareFeet: Number(siteRow.sqft || siteRow.property_sqft || 0),
+        totalCents,
       });
       appointmentEmailScheduledFor = pendingEmail.scheduledFor;
       nextSiteData.appointment_change_email_id = pendingEmail.emailId;

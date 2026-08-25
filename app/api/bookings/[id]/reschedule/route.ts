@@ -333,6 +333,7 @@ async function loadBookingContext(id: string) {
     .select(`
       id,
       selected_package_name,
+      total_cents,
       selected_services,
       selected_addons,
       scheduled_start,
@@ -365,6 +366,8 @@ async function loadBookingContext(id: string) {
       invoice_items,
       balance_due_cents,
       invoice_public_token,
+      sqft,
+      property_sqft,
       site_data
     `)
     .eq("booking_id", id)
@@ -801,6 +804,10 @@ export async function POST(
           scheduledEnd: scheduled_end,
           balanceCents: Number(site.balance_due_cents || 0),
           invoiceToken: clean(site.invoice_public_token),
+          invoiceItems: site.invoice_items,
+          packageName: clean(booking.selected_package_name),
+          squareFeet: Number(site.sqft || site.property_sqft || 0),
+          totalCents: Number(booking.total_cents || 0),
         });
         appointmentEmailScheduledFor = pendingEmail.scheduledFor;
         const nextSiteData = {
