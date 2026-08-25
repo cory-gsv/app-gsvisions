@@ -24,10 +24,10 @@ function bulletLines(values: string[]) {
 }
 
 const packageIncludes: Record<string, string[]> = {
-  "standard media": ["Photoshoot", "Aerial drone photos", "2D floor plan", "One virtual twilight"],
-  "matterport media": ["Photoshoot", "Aerial drone photos", "2D floor plan", "One virtual twilight", "3D Matterport tour"],
-  "video plus": ["Photoshoot", "Cinematic video tour", "Aerial drone photography", "Aerial drone video", "2D floor plan", "One virtual twilight"],
-  signature: ["Photoshoot", "Cinematic video tour", "Aerial drone photography", "Aerial drone video", "2D floor plan", "One virtual twilight", "3D Matterport tour"],
+  "standard media": ["Photoshoot", "Aerial drone photos", "One virtual twilight", "Complete marketing kit ($100 value)"],
+  "matterport media": ["Photoshoot", "Aerial drone photos", "One virtual twilight", "3D Matterport tour", "Complete marketing kit ($100 value)"],
+  "video plus": ["Photoshoot", "Cinematic video tour", "Aerial drone photography", "Aerial drone video", "One virtual twilight", "Complete marketing kit ($100 value)"],
+  signature: ["Photoshoot", "Cinematic video tour", "Aerial drone photography", "Aerial drone video", "One virtual twilight", "3D Matterport tour", "Complete marketing kit ($100 value)"],
 };
 
 const knownAddOnNames = new Set([

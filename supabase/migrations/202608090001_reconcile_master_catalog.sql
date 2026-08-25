@@ -17,10 +17,10 @@ declare
 begin
   for family in
     select * from (values
-      ('standard-media', 'Standard Media', 'Listing photography, aerial drone photos, a measured 2D floor plan, and one polished virtual twilight.', array[30000,40000,50000,62000,79000]::integer[], array[100,120,155,190,230]::integer[]),
-      ('matterport-media', 'Matterport Media', 'Listing photography and aerial photos paired with a measured 2D floor plan, virtual twilight, and immersive 3D Matterport tour.', array[45000,57000,56000,62000,75000]::integer[], array[135,160,215,235,310]::integer[]),
-      ('video-plus', 'Video Plus', 'Photo and cinematic video coverage built for standout marketing.', array[60000,70000,80000,90000,115000]::integer[], array[210,255,315,375,480]::integer[]),
-      ('signature', 'Signature', 'Our complete photo, video, aerial, floor-plan, and 3D media suite.', array[70000,80000,90000,105000,135000]::integer[], array[245,280,375,450,600]::integer[])
+      ('standard-media', 'Standard Media', 'Listing photography, aerial drone photos, and one polished virtual twilight.', array[30000,40000,50000,62000,79000]::integer[], array[85,100,130,160,190]::integer[]),
+      ('matterport-media', 'Matterport Media', 'Listing photography and aerial photos paired with virtual twilight and an immersive 3D Matterport tour.', array[45000,57000,70000,84000,105000]::integer[], array[120,140,190,205,270]::integer[]),
+      ('video-plus', 'Video Plus', 'Photo and cinematic video coverage with aerial drone photography and video.', array[60000,70000,80000,90000,115000]::integer[], array[195,235,290,345,440]::integer[]),
+      ('signature', 'Signature', 'Our complete photo, video, aerial photography, aerial video, virtual twilight, and 3D media suite.', array[70000,80000,90000,105000,135000]::integer[], array[230,260,350,420,560]::integer[])
     ) as x(key, label, description, prices, minutes)
   loop
     for i in 1..5 loop
@@ -67,7 +67,7 @@ begin
   for family in
     select * from (values
       ('large-property', 'Large property', 'Is your property over 1 acre in size? If so, extra time is needed to properly capture it.', 5000, 'Over one acre'),
-      ('marketing-kit', 'Marketing kit', 'Custom agent and office branding, property sites, automatic video reels, teaser videos, printable flyers, social graphics, and weekly traffic reports.', 8500, 'Per property'),
+        ('marketing-kit', 'Marketing kit', 'Custom agent and office branding, property sites, automatic video reels, teaser videos, printable flyers, social graphics, and weekly traffic reports.', 10000, 'Per property'),
       ('property-domain', 'Custom property-site domain', 'A memorable custom web address for the property presentation site.', 7500, 'Per domain'),
       ('virtual-twilight', 'Virtual twilight', 'A daylight exterior transformed into a polished dusk presentation.', 3000, 'Per finished image'),
       ('virtual-staging', 'Virtual staging', 'Photorealistic furnishings added to help buyers imagine the space.', 3000, 'Per finished image'),

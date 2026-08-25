@@ -14,10 +14,10 @@ const tiers = [
   { label: "Up to 7,000", min: 5001, max: 7000 },
 ];
 const packageFamilies = [
-  { key: "standard-media", name: "Standard Media", description: "Listing photography, aerial drone photos, a measured 2D floor plan, and one polished virtual twilight.", prices: [300, 400, 500, 620, 790], minutes: [100, 120, 155, 190, 230], includes: ["photoshoot", "aerial-photography", "floor-plan", "virtual-twilight"] },
-  { key: "matterport-media", name: "Matterport Media", description: "Listing photography and aerial photos paired with a measured 2D floor plan, virtual twilight, and immersive 3D Matterport tour.", prices: [450, 570, 560, 620, 750], minutes: [135, 160, 215, 235, 310], includes: ["photoshoot", "aerial-photography", "floor-plan", "virtual-twilight", "matterport-scanning"] },
-  { key: "video-plus", name: "Video Plus", description: "Photo and cinematic video coverage with aerial drone photography and video.", prices: [600, 700, 800, 900, 1150], minutes: [210, 255, 315, 375, 480], includes: ["photoshoot", "cinematic-video-tour", "aerial-photography", "aerial-video", "floor-plan", "virtual-twilight"] },
-  { key: "signature", name: "Signature", description: "Our complete photo, video, aerial photography, aerial video, floor-plan, and 3D media suite.", prices: [700, 800, 900, 1050, 1350], minutes: [245, 280, 375, 450, 600], includes: ["photoshoot", "cinematic-video-tour", "aerial-photography", "aerial-video", "floor-plan", "virtual-twilight", "matterport-scanning"] },
+  { key: "standard-media", name: "Standard Media", description: "Listing photography, aerial drone photos, and one polished virtual twilight.", prices: [300, 400, 500, 620, 790], minutes: [85, 100, 130, 160, 190], includes: ["photoshoot", "aerial-photography", "floor-plan", "virtual-twilight"] },
+  { key: "matterport-media", name: "Matterport Media", description: "Listing photography and aerial photos paired with virtual twilight and an immersive 3D Matterport tour.", prices: [450, 570, 700, 840, 1050], minutes: [120, 140, 190, 205, 270], includes: ["photoshoot", "aerial-photography", "floor-plan", "virtual-twilight", "matterport-scanning"] },
+  { key: "video-plus", name: "Video Plus", description: "Photo and cinematic video coverage with aerial drone photography and video.", prices: [600, 700, 800, 900, 1150], minutes: [195, 235, 290, 345, 440], includes: ["photoshoot", "cinematic-video-tour", "aerial-photography", "aerial-video", "floor-plan", "virtual-twilight"] },
+  { key: "signature", name: "Signature", description: "Our complete photo, video, aerial photography, aerial video, virtual twilight, and 3D media suite.", prices: [700, 800, 900, 1050, 1350], minutes: [230, 260, 350, 420, 560], includes: ["photoshoot", "cinematic-video-tour", "aerial-photography", "aerial-video", "floor-plan", "virtual-twilight", "matterport-scanning"] },
 ];
 const serviceFamilies = [
   { key: "photoshoot", name: "Photoshoot", description: "Interior and exterior MLS-ready listing photography.", prices: [165, 235, 335, 450, 600], minutes: [45, 60, 90, 120, 150] },
@@ -30,7 +30,7 @@ const serviceFamilies = [
 ];
 const addOns = [
   { key: "large-property", name: "Large property", description: "Is your property over 1 acre in size? If so, extra time is needed to properly capture it.", price: 50, unit: "Over one acre" },
-  { key: "marketing-kit", name: "Marketing kit", description: "Custom agent and office branding, property sites, automatic video reels, teaser videos, printable flyers, social graphics, and weekly traffic reports.", price: 85, unit: "Per property" },
+  { key: "marketing-kit", name: "Marketing kit", description: "Custom agent and office branding, property sites, automatic video reels, teaser videos, printable flyers, social graphics, and weekly traffic reports.", price: 100, unit: "Per property" },
   { key: "property-domain", name: "Custom property-site domain", description: "A memorable custom web address for the property presentation site.", price: 75, unit: "Per domain" },
   { key: "virtual-twilight", name: "Virtual twilight", description: "A daylight exterior transformed into a polished dusk presentation.", price: 30, unit: "Per finished image" },
   { key: "virtual-staging", name: "Virtual staging", description: "Photorealistic furnishings added to help buyers imagine the space.", price: 30, unit: "Per finished image" },

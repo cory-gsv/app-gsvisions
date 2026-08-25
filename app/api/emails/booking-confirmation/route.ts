@@ -161,6 +161,7 @@ export async function POST(req: Request) {
           property_zip: string | null;
           property_full_address: string | null;
           address_full: string | null;
+          site_data: Record<string, unknown> | null;
           client_id: string | null;
           client_ms_id: string | null;
         }
@@ -178,6 +179,7 @@ export async function POST(req: Request) {
           property_zip,
           property_full_address,
           address_full,
+          site_data,
           client_id,
           client_ms_id
         `)
@@ -197,6 +199,7 @@ export async function POST(req: Request) {
           property_zip,
           property_full_address,
           address_full,
+          site_data,
           client_id,
           client_ms_id
         `)
@@ -334,6 +337,18 @@ export async function POST(req: Request) {
           hour: "numeric",
           minute: "2-digit",
         }).format(new Date(apptStart))
+      : "";
+
+    const siteData = site.site_data && typeof site.site_data === "object" && !Array.isArray(site.site_data)
+      ? site.site_data as Record<string, unknown>
+      : {};
+    const twilightAppointment = siteData.twilight_appointment && typeof siteData.twilight_appointment === "object" && !Array.isArray(siteData.twilight_appointment)
+      ? siteData.twilight_appointment as Record<string, unknown>
+      : null;
+    const twilightDate = clean(twilightAppointment?.date);
+    const twilightTime = clean(twilightAppointment?.time);
+    const twilightDateDisplay = /^\d{4}-\d{2}-\d{2}$/.test(twilightDate)
+      ? new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" }).format(new Date(`${twilightDate}T12:00:00-08:00`))
       : "";
 
     const estimatedDuration =
@@ -515,6 +530,20 @@ export async function POST(req: Request) {
                 </table>
               </td>
             </tr>
+
+            ${twilightDateDisplay && twilightTime ? `
+            <tr>
+              <td style="padding:0 32px 18px 32px;">
+                <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #d9c56f;border-radius:18px;background:#fffdf5;">
+                  <tr><td align="center" style="padding:20px;">
+                    <div style="font-size:12px;font-weight:800;letter-spacing:.14em;color:#8a6900;text-transform:uppercase;margin-bottom:8px;">Twilight return visit</div>
+                    <div style="font-size:22px;line-height:1.25;font-weight:800;color:#171717;">${twilightDateDisplay}</div>
+                    <div style="font-size:19px;line-height:1.25;font-weight:700;color:#171717;margin-top:4px;">${twilightTime}</div>
+                    <div style="font-size:14px;line-height:1.55;color:#6b7280;margin-top:8px;">This is a separate one-hour on-location appointment.</div>
+                  </td></tr>
+                </table>
+              </td>
+            </tr>` : ""}
 
             <tr>
               <td style="padding:0 32px 22px 32px;">
