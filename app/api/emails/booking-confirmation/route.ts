@@ -687,6 +687,7 @@ export async function POST(req: Request) {
         process.env.EMAIL_FROM ||
         "Golden State Visions <onboarding@resend.dev>",
       to: [toEmail],
+      bcc: [process.env.EMAIL_AUDIT_BCC || "cory@gsvisions.co"],
       replyTo: process.env.EMAIL_REPLY_TO || undefined,
       subject,
       html,

@@ -37,10 +37,10 @@ export async function sendPaymentReceivedEmail(args: {
   const { error } = await new Resend(apiKey).emails.send({
     from: process.env.EMAIL_FROM || "Golden State Visions <onboarding@resend.dev>",
     to: [recipient],
+    bcc: [clean(process.env.EMAIL_AUDIT_BCC) || "cory@gsvisions.co"],
     replyTo: clean(profile?.email) || process.env.EMAIL_REPLY_TO || undefined,
     subject: `Payment received · ${address} · ${money(total, args.currency)}`,
     html,
   }, { idempotencyKey: `payment-received:${args.paymentReference}` });
   if (error) throw new Error(error.message || "Payment notification email failed.");
 }
-

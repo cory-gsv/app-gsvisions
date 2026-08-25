@@ -48,6 +48,7 @@ export async function sendNewBookingClientInvite(args: {
   const { error: sendError } = await new Resend(apiKey).emails.send({
     from: process.env.EMAIL_FROM || "Golden State Visions <onboarding@resend.dev>",
     to: [args.email],
+    bcc: [clean(process.env.EMAIL_AUDIT_BCC) || "cory@gsvisions.co"],
     replyTo: process.env.EMAIL_REPLY_TO || undefined,
     subject: "Set your Golden State Visions portal password",
     html,
@@ -89,6 +90,7 @@ export async function sendPasswordResetEmail(args: {
   const { error: sendError } = await new Resend(apiKey).emails.send({
     from: process.env.EMAIL_FROM || "Golden State Visions <onboarding@resend.dev>",
     to: [args.email],
+    bcc: [clean(process.env.EMAIL_AUDIT_BCC) || "cory@gsvisions.co"],
     replyTo: process.env.EMAIL_REPLY_TO || undefined,
     subject: "Reset your Golden State Visions portal password",
     html,

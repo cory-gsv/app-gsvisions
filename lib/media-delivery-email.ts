@@ -291,15 +291,12 @@ export async function sendMediaReadyEmail({
     messageId = clean(data);
   }
 
-  const auditRecipient = clean(process.env.MEDIA_DELIVERY_BCC) || "cory@gsvisions.co";
-  const auditBcc = !isSample && !draft.to.includes(auditRecipient) && !draft.cc.includes(auditRecipient)
-    ? [auditRecipient]
-    : undefined;
+  const auditRecipient = clean(process.env.EMAIL_AUDIT_BCC || process.env.MEDIA_DELIVERY_BCC) || "cory@gsvisions.co";
   const result = await new Resend(clean(process.env.RESEND_API_KEY)).emails.send({
     from: clean(process.env.EMAIL_FROM) || "Golden State Visions <onboarding@resend.dev>",
     to: draft.to,
     cc: draft.cc.length ? draft.cc : undefined,
-    bcc: auditBcc,
+    bcc: [auditRecipient],
     replyTo: clean(process.env.EMAIL_REPLY_TO) || undefined,
     subject: draft.subject,
     html: messageId ? addFirstPartyEmailTracking(draft.html, messageId) : draft.html,
