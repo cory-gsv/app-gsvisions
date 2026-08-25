@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addFirstPartyEmailTracking } from "@/lib/email-tracking";
+import { assistantCcEmails } from "@/lib/portal-access";
 
 type SupabaseAdmin = SupabaseClient;
 
@@ -183,7 +184,10 @@ export async function buildMediaReadyEmailDraft({
   const defaultRecipient = clean(sampleRecipient) || clientRecipient;
   const hasToOverride = Boolean(overrides && Object.prototype.hasOwnProperty.call(overrides, "to"));
   const to = normalizeEmails(hasToOverride ? overrides?.to : [defaultRecipient], "To");
-  const cc = normalizeEmails(overrides?.cc || [], "CC");
+  const isAddressedToClient = to.some((recipient) => recipient.toLowerCase() === clientRecipient.toLowerCase());
+  const automaticCc = clean(sampleRecipient) || !isAddressedToClient ? [] : await assistantCcEmails(admin, profileId);
+  const cc = normalizeEmails([...(overrides?.cc || []), ...automaticCc], "CC")
+    .filter((email) => !to.some((recipient) => recipient.toLowerCase() === email.toLowerCase()));
   if (!to.length) throw new Error("At least one To recipient is required.");
 
   let booking: BookingRecord | null = null;

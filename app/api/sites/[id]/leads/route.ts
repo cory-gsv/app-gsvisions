@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/lib/authz";
+import { assistantCcEmails, portalUserOwnsSite } from "@/lib/portal-access";
 
 export const runtime = "nodejs";
 
@@ -57,11 +58,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     let notified = false;
     if (process.env.RESEND_API_KEY) {
+      const assistantEmails = await assistantCcEmails(admin, clientId);
       const clientName = clean(client?.full_name) || [clean(client?.first_name), clean(client?.last_name)].filter(Boolean).join(" ") || "there";
       const subject = `New property inquiry: ${propertyAddress}`;
       const html = `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#17231f"><div style="height:8px;background:#ffc72c"></div><div style="padding:32px"><p style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#986f00">New property website lead</p><h1 style="font-size:30px;margin:10px 0 18px">${escapeHtml(propertyAddress)}</h1><p>Hi ${escapeHtml(clientName)},</p><p>A visitor sent you a message from your Golden State Visions property website.</p><div style="margin:24px 0;padding:20px;background:#f3f1ea;border-left:5px solid #ffc72c"><strong>${escapeHtml(name)}</strong><br><a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>${phone ? `<br>${escapeHtml(phone)}` : ""}<p style="white-space:pre-wrap;line-height:1.6">${escapeHtml(message)}</p></div><p>Reply directly to this email to contact ${escapeHtml(name)}.</p></div></div>`;
       const { data: sent, error: sendError } = await new Resend(process.env.RESEND_API_KEY).emails.send({
-        from: process.env.EMAIL_FROM || "Golden State Visions <onboarding@resend.dev>", to: clientEmail, bcc: [clean(process.env.EMAIL_AUDIT_BCC) || "cory@gsvisions.co"], replyTo: email, subject, html,
+        from: process.env.EMAIL_FROM || "Golden State Visions <onboarding@resend.dev>", to: clientEmail, cc: assistantEmails.length ? assistantEmails : undefined, bcc: [clean(process.env.EMAIL_AUDIT_BCC) || "cory@gsvisions.co"], replyTo: email, subject, html,
         text: `Hi ${clientName},\n\nA visitor sent a message from the property website for ${propertyAddress}.\n\nName: ${name}\nEmail: ${email}${phone ? `\nPhone: ${phone}` : ""}\n\n${message}`,
       }, { idempotencyKey: `property-lead/${lead.id}` });
       notified = !sendError;
@@ -84,7 +86,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     if (error || !site) return NextResponse.json({ error: "Site not found." }, { status: 404 });
     const role = clean(profile?.role).toLowerCase();
     const isAdmin = profile?.is_admin === true || role === "admin";
-    const isOwner = clean(site.client_id) === user.id || clean(site.client_ms_id) === user.id;
+    const isOwner = portalUserOwnsSite(site, user.id, profile);
     if (!isAdmin && !isOwner) throw new AuthorizationError("You do not have access to these leads.", 403);
     const { data: leads, error: leadError } = await admin.from("property_leads").select("id, name, email, phone, message, property_address, status, email_status, created_at").eq("site_id", id).order("created_at", { ascending: false }).limit(200);
     if (leadError) return NextResponse.json({ error: leadError.message }, { status: 500 });

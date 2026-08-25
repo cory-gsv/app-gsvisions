@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isMarketingDesignKind, marketingDesignLabel, marketingEditorAllowsClientAccess, marketingEditorEnabled } from "@/lib/marketing-kit";
 import MarketingEditorShell from "./MarketingEditorShell";
+import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
 
 function clean(value: unknown) { return String(value ?? "").trim(); }
 function record(value: unknown): Record<string, unknown> {
@@ -28,14 +29,14 @@ export default async function MarketingEditorPage({ params }: { params: Promise<
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 
   const [{ data: profile }, { data: site }] = await Promise.all([
-    admin.from("profiles").select("id, role, is_admin").eq("id", authData.user.id).maybeSingle(),
+    admin.from("profiles").select("id, role, is_admin, assistant_to_profile_id").eq("id", authData.user.id).maybeSingle(),
     admin.from("sites").select("id, client_id, client_ms_id, property_address, property_city, property_state, property_zip, property_full_address, beds, baths, sqft, property_sqft, site_data").eq("id", slug).maybeSingle(),
   ]);
   if (!profile || !site) notFound();
   const role = clean(profile.role).toLowerCase();
   const isAdmin = profile.is_admin === true || role === "admin";
-  const { data: coListerAccess } = await admin.from("site_co_listers").select("site_id").eq("site_id", site.id).eq("profile_id", authData.user.id).maybeSingle();
-  const permitted = isAdmin || (marketingEditorAllowsClientAccess() && (role === "staff" || clean(site.client_id) === authData.user.id || clean(site.client_ms_id) === authData.user.id || Boolean(coListerAccess)));
+  const { data: coListerAccess } = await admin.from("site_co_listers").select("site_id").eq("site_id", site.id).in("profile_id", portalOwnerIds(authData.user.id, profile)).maybeSingle();
+  const permitted = isAdmin || (marketingEditorAllowsClientAccess() && (role === "staff" || portalUserOwnsSite(site, authData.user.id, profile) || Boolean(coListerAccess)));
   if (!permitted) redirect("/dashboard");
 
   const clientId = clean(site.client_id) || clean(site.client_ms_id);

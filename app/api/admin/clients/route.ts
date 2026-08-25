@@ -1,9 +1,31 @@
 import { AuthorizationError, authorizationErrorResponse, requireAdmin, requireUser } from "@/lib/authz";
 import { sendNewBookingClientInvite } from "@/lib/client-invite";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const runtime = "nodejs";
 
 const clean = (value: unknown) => String(value ?? "").trim();
+
+async function validateAssistantTarget(admin: SupabaseClient, assistantToProfileId: string, clientId = "") {
+  if (!assistantToProfileId) return null;
+  if (assistantToProfileId === clientId) {
+    throw new AuthorizationError("A client cannot be assigned as their own assistant.", 400);
+  }
+  const { data: target, error } = await admin
+    .from("profiles")
+    .select("id,full_name,first_name,last_name,role,is_admin,assistant_to_profile_id")
+    .eq("id", assistantToProfileId)
+    .maybeSingle();
+  if (error || !target) throw new AuthorizationError("Choose a valid realtor for this assistant.", 400);
+  const targetRole = clean(target.role).toLowerCase();
+  if (target.is_admin === true || targetRole === "admin" || targetRole === "staff") {
+    throw new AuthorizationError("Assistants can only be assigned to a realtor account.", 400);
+  }
+  if (clean(target.assistant_to_profile_id)) {
+    throw new AuthorizationError("An assistant cannot be assigned to another assistant.", 400);
+  }
+  return target;
+}
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +36,8 @@ export async function POST(request: Request) {
 
     const { data: existing } = await admin.from("profiles").select("id").ilike("email", email).maybeSingle();
     if (existing?.id) return Response.json({ error: "A client with this email already exists." }, { status: 409 });
+    const assistantToProfileId = clean(body.assistant_to_profile_id);
+    await validateAssistantTarget(admin, assistantToProfileId);
 
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
@@ -33,6 +57,7 @@ export async function POST(request: Request) {
       "profile_photo_url", "brokerage_logo1_url", "brokerage_logo2_url",
       "brokerage_website_url", "facebook_url", "instagram_url", "linkedin_url",
       "twitter_url", "youtube_url",
+      "assistant_to_profile_id",
     ];
     const supplied = Object.fromEntries(allowedFields.map((key) => [key, body[key] ?? null]));
     const profile = {
@@ -87,7 +112,7 @@ export async function PATCH(request: Request) {
 
     const firstName = clean(body.first_name);
     const lastName = clean(body.last_name);
-    const update = {
+    const update: Record<string, unknown> = {
       first_name: firstName || null,
       last_name: lastName || null,
       full_name: [firstName, lastName].filter(Boolean).join(" ") || null,
@@ -102,6 +127,24 @@ export async function PATCH(request: Request) {
       youtube_url: clean(body.youtube_url) || null,
       updated_at: new Date().toISOString(),
     };
+    if (isAdmin && Object.prototype.hasOwnProperty.call(body, "assistant_to_profile_id")) {
+      const assistantToProfileId = clean(body.assistant_to_profile_id);
+      await validateAssistantTarget(admin, assistantToProfileId, clientId);
+      update.assistant_to_profile_id = assistantToProfileId || null;
+    }
+    if (isAdmin) {
+      const nextRole = clean(body.role).toLowerCase() || "user";
+      if (!new Set(["user", "admin", "staff"]).has(nextRole)) {
+        throw new AuthorizationError("Choose a valid account role.", 400);
+      }
+      if (clean(update.assistant_to_profile_id) && nextRole !== "user") {
+        throw new AuthorizationError("An assistant account must use the user role.", 400);
+      }
+      update.role = nextRole;
+      update.is_admin = nextRole === "admin";
+      update.sms_enabled = body.sms_enabled === true;
+      update.payment_required_at_checkout = body.payment_required_at_checkout === true;
+    }
     const { data, error } = await admin.from("profiles").update(update).eq("id", clientId).select("*").maybeSingle();
     if (error) throw error;
     if (!data) return Response.json({ error: "Client profile not found." }, { status: 404 });

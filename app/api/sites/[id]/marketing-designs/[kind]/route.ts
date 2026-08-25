@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AuthorizationError, authorizationErrorResponse, requireUser } from "@/lib/authz";
 import { isMarketingDesignKind, marketingEditorAllowsClientAccess, marketingEditorEnabled } from "@/lib/marketing-kit";
+import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
 
 export const runtime = "nodejs";
 
@@ -42,11 +43,10 @@ async function authorize(request: Request, siteId: string) {
   if (error || !site) throw new AuthorizationError("Property not found.", 404);
   const role = clean(auth.profile?.role).toLowerCase();
   const isAdmin = auth.profile?.is_admin === true || role === "admin";
-  const { data: coListerAccess } = await auth.admin.from("site_co_listers").select("site_id").eq("site_id", siteId).eq("profile_id", auth.user.id).maybeSingle();
+  const { data: coListerAccess } = await auth.admin.from("site_co_listers").select("site_id").eq("site_id", siteId).in("profile_id", portalOwnerIds(auth.user.id, auth.profile)).maybeSingle();
   const canAccess = isAdmin || (marketingEditorAllowsClientAccess() && (
     role === "staff"
-    || clean(site.client_id) === auth.user.id
-    || clean(site.client_ms_id) === auth.user.id
+    || portalUserOwnsSite(site, auth.user.id, auth.profile)
     || Boolean(coListerAccess)
   ));
   if (!canAccess) throw new AuthorizationError("You do not have access to this marketing kit.", 403);

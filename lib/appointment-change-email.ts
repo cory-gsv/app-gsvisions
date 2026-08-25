@@ -8,6 +8,7 @@ export async function scheduleAppointmentChangeEmail(args: {
   bookingId: string;
   siteId: string;
   recipientEmail: string;
+  ccEmails?: string[];
   recipientName?: string | null;
   propertyAddress: string;
   scheduledStart: string;
@@ -17,6 +18,9 @@ export async function scheduleAppointmentChangeEmail(args: {
   if (!apiKey) throw new Error("Appointment email delivery is not configured.");
 
   const recipient = clean(args.recipientEmail);
+  const cc = Array.from(new Set((args.ccEmails || [])
+    .map((email) => clean(email).toLowerCase())
+    .filter((email) => email && email !== recipient.toLowerCase() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))));
   const start = new Date(args.scheduledStart);
   if (!recipient || Number.isNaN(start.getTime())) throw new Error("The updated appointment email is missing a recipient or valid time.");
 
@@ -47,6 +51,7 @@ export async function scheduleAppointmentChangeEmail(args: {
     from: process.env.EMAIL_FROM || "Golden State Visions <onboarding@resend.dev>",
     to: [recipient],
     bcc: [auditRecipient],
+    cc: cc.length ? cc : undefined,
     replyTo: process.env.EMAIL_REPLY_TO || undefined,
     subject: `Appointment updated – ${propertyAddress}`,
     html,

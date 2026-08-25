@@ -36,7 +36,7 @@ export async function requireUser(request: Request) {
   });
   const { data: profile, error: profileError } = await admin
     .from("profiles")
-    .select("id, role, is_admin")
+    .select("id, role, is_admin, assistant_to_profile_id")
     .eq("id", data.user.id)
     .maybeSingle();
 

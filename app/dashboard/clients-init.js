@@ -204,6 +204,7 @@ export async function initClientsDashboard() {
     profile_photo_url: "profile_photo_url",
     brokerage_logo1_url: "brokerage_logo1_url",
     brokerage_logo2_url: "brokerage_logo2_url",
+    assistant_to_profile_id: "assistant_to_profile_id",
     active_sites: "active_sites",
     total_sites: "total_sites"
   }
@@ -212,6 +213,7 @@ export async function initClientsDashboard() {
   let _isCreateMode = false
   let _adminCount = 0
   let _currentUserId = ""
+  let _allClients = []
 
   function clientDisplayName(c) {
     const full = clean(c?.[COL.full_name])
@@ -229,13 +231,6 @@ export async function initClientsDashboard() {
   }
 
   async function fetchClients(dash) {
-    let clients = null
-    try {
-      const { data, error } = await dash.sb.rpc("admin_clients")
-      if (!error && Array.isArray(data)) clients = data
-    } catch (_) {}
-
-    if (!clients) {
       const { data, error } = await dash.sb
         .from("profiles")
         .select([
@@ -259,13 +254,13 @@ export async function initClientsDashboard() {
           COL.youtube_url,
           COL.profile_photo_url,
           COL.brokerage_logo1_url,
-          COL.brokerage_logo2_url
+          COL.brokerage_logo2_url,
+          COL.assistant_to_profile_id
         ].join(","))
         .order(COL.full_name, { ascending: true })
 
       if (error) throw error
-      clients = data || []
-    }
+      const clients = data || []
 
     // Keep client counts tied to the same source of truth as Sites / Orders.
     // Older imported rows may use client_ms_id instead of client_id.
@@ -293,7 +288,8 @@ export async function initClientsDashboard() {
       })
 
       return clients.map((client) => {
-        const count = counts.get(clean(client?.id)) || { total: 0, active: 0 }
+        const ownerId = clean(client?.assistant_to_profile_id) || clean(client?.id)
+        const count = counts.get(ownerId) || { total: 0, active: 0 }
         return { ...client, active_sites: count.active, total_sites: count.total }
       })
     } catch (err) {
@@ -377,6 +373,21 @@ export async function initClientsDashboard() {
     })
     const result = await response.json().catch(() => ({}))
     if (!response.ok) throw new Error(clean(result?.error) || "Could not create client.")
+    return result.client
+  }
+
+  async function updateClientProfile(dash, clientId, payload) {
+    const { data: sessionData, error: sessionError } = await dash.sb.auth.getSession()
+    if (sessionError) throw sessionError
+    const token = sessionData?.session?.access_token
+    if (!token) throw new Error("Your admin session has expired. Please log in again.")
+    const response = await fetch("/api/admin/clients", {
+      method: "PATCH",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ client_id: clientId, ...payload })
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(clean(result?.error) || "Could not update client.")
     return result.client
   }
 
@@ -488,6 +499,20 @@ export async function initClientsDashboard() {
     toggleDeleteButton(!_isCreateMode && !deletionBlocked)
   }
 
+  function populateAssistantOptions(selectedId = "", editingId = "") {
+    const select = $("#gsv-cm-assistant-to")
+    if (!select) return
+    const options = _allClients
+      .filter((client) => {
+        const id = clean(client?.id)
+        const role = clean(client?.role).toLowerCase()
+        return id && id !== editingId && client?.is_admin !== true && role !== "admin" && role !== "staff" && !clean(client?.assistant_to_profile_id)
+      })
+      .sort((a, b) => clientDisplayName(a).localeCompare(clientDisplayName(b)))
+    select.innerHTML = `<option value="">Not an assistant</option>${options.map((client) => `<option value="${escapeHtml(client.id)}">${escapeHtml(clientDisplayName(client))}</option>`).join("")}`
+    select.value = selectedId || ""
+  }
+
   function clearModalForCreate() {
     _editingClient = null
     _isCreateMode = true
@@ -509,6 +534,7 @@ export async function initClientsDashboard() {
     setVal("#gsv-cm-role", "user")
     setVal("#gsv-cm-sms", false)
     setVal("#gsv-cm-payment-required", false)
+    populateAssistantOptions()
 
     setImgSafe("#gsv-cm-avatar-img", "", { placeholder: window.GSV_PLACEHOLDER_LOGO })
     setImgSafe("#gsv-cm-logo1-img", "", { placeholder: window.GSV_PLACEHOLDER_LOGO })
@@ -543,6 +569,7 @@ export async function initClientsDashboard() {
     setVal("#gsv-cm-role", clean(client.role) || "user")
     setVal("#gsv-cm-sms", !!client.sms_enabled)
     setVal("#gsv-cm-payment-required", !!client.payment_required_at_checkout)
+    populateAssistantOptions(clean(client.assistant_to_profile_id), clean(client.id))
 
     applyModalModeUI()
     openModal("#gsv-client-modal")
@@ -557,6 +584,8 @@ export async function initClientsDashboard() {
     const av = avatarOrInitial(c)
     const active = Number(c?.active_sites ?? 0)
     const total = Number(c?.total_sites ?? 0)
+    const assistantTo = clean(c?.assistant_to_profile_id)
+    const realtor = assistantTo ? _allClients.find((client) => clean(client?.id) === assistantTo) : null
 
     return `
       <div class="gsv-client" data-client-id="${escapeHtml(id)}">
@@ -570,6 +599,7 @@ export async function initClientsDashboard() {
             <div class="gsv-client__name">${escapeHtml(name)}</div>
             <div class="gsv-client__email">${email ? escapeHtml(email) : '<span style="opacity:.6;">No email</span>'}</div>
             <div class="gsv-client__phone">${phone ? escapeHtml(phone) : '<span style="opacity:.6;">No phone</span>'}</div>
+            ${realtor ? `<div class="gsv-client__assistant">Assistant to: ${escapeHtml(clientDisplayName(realtor))}</div>` : ""}
           </div>
         </div>
 
@@ -689,7 +719,8 @@ export async function initClientsDashboard() {
       [COL.youtube_url]: clean($("#gsv-cm-youtube")?.value) || null,
       [COL.profile_photo_url]: null,
       [COL.brokerage_logo1_url]: null,
-      [COL.brokerage_logo2_url]: null
+      [COL.brokerage_logo2_url]: null,
+      [COL.assistant_to_profile_id]: clean($("#gsv-cm-assistant-to")?.value) || null
     }
 
     setStatus(dash, "Creating client…", "info")
@@ -748,11 +779,12 @@ export async function initClientsDashboard() {
       [COL.youtube_url]: clean($("#gsv-cm-youtube")?.value) || null,
       [COL.role]: clean($("#gsv-cm-role")?.value) || "user",
       [COL.sms_enabled]: !!$("#gsv-cm-sms")?.checked,
-      [COL.payment_required_at_checkout]: !!$("#gsv-cm-payment-required")?.checked
+      [COL.payment_required_at_checkout]: !!$("#gsv-cm-payment-required")?.checked,
+      [COL.assistant_to_profile_id]: clean($("#gsv-cm-assistant-to")?.value) || null
     }
 
     setStatus(dash, "Saving client…", "info")
-    await updateProfile(dash, id, payload)
+    await updateClientProfile(dash, id, payload)
 
     if (_editingClient) {
       Object.keys(payload).forEach((k) => {
@@ -931,6 +963,7 @@ export async function initClientsDashboard() {
     try {
       if (!quiet) setStatus(dash, "Loading clients…", "info")
       const clients = await fetchClients(dash)
+      _allClients = clients
       _currentUserId = clean(dash?.user?.id)
       _adminCount = (clients || []).filter((client) => {
         return client?.is_admin === true || clean(client?.role).toLowerCase() === "admin"

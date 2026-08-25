@@ -1420,6 +1420,16 @@ export default function DashboardPage() {
           </label>
           <input className="gsv-dash__input" id="gsv-cm-phone" type="tel" />
 
+          <label className="gsv-dash__label" htmlFor="gsv-cm-assistant-to">
+            Assistant to
+          </label>
+          <select className="gsv-dash__input" id="gsv-cm-assistant-to">
+            <option value="">Not an assistant</option>
+          </select>
+          <div className="gsv-dash__mini gsv-client-assistant-help">
+            The assistant receives the same portal access to this realtor&apos;s properties, appointments, invoices, and downloadable media.
+          </div>
+
           <label className="gsv-dash__label" htmlFor="gsv-cm-brokerage">
             Brokerage Name
           </label>

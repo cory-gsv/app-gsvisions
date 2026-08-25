@@ -10,6 +10,7 @@ import {
   cancelScheduledAppointmentChangeEmail,
   scheduleAppointmentChangeEmail,
 } from "@/lib/appointment-change-email";
+import { assistantCcEmails } from "@/lib/portal-access";
 
 const BUSINESS_TIME_ZONE = "America/Los_Angeles";
 
@@ -785,11 +786,13 @@ export async function POST(
       let appointmentEmailScheduledFor: string | null = null;
       const clientEmail = clean(booking.client_email);
       if (clientEmail && site?.id) {
+        const assistantEmails = await assistantCcEmails(supabase, clean(booking.client_id));
         const pendingEmail = await scheduleAppointmentChangeEmail({
           previousEmailId: clean(siteData.appointment_change_email_id),
           bookingId: clean(id),
           siteId: clean(site.id),
           recipientEmail: clientEmail,
+          ccEmails: assistantEmails,
           recipientName: [clean(booking.client_first_name), clean(booking.client_last_name)].filter(Boolean).join(" "),
           propertyAddress: location,
           scheduledStart: scheduled_start,

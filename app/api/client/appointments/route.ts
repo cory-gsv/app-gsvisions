@@ -1,5 +1,6 @@
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
 import { createRescheduleToken } from "@/lib/reschedule-token";
+import { portalOwnerIds } from "@/lib/portal-access";
 
 export const runtime = "nodejs";
 
@@ -27,13 +28,14 @@ function twilightStart(siteData: unknown) {
 
 export async function GET(request: Request) {
   try {
-    const { user, admin } = await requireUser(request);
+    const { user, profile, admin } = await requireUser(request);
     const userId = clean(user.id);
+    const ownerIds = portalOwnerIds(userId, profile);
 
     const { data: sites, error: sitesError } = await admin
       .from("sites")
       .select("id,booking_id,address_full,city_state_zip,status,site_data")
-      .or(`client_id.eq.${userId},client_ms_id.eq.${userId}`);
+      .or(ownerIds.flatMap((ownerId) => [`client_id.eq.${ownerId}`, `client_ms_id.eq.${ownerId}`]).join(","));
 
     if (sitesError) throw sitesError;
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/lib/authz";
 import { makePropertySiteSlug, normalizePropertySiteSlug } from "@/lib/property-site-slug";
+import { portalUserOwnsSite } from "@/lib/portal-access";
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
@@ -19,7 +20,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 
     const role = clean(profile?.role).toLowerCase();
     const isAdmin = profile?.is_admin === true || role === "admin";
-    const isOwner = clean(site.client_id) === user.id || clean(site.client_ms_id) === user.id;
+    const isOwner = portalUserOwnsSite(site, user.id, profile);
     if (!isAdmin && !isOwner) throw new AuthorizationError("You do not have access to this site.", 403);
 
     const body = await request.json().catch(() => ({}));

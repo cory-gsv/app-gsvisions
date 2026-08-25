@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
+import { portalOwnerIds } from "@/lib/portal-access";
 
 const clean = (value: unknown) => String(value ?? "").trim();
 
@@ -8,16 +9,17 @@ export async function GET(request: Request) {
     const { user, profile, admin } = await requireUser(request);
     const role = clean(profile?.role).toLowerCase();
     const isStaff = profile?.is_admin === true || role === "admin" || role === "staff";
+    const ownerIds = portalOwnerIds(user.id, profile);
     const columns = "id,created_at,client_id,client_ms_id,address_full,city_state_zip,property_address,property_city,property_state,property_zip,property_full_address,site_name,name,main_photo_preview_url,site_slug,status";
     let query = admin.from("sites").select(columns).order("created_at", { ascending: false });
     if (!isStaff) {
       const { data: coListerRows, error: coListerError } = await admin
         .from("site_co_listers")
         .select("site_id")
-        .eq("profile_id", user.id);
+        .in("profile_id", ownerIds);
       if (coListerError) throw coListerError;
       const coListerIds = (coListerRows || []).map((row) => clean(row.site_id)).filter(Boolean);
-      const filters = [`client_id.eq.${user.id}`, `client_ms_id.eq.${user.id}`];
+      const filters = ownerIds.flatMap((ownerId) => [`client_id.eq.${ownerId}`, `client_ms_id.eq.${ownerId}`]);
       if (coListerIds.length) filters.push(`id.in.(${coListerIds.join(",")})`);
       query = query.or(filters.join(","));
     }

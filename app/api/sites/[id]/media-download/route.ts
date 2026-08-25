@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { PassThrough } from "node:stream";
 import sharp from "sharp";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
+import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -59,10 +60,10 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     const role = clean(profile?.role).toLowerCase();
     const isStaff = profile?.is_admin === true || role === "admin" || role === "staff";
     const { data: coListerAccess, error: coListerError } = !isStaff
-      ? await admin.from("site_co_listers").select("site_id").eq("site_id", siteId).eq("profile_id", user.id).maybeSingle()
+      ? await admin.from("site_co_listers").select("site_id").eq("site_id", siteId).in("profile_id", portalOwnerIds(user.id, profile)).maybeSingle()
       : { data: null, error: null };
     if (coListerError) throw new Error(coListerError.message);
-    if (!isStaff && clean(site.client_id) !== user.id && clean(site.client_ms_id) !== user.id && !coListerAccess) {
+    if (!isStaff && !portalUserOwnsSite(site, user.id, profile) && !coListerAccess) {
       return Response.json({ error: "You do not have access to this media." }, { status: 403 });
     }
     if (!isStaff && site.paid !== true && Math.max(0, Number(site.balance_due_cents || 0)) > 0) {

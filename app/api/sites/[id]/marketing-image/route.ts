@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
+import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
 
 export const runtime = "nodejs";
 const clean = (value: unknown) => String(value ?? "").trim();
@@ -11,8 +12,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const { id } = await context.params;
     const { data: site } = await admin.from("sites").select("id, client_id, client_ms_id").eq("id", id).maybeSingle();
     const role = clean(profile?.role).toLowerCase();
-    const { data: coListerAccess } = await admin.from("site_co_listers").select("site_id").eq("site_id", id).eq("profile_id", user.id).maybeSingle();
-    const canEdit = profile?.is_admin === true || role === "admin" || role === "staff" || clean(site?.client_id) === user.id || clean(site?.client_ms_id) === user.id || Boolean(coListerAccess);
+    const { data: coListerAccess } = await admin.from("site_co_listers").select("site_id").eq("site_id", id).in("profile_id", portalOwnerIds(user.id, profile)).maybeSingle();
+    const canEdit = profile?.is_admin === true || role === "admin" || role === "staff" || portalUserOwnsSite(site, user.id, profile) || Boolean(coListerAccess);
     if (!site || !canEdit) return Response.json({ error: "You do not have access to this property." }, { status: 403 });
     const form = await request.formData(); const file = form.get("file");
     if (!(file instanceof File) || !ALLOWED_TYPES.has(file.type.toLowerCase()) || file.size < 1 || file.size > 10 * 1024 * 1024) return Response.json({ error: "Choose a JPG, PNG, or WebP image smaller than 10 MB." }, { status: 415 });

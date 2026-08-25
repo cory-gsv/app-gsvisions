@@ -4,6 +4,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { marketingEditorAllowsClientAccess, marketingEditorEnabled } from "@/lib/marketing-kit";
 import { makePropertySiteSlug, normalizePropertySiteSlug, propertySiteUrl } from "@/lib/property-site-slug";
 import MarketingKitHub from "./MarketingKitHub";
+import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
 import "./marketing-kit.css";
 
 function clean(value: unknown) { return String(value ?? "").trim(); }
@@ -41,14 +42,14 @@ export default async function MarketingKitPage({ params }: { params: Promise<{ s
   if (!url || !key) throw new Error("Missing Supabase server environment.");
   const admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   const [{ data: profile }, { data: site }] = await Promise.all([
-    admin.from("profiles").select("id, role, is_admin").eq("id", authData.user.id).maybeSingle(),
+    admin.from("profiles").select("id, role, is_admin, assistant_to_profile_id").eq("id", authData.user.id).maybeSingle(),
     admin.from("sites").select("id, slug, site_slug, client_id, client_ms_id, property_address, property_city, property_state, property_zip, property_full_address, beds, baths, sqft, property_sqft, hero_image_url, main_photo_url, main_photo_preview_url, preview_image_url, site_data").eq("id", slug).maybeSingle(),
   ]);
   if (!profile || !site) notFound();
   const role = clean(profile.role).toLowerCase();
   const isAdmin = profile.is_admin === true || role === "admin";
-  const ownsSite = clean(site.client_id) === authData.user.id || clean(site.client_ms_id) === authData.user.id;
-  const { data: coListerAccess } = await admin.from("site_co_listers").select("site_id").eq("site_id", site.id).eq("profile_id", authData.user.id).maybeSingle();
+  const ownsSite = portalUserOwnsSite(site, authData.user.id, profile);
+  const { data: coListerAccess } = await admin.from("site_co_listers").select("site_id").eq("site_id", site.id).in("profile_id", portalOwnerIds(authData.user.id, profile)).maybeSingle();
   if (!(isAdmin || (marketingEditorAllowsClientAccess() && (role === "staff" || ownsSite || Boolean(coListerAccess))))) redirect("/dashboard");
 
   const clientId = clean(site.client_id) || clean(site.client_ms_id);
@@ -72,6 +73,8 @@ export default async function MarketingKitPage({ params }: { params: Promise<{ s
   const agentName = clean(agent?.full_name) || [clean(agent?.first_name), clean(agent?.last_name)].filter(Boolean).join(" ") || "Your Agent";
   const publicSlug = normalizePropertySiteSlug(site.site_slug) || normalizePropertySiteSlug(site.slug) || makePropertySiteSlug(street);
   const designs = designMap((Array.isArray(designRows) ? designRows : []) as Array<Record<string, unknown>>);
+  // Server-rendered request time is intentionally used for rolling traffic windows.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const timestamps = (Array.isArray(trafficRows) ? trafficRows : []).map((item) => new Date(clean(item.created_at)).getTime()).filter(Number.isFinite);
 

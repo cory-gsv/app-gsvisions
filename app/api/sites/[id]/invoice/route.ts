@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
 import { createMicrosoftCalendarEvent, shiftMicrosoftCalendarTravelEvents, updateMicrosoftCalendarEvent } from "@/lib/m365-calendar";
 import { cancelScheduledAppointmentChangeEmail, scheduleAppointmentChangeEmail } from "@/lib/appointment-change-email";
+import { assistantCcEmails } from "@/lib/portal-access";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -202,7 +203,7 @@ export async function PATCH(
 
     const { data: siteRow, error: siteLookupError } = await supabase
       .from("sites")
-      .select("id, booking_id, paid, balance_due_cents, site_data, property_full_address, address_full, property_address, property_city, property_state, property_zip")
+      .select("id, booking_id, client_id, client_ms_id, paid, balance_due_cents, site_data, property_full_address, address_full, property_address, property_city, property_state, property_zip")
       .eq("id", id)
       .maybeSingle();
 
@@ -547,11 +548,13 @@ export async function PATCH(
     }
 
     if (needsAppointmentConfirmation && customerEmail) {
+      const assistantEmails = await assistantCcEmails(supabase, clean(siteRow.client_id) || clean(siteRow.client_ms_id));
       const pendingEmail = await scheduleAppointmentChangeEmail({
         previousEmailId: clean(currentSiteData.appointment_change_email_id),
         bookingId: clean(siteRow.booking_id),
         siteId: id,
         recipientEmail: customerEmail,
+        ccEmails: assistantEmails,
         recipientName: customerName,
         propertyAddress: clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
           clean(siteRow.property_address),

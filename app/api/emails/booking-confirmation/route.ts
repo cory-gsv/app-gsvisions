@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { createClient } from "@supabase/supabase-js";
 import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
 import { createRescheduleToken } from "@/lib/reschedule-token";
+import { assistantCcEmails } from "@/lib/portal-access";
 
 function getResend() {
   const apiKey = process.env.RESEND_API_KEY || "";
@@ -263,6 +264,7 @@ export async function POST(req: Request) {
       .single();
 
     const toEmail = clean(profile?.email);
+    const assistantEmails = await assistantCcEmails(supabase, profileId);
     if (!toEmail) {
       return NextResponse.json(
         { error: "Client email not found." },
@@ -687,6 +689,7 @@ export async function POST(req: Request) {
         process.env.EMAIL_FROM ||
         "Golden State Visions <onboarding@resend.dev>",
       to: [toEmail],
+      cc: assistantEmails.length ? assistantEmails : undefined,
       bcc: [process.env.EMAIL_AUDIT_BCC || "cory@gsvisions.co"],
       replyTo: process.env.EMAIL_REPLY_TO || undefined,
       subject,

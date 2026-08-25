@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/lib/authz";
 import { getSuggestedDomainQuotes } from "@/lib/custom-domains";
+import { portalUserOwnsSite } from "@/lib/portal-access";
 
 export const runtime = "nodejs";
 
@@ -12,7 +13,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     if (!site) return NextResponse.json({ error: "Site not found." }, { status: 404 });
     const role = String(profile?.role || "").toLowerCase();
     const isAdmin = profile?.is_admin === true || role === "admin";
-    if (!isAdmin && site.client_id !== user.id && site.client_ms_id !== user.id) throw new AuthorizationError("You do not have access to this site.", 403);
+    if (!isAdmin && !portalUserOwnsSite(site, user.id, profile)) throw new AuthorizationError("You do not have access to this site.", 403);
     const body = await request.json().catch(() => ({}));
     const quotes = await getSuggestedDomainQuotes(body.domain);
     return NextResponse.json({

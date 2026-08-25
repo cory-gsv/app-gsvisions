@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
+import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -47,6 +48,7 @@ export async function GET(req: NextRequest) {
 
     const role = clean(profile?.role).toLowerCase();
     const isStaff = profile?.is_admin === true || role === "admin" || role === "staff";
+    const ownerIds = portalOwnerIds(user.id, profile);
     const lockedSiteIds = new Set<string>();
     if (!isStaff) {
       const { data: sites, error: sitesError } = await admin
@@ -56,14 +58,14 @@ export async function GET(req: NextRequest) {
       const { data: coListerRows, error: coListerError } = await admin
         .from("site_co_listers")
         .select("site_id")
-        .eq("profile_id", user.id)
+        .in("profile_id", ownerIds)
         .in("site_id", siteIds);
       const coListerSiteIds = new Set((coListerRows || []).map((row) => clean(row.site_id)));
       const allowedIds = new Set(
         (Array.isArray(sites) ? sites : [])
           .filter(
             (site) =>
-              clean(site?.client_id) === user.id || clean(site?.client_ms_id) === user.id || coListerSiteIds.has(clean(site?.id))
+              portalUserOwnsSite(site, user.id, profile) || coListerSiteIds.has(clean(site?.id))
           )
           .map((site) => clean(site?.id))
       );

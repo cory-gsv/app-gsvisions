@@ -2,6 +2,7 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
+import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
@@ -30,8 +31,8 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         .select("client_id, client_ms_id, paid, balance_due_cents")
         .eq("id", asset.site_id)
         .maybeSingle();
-      const { data: coLister } = await admin.from("site_co_listers").select("site_id").eq("site_id", asset.site_id).eq("profile_id", user.id).maybeSingle();
-      if (clean(site?.client_id) !== user.id && clean(site?.client_ms_id) !== user.id && !coLister) {
+      const { data: coLister } = await admin.from("site_co_listers").select("site_id").eq("site_id", asset.site_id).in("profile_id", portalOwnerIds(user.id, profile)).maybeSingle();
+      if (!portalUserOwnsSite(site, user.id, profile) && !coLister) {
         return NextResponse.json({ error: "You do not have access to this media." }, { status: 403 });
       }
 

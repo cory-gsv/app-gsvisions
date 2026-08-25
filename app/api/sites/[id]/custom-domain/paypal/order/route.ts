@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/lib/authz";
 import { getDomainQuote } from "@/lib/custom-domains";
 import { paypalConfigured, paypalRequest } from "@/lib/paypal";
+import { portalUserOwnsSite } from "@/lib/portal-access";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   if (!paypalConfigured()) return NextResponse.json({ error: "PayPal is not configured." }, { status: 503 });
@@ -12,7 +13,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const { data: site } = await admin.from("sites").select("id,client_id,client_ms_id,property_full_address,address_full").eq("id", id).maybeSingle();
     if (!site) return NextResponse.json({ error: "Site not found." }, { status: 404 });
     const role = String(profile?.role || "").toLowerCase();
-    if (profile?.is_admin !== true && role !== "admin" && site.client_id !== user.id && site.client_ms_id !== user.id) throw new AuthorizationError("You do not have access to this site.", 403);
+    if (profile?.is_admin !== true && role !== "admin" && !portalUserOwnsSite(site, user.id, profile)) throw new AuthorizationError("You do not have access to this site.", 403);
     const body = await request.json().catch(() => ({}));
     const quote = await getDomainQuote(body.domain);
     if (!quote.available) return NextResponse.json({ error: "That domain is no longer available." }, { status: 409 });

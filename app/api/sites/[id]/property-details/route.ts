@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AuthorizationError, authorizationErrorResponse, requireUser } from "@/lib/authz";
+import { portalUserOwnsSite } from "@/lib/portal-access";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -89,7 +90,7 @@ export async function PATCH(
 
     const role = clean(profile?.role).toLowerCase();
     const isAdmin = profile?.is_admin === true || role === "admin";
-    const isOwner = clean(existingSite.client_id) === user.id || clean(existingSite.client_ms_id) === user.id;
+    const isOwner = portalUserOwnsSite(existingSite, user.id, profile);
     if (!isAdmin && !isOwner) {
       throw new AuthorizationError("You do not have access to edit this property.", 403);
     }

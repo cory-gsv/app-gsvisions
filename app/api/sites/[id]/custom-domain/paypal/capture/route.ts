@@ -3,6 +3,7 @@ import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/l
 import { getDomainQuote, normalizeDomain } from "@/lib/custom-domains";
 import { completeDomainPurchase, GSV_DOMAIN_REGISTRANT } from "@/lib/domain-purchase";
 import { paypalConfigured, paypalRequest } from "@/lib/paypal";
+import { portalUserOwnsSite } from "@/lib/portal-access";
 
 type PayPalOrder = { status?: string; purchase_units?: Array<{ reference_id?: string; custom_id?: string; amount?: { currency_code?: string; value?: string }; payments?: { captures?: Array<{ id?: string; status?: string; amount?: { currency_code?: string; value?: string } }> } }>; message?: string };
 
@@ -14,7 +15,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const { data: site } = await admin.from("sites").select("id,client_id,client_ms_id").eq("id", id).maybeSingle();
     if (!site) return NextResponse.json({ error: "Site not found." }, { status: 404 });
     const role = String(profile?.role || "").toLowerCase();
-    if (profile?.is_admin !== true && role !== "admin" && site.client_id !== user.id && site.client_ms_id !== user.id) throw new AuthorizationError("You do not have access to this site.", 403);
+    if (profile?.is_admin !== true && role !== "admin" && !portalUserOwnsSite(site, user.id, profile)) throw new AuthorizationError("You do not have access to this site.", 403);
     const body = await request.json().catch(() => ({}));
     const orderId = String(body.paypalOrderId || "");
     if (!/^[A-Z0-9]+$/.test(orderId)) return NextResponse.json({ error: "Invalid PayPal order." }, { status: 400 });

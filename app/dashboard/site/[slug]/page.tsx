@@ -18,6 +18,7 @@ import "./property-workspace.css";
 import { makePropertySiteSlug, normalizePropertySiteSlug, propertySiteUrl } from "@/lib/property-site-slug";
 import { marketingEditorAllowsClientAccess, marketingEditorEnabled } from "@/lib/marketing-kit";
 import { createRescheduleToken } from "@/lib/reschedule-token";
+import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
 
 type Site = {
   id: string;
@@ -668,7 +669,7 @@ export default async function SitePage({
 
   const { data: viewerProfile, error: viewerProfileError } = await adminSb
     .from("profiles")
-    .select("id, role, is_admin")
+    .select("id, role, is_admin, assistant_to_profile_id")
     .eq("id", authData.user.id)
     .maybeSingle();
 
@@ -733,6 +734,7 @@ export default async function SitePage({
   if (!site) notFound();
 
   const viewerId = clean(authData.user.id);
+  const viewerOwnerIds = portalOwnerIds(viewerId, viewerProfile);
   const { data: coListerLink } = await adminSb
     .from("site_co_listers")
     .select("profile_id")
@@ -740,7 +742,7 @@ export default async function SitePage({
     .maybeSingle();
   const coListerProfileId = clean(coListerLink?.profile_id);
   const ownsSite =
-    clean(site.client_id) === viewerId || clean(site.client_ms_id) === viewerId || coListerProfileId === viewerId;
+    portalUserOwnsSite(site, viewerId, viewerProfile) || viewerOwnerIds.includes(coListerProfileId);
   if (!viewerIsAdmin && !ownsSite) redirect("/dashboard");
   if (cleanSlug !== site.id) redirect(`/dashboard/site/${site.id}`);
 
