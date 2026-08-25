@@ -137,6 +137,74 @@ export async function updateMicrosoftCalendarEventBody(eventId: string, content:
   return updateMicrosoftCalendarEvent({ eventId, content });
 }
 
+export async function createMicrosoftCalendarEvent(args: {
+  subject: string;
+  content: string;
+  propertyAddress: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+  travelMinutes?: number;
+  bufferMinutes?: number;
+}) {
+  if (!isMicrosoftCalendarConfigured()) throw new Error("Microsoft 365 calendar is not configured.");
+  const start = new Date(args.scheduledStart);
+  const end = new Date(args.scheduledEnd);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+    throw new Error("Microsoft 365 calendar creation requires a valid appointment range.");
+  }
+  const response = await graphRequest(`/users/${encodeURIComponent(m365CalendarEmail)}/events`, {
+    method: "POST",
+    body: JSON.stringify({
+      subject: args.subject,
+      start: graphDateTime(start.toISOString(), "start time"),
+      end: graphDateTime(end.toISOString(), "end time"),
+      location: { displayName: args.propertyAddress },
+      showAs: "busy",
+      allowNewTimeProposals: false,
+      body: { contentType: "text", content: args.content },
+    }),
+  });
+  if (!response.ok) {
+    const graphError = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+    const detail = String(graphError?.error?.message || "").trim();
+    throw new Error(`Microsoft 365 calendar creation returned ${response.status}${detail ? `: ${detail}` : "."}`);
+  }
+  const event = await response.json() as GraphEvent;
+  if (!event.id) throw new Error("Microsoft 365 created an appointment without returning its event ID.");
+
+  const travelBlockMinutes = Math.max(0, Number(args.travelMinutes || 0)) + Math.max(0, Number(args.bufferMinutes ?? 30));
+  const travelIds: string[] = [];
+  const createTravelBlock = async (subject: string, blockStart: Date, blockEnd: Date) => {
+    const blockResponse = await graphRequest(`/users/${encodeURIComponent(m365CalendarEmail)}/events`, {
+      method: "POST",
+      body: JSON.stringify({
+        subject,
+        start: graphDateTime(blockStart.toISOString(), "travel start time"),
+        end: graphDateTime(blockEnd.toISOString(), "travel end time"),
+        showAs: "busy",
+        sensitivity: "private",
+        allowNewTimeProposals: false,
+        body: { contentType: "text", content: args.propertyAddress },
+      }),
+    });
+    if (!blockResponse.ok) throw new Error(`Microsoft 365 travel-block creation returned ${blockResponse.status}.`);
+    const block = await blockResponse.json() as GraphEvent;
+    if (block.id) travelIds.push(block.id);
+  };
+
+  try {
+    if (travelBlockMinutes > 0) {
+      await createTravelBlock(`Travel to ${args.propertyAddress}`, new Date(start.getTime() - travelBlockMinutes * 60_000), start);
+      await createTravelBlock(`Travel from ${args.propertyAddress}`, end, new Date(end.getTime() + travelBlockMinutes * 60_000));
+    }
+  } catch (error) {
+    await Promise.all(travelIds.map((id) => graphRequest(`/users/${encodeURIComponent(m365CalendarEmail)}/events/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => undefined)));
+    await graphRequest(`/users/${encodeURIComponent(m365CalendarEmail)}/events/${encodeURIComponent(event.id)}`, { method: "DELETE" }).catch(() => undefined);
+    throw error;
+  }
+  return { id: event.id, webLink: event.webLink || "", travelEventIds: travelIds };
+}
+
 function parseGraphUtcDateTime(value: unknown) {
   const raw = String(value || "").trim();
   if (!raw) return null;

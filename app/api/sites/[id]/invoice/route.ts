@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
-import { shiftMicrosoftCalendarTravelEvents, updateMicrosoftCalendarEvent } from "@/lib/m365-calendar";
+import { createMicrosoftCalendarEvent, shiftMicrosoftCalendarTravelEvents, updateMicrosoftCalendarEvent } from "@/lib/m365-calendar";
 import { cancelScheduledAppointmentChangeEmail, scheduleAppointmentChangeEmail } from "@/lib/appointment-change-email";
 
 function clean(v: unknown): string {
@@ -353,6 +353,8 @@ export async function PATCH(
         updated_at: new Date().toISOString(),
       };
 
+      if (nextScheduledStart) bookingUpdatePayload.status = "scheduled";
+
       if (nextScheduledStart) bookingUpdatePayload.scheduled_start = nextScheduledStart;
       if (nextScheduledEnd) bookingUpdatePayload.scheduled_end = nextScheduledEnd;
       if (previousBookingTimezone) {
@@ -420,8 +422,7 @@ export async function PATCH(
       [clean(siteRow.property_state), clean(siteRow.property_zip)].filter(Boolean).join(" "),
     ].filter(Boolean).join(", ");
 
-    if (calendarEventId) {
-      const packageRow = invoiceItems.find((item) => clean(item.kind) === "package") || null;
+    const packageRow = invoiceItems.find((item) => clean(item.kind) === "package") || null;
       const packageGroupId = clean(packageRow?.group_id);
       const savedIncludedServices = packageGroupId
         ? invoiceItems
@@ -462,6 +463,9 @@ export async function PATCH(
         travelMinutes: Number(travel.driveMinutes || 0),
         travelFee: Number(travel.fee || 0),
       });
+
+    let calendarEventCreated = false;
+    if (calendarEventId) {
       try {
         calendarSync = await updateMicrosoftCalendarEvent({
           eventId: calendarEventId,
@@ -476,6 +480,30 @@ export async function PATCH(
         };
         console.error("INVOICE_CALENDAR_SYNC_FAILED", { siteId: id, calendarEventId, error: calendarSync.reason });
       }
+    } else if (nextAppointmentStart && nextAppointmentEnd && (appointmentChanged || clean(nextSiteData.pending_appointment_change_start) === nextAppointmentStart)) {
+      try {
+        const created = await createMicrosoftCalendarEvent({
+          subject: `GSV Real Estate Media — ${propertyAddress}`,
+          content: notes,
+          propertyAddress,
+          scheduledStart: nextAppointmentStart,
+          scheduledEnd: nextAppointmentEnd,
+          travelMinutes: Number(travel.driveMinutes || 0),
+          bufferMinutes: Number(process.env.M365_APPOINTMENT_BUFFER_MINUTES || 30),
+        });
+        calendarEventCreated = true;
+        calendarSync = { updated: true, created: true, event_id: created.id, travel_events_created: created.travelEventIds.length };
+        nextSiteData.calendar_event_id = created.id;
+        if (created.webLink) nextSiteData.calendar_web_link = created.webLink;
+        const { error: eventStateError } = await supabase
+          .from("sites")
+          .update({ status: "scheduled", site_data: nextSiteData, updated_at: new Date().toISOString() })
+          .eq("id", id);
+        if (eventStateError) throw new Error("The calendar event was created, but its ID could not be saved to the order.");
+      } catch (calendarError) {
+        calendarSync = { updated: false, reason: calendarError instanceof Error ? calendarError.message : "calendar_creation_failed" };
+        console.error("INVOICE_CALENDAR_CREATE_FAILED", { siteId: id, error: calendarSync.reason });
+      }
     }
 
     const pendingAppointmentStart = clean(nextSiteData.pending_appointment_change_start);
@@ -486,7 +514,7 @@ export async function PATCH(
       (appointmentChanged || pendingAppointmentStart === nextAppointmentStart)
     );
 
-    if (needsAppointmentConfirmation && calendarSync.updated === true) {
+    if (needsAppointmentConfirmation && calendarSync.updated === true && !calendarEventCreated) {
       try {
         const travelSync = await shiftMicrosoftCalendarTravelEvents({
           propertyAddress,
