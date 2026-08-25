@@ -60,7 +60,10 @@ export async function listMicrosoftCalendarEvents(start: string, end: string) {
     "$orderby": "start/dateTime",
     "$top": "500",
   });
-  const response = await graphRequest(`/users/${encodeURIComponent(m365CalendarEmail)}/calendarView?${query}`);
+  const response = await graphRequest(
+    `/users/${encodeURIComponent(m365CalendarEmail)}/calendarView?${query}`,
+    { headers: { Prefer: 'outlook.timezone="UTC"' } }
+  );
   if (!response.ok) throw new Error(`Microsoft 365 calendar returned ${response.status}.`);
   const data = await response.json() as { value?: GraphEvent[] };
   return (data.value || [])
@@ -68,8 +71,8 @@ export async function listMicrosoftCalendarEvents(start: string, end: string) {
     .map((event) => ({
       id: event.id || "",
       title: event.subject || "(No title)",
-      start: event.start!.dateTime!,
-      end: event.end!.dateTime!,
+      start: new Date(`${event.start!.dateTime!.replace(/Z$/, "")}Z`).toISOString(),
+      end: new Date(`${event.end!.dateTime!.replace(/Z$/, "")}Z`).toISOString(),
       allDay: event.isAllDay === true,
       location: event.location?.displayName || "",
       showAs: event.showAs || "busy",

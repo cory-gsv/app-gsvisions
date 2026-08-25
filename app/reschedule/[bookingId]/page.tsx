@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import type { Metadata } from "next";
 import RescheduleForm from "./RescheduleForm";
 import { verifyRescheduleToken } from "@/lib/reschedule-token";
+import "./reschedule.css";
 
 export const metadata: Metadata = {
   title: "Request an appointment change | Golden State Visions",
@@ -37,6 +38,7 @@ function formatDateLabel(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -48,6 +50,7 @@ function formatTimeLabel(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
     hour: "numeric",
     minute: "2-digit",
   }).format(d);
@@ -149,42 +152,13 @@ export default async function ReschedulePage({
         : 120;
 
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "#f6f6f6",
-        padding: "32px 20px",
-        color: "#171717",
-      }}
-    >
-      <div
-        style={{
-          maxWidth: "1180px",
-          margin: "0 auto",
-        }}
-      >
-        <div
-          style={{
-            background: "#ffffff",
-            border: "1px solid #e8e8e8",
-            borderRadius: "22px",
-            boxShadow: "0 10px 30px rgba(0,0,0,.05)",
-            padding: "32px",
-          }}
-        >
-          <div
-            style={{
-              fontSize: "13px",
-              fontWeight: 800,
-              letterSpacing: ".08em",
-              textTransform: "uppercase",
-              color: "#6b7280",
-              marginBottom: "10px",
-            }}
-          >
-            Reschedule Appointment
-          </div>
-
+    <main className="gsv-reschedule-page">
+      <div className="gsv-reschedule-shell">
+        <header className="gsv-reschedule-brand">
+          <strong>Golden State Visions</strong>
+          <span>Appointment changes</span>
+        </header>
+        <div className="gsv-reschedule-card">
           <RescheduleForm
             bookingId={booking.id}
             token={token}

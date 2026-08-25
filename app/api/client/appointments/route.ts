@@ -1,4 +1,5 @@
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
+import { createRescheduleToken } from "@/lib/reschedule-token";
 
 export const runtime = "nodejs";
 
@@ -79,6 +80,7 @@ export async function GET(request: Request) {
             package_name: clean(booking.selected_package_name),
             timezone: clean(booking.scheduled_timezone),
             site_id: clean(site.id),
+            reschedule_url: `/reschedule/${encodeURIComponent(clean(booking.id))}?token=${encodeURIComponent(createRescheduleToken(clean(booking.id)))}`,
           },
         };
       })

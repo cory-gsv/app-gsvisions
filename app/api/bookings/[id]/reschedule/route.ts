@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { verifyRescheduleToken } from "@/lib/reschedule-token";
-import { listMicrosoftCalendarEvents } from "@/lib/m365-calendar";
+import {
+  listMicrosoftCalendarEvents,
+  shiftMicrosoftCalendarTravelEvents,
+  updateMicrosoftCalendarEvent,
+} from "@/lib/m365-calendar";
+import {
+  cancelScheduledAppointmentChangeEmail,
+  scheduleAppointmentChangeEmail,
+} from "@/lib/appointment-change-email";
+
+const BUSINESS_TIME_ZONE = "America/Los_Angeles";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -27,23 +37,54 @@ function getSupabaseAdmin() {
   });
 }
 
-function dayKeyLocal(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
+function pacificDateKey(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
-function startOfDay(d: Date) {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+function addDaysToKey(ymd: string, amount: number) {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day + amount, 12));
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
-function addDays(d: Date, n: number) {
-  const x = new Date(d);
-  x.setDate(x.getDate() + n);
-  return x;
+function dayOfWeek(ymd: string) {
+  const [year, month, day] = ymd.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12)).getUTCDay();
+}
+
+function pacificInstant(ymd: string, hour = 0, minute = 0) {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const utcGuess = Date.UTC(year, month - 1, day, hour, minute);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: BUSINESS_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = formatter.formatToParts(new Date(utcGuess));
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value || 0);
+  const representedAsUtc = Date.UTC(
+    value("year"),
+    value("month") - 1,
+    value("day"),
+    value("hour"),
+    value("minute"),
+    value("second")
+  );
+  return new Date(utcGuess - (representedAsUtc - utcGuess));
 }
 
 function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
@@ -52,12 +93,6 @@ function overlaps(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
 
 function isDateOnlyString(v: unknown) {
   return /^\d{4}-\d{2}-\d{2}$/.test(clean(v));
-}
-
-function parseYMDLocal(ymd: string) {
-  const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0);
 }
 
 function normalizeEvents(input: unknown) {
@@ -78,17 +113,17 @@ function normalizeEvents(input: unknown) {
       let e: Date | null = null;
 
       if (allDay) {
-        s = isDateOnlyString(rawStart) ? parseYMDLocal(rawStart) : new Date(rawStart);
+        s = isDateOnlyString(rawStart) ? pacificInstant(rawStart) : new Date(rawStart);
         e = isDateOnlyString(rawEnd)
-          ? parseYMDLocal(rawEnd)
+          ? pacificInstant(rawEnd)
           : rawEnd
             ? new Date(rawEnd)
             : s
-              ? addDays(startOfDay(s), 1)
+              ? pacificInstant(addDaysToKey(pacificDateKey(s), 1))
               : null;
 
         if (s && (!e || Number.isNaN(e.getTime()))) {
-          e = addDays(startOfDay(s), 1);
+          e = pacificInstant(addDaysToKey(pacificDateKey(s), 1));
         }
       } else {
         s = rawStart ? new Date(rawStart) : null;
@@ -113,23 +148,23 @@ function normalizeEvents(input: unknown) {
     .filter((ev) => ev.id && ev.s && ev.e && !Number.isNaN(ev.s.getTime()) && !Number.isNaN(ev.e.getTime()));
 }
 
-function buildCalendarRows(startDate: Date, rowCount: number) {
-  const rows: (Date | null)[][] = [];
-  let cursor = startOfDay(startDate);
+function buildCalendarRows(startDate: string, rowCount: number) {
+  const rows: (string | null)[][] = [];
+  let cursor = startDate;
 
   for (let row = 0; row < rowCount; row++) {
-    const cells: (Date | null)[] = new Array(7).fill(null);
+    const cells: (string | null)[] = new Array(7).fill(null);
 
     if (row === 0) {
-      const firstDow = cursor.getDay();
+      const firstDow = dayOfWeek(cursor);
       for (let col = firstDow; col < 7; col++) {
-        cells[col] = new Date(cursor);
-        cursor = addDays(cursor, 1);
+        cells[col] = cursor;
+        cursor = addDaysToKey(cursor, 1);
       }
     } else {
       for (let col = 0; col < 7; col++) {
-        cells[col] = new Date(cursor);
-        cursor = addDays(cursor, 1);
+        cells[col] = cursor;
+        cursor = addDaysToKey(cursor, 1);
       }
     }
 
@@ -139,13 +174,14 @@ function buildCalendarRows(startDate: Date, rowCount: number) {
   return rows;
 }
 
-function flattenCalendarRows(rows: (Date | null)[][]) {
-  return rows.flat().filter(Boolean) as Date[];
+function flattenCalendarRows(rows: (string | null)[][]) {
+  return rows.flat().filter(Boolean) as string[];
 }
 
 function fmtTime(d: Date) {
   const parts = d
     .toLocaleTimeString("en-US", {
+      timeZone: BUSINESS_TIME_ZONE,
       hour: "numeric",
       minute: "2-digit",
     })
@@ -154,17 +190,14 @@ function fmtTime(d: Date) {
   return parts.replace(" am", "a").replace(" pm", "p").replace(" ", "");
 }
 
-function allDayEventBlocksDay(
-  ev: { s: Date; e: Date },
-  dayDate: Date
-) {
-  const dayStart = startOfDay(dayDate);
-  const nextDayStart = addDays(dayStart, 1);
+function allDayEventBlocksDay(ev: { s: Date; e: Date }, ymd: string) {
+  const dayStart = pacificInstant(ymd);
+  const nextDayStart = pacificInstant(addDaysToKey(ymd, 1));
   return overlaps(dayStart, nextDayStart, ev.s, ev.e);
 }
 
 function computeSlotsForDays(args: {
-  days: Date[];
+  days: string[];
   events: Array<{
     id: string;
     s: Date;
@@ -198,8 +231,7 @@ function computeSlotsForDays(args: {
     }>
   >();
 
-  for (const d of days) {
-    const key = dayKeyLocal(d);
+  for (const key of days) {
     const slots: Array<{
       start: string;
       end: string;
@@ -207,21 +239,18 @@ function computeSlotsForDays(args: {
       label: string;
     }> = [];
 
-    const isSameDay = key === dayKeyLocal(now);
-    const isClosedWeekday = CLOSED_WEEKDAYS.has(d.getDay());
+    const isSameDay = key === pacificDateKey(now);
+    const isClosedWeekday = CLOSED_WEEKDAYS.has(dayOfWeek(key));
 
-    const dayStart = new Date(d);
-    dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
-
-    const dayEnd = new Date(d);
-    dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
+    const dayStart = pacificInstant(key, DAY_START_HOUR);
+    const dayEnd = pacificInstant(key, DAY_END_HOUR);
 
     if (isClosedWeekday) {
       byDay.set(key, []);
       continue;
     }
 
-    const hasAllDayBlock = events.some((ev) => ev.allDay && allDayEventBlocksDay(ev, d));
+    const hasAllDayBlock = events.some((ev) => ev.allDay && allDayEventBlocksDay(ev, key));
     if (hasAllDayBlock) {
       for (
         let t = new Date(dayStart);
@@ -309,7 +338,10 @@ async function loadBookingContext(id: string) {
       scheduled_end,
       estimated_minutes,
       photographer_name,
-      client_id
+      client_id,
+      client_first_name,
+      client_last_name,
+      client_email
     `)
     .eq("id", id)
     .single();
@@ -328,7 +360,9 @@ async function loadBookingContext(id: string) {
       property_state,
       property_zip,
       property_full_address,
-      address_full
+      address_full,
+      invoice_items,
+      site_data
     `)
     .eq("booking_id", id)
     .limit(1)
@@ -365,6 +399,7 @@ async function loadBookingContext(id: string) {
 
   return {
     booking,
+    site,
     location,
     durationMinutes,
   };
@@ -377,6 +412,43 @@ async function fetchCalendarEvents(args: {
 }) {
   const events = await listMicrosoftCalendarEvents(args.startIso, args.endIso);
   return normalizeEvents({ events });
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function removeCurrentAppointmentEvents(args: {
+  events: Array<{ id: string; title?: string; s: Date; e: Date; allDay: boolean }>;
+  calendarEventId: string;
+  location: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+}) {
+  const start = new Date(args.scheduledStart);
+  const end = new Date(args.scheduledEnd);
+  const addressKey = clean(args.location).split(",")[0].toLowerCase();
+  const near = (left: Date, right: Date) => Math.abs(left.getTime() - right.getTime()) <= 2 * 60_000;
+
+  return args.events.filter((event) => {
+    if (args.calendarEventId && event.id === args.calendarEventId) return false;
+    const title = clean(event.title).toLowerCase();
+    if (!addressKey || !title.includes(addressKey)) return true;
+    if (title.startsWith("travel to") && near(event.e, start)) return false;
+    if (title.startsWith("travel from") && near(event.s, end)) return false;
+    return true;
+  });
+}
+
+function appointmentItemsAtTime(input: unknown, scheduledStart: string, scheduledEnd: string) {
+  if (!Array.isArray(input)) return input;
+  return input.map((value) => {
+    const item = asRecord(value);
+    if (!clean(item.appt_start)) return value;
+    return { ...item, appt_start: scheduledStart, appt_end: scheduledEnd };
+  });
 }
 
 export async function GET(
@@ -396,11 +468,25 @@ export async function GET(
       return NextResponse.json({ error: "Invalid or expired reschedule link." }, { status: 401 });
     }
     const rows = Math.max(1, Math.min(6, Number(searchParams.get("rows") || "2")));
-    const tz = clean(searchParams.get("tz")) || "America/Los_Angeles";
+    const tz = BUSINESS_TIME_ZONE;
 
-    const { booking, location, durationMinutes } = await loadBookingContext(bookingId);
+    const { booking, site, location, durationMinutes } = await loadBookingContext(bookingId);
 
     const scheduledStart = clean(booking.scheduled_start);
+    const scheduledEnd = clean(booking.scheduled_end);
+    const siteData = asRecord(site?.site_data);
+    let calendarEventId = clean(siteData.calendar_event_id);
+    if (!calendarEventId && site?.id) {
+      const supabase = getSupabaseAdmin();
+      const { data: ingestRow } = await supabase
+        .from("booking_ingest_events")
+        .select("payload")
+        .eq("site_id", site.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      calendarEventId = clean(asRecord(ingestRow?.payload).fulfillment_appointment_id);
+    }
     const within24Hours = scheduledStart ? isWithin24Hours(scheduledStart) : false;
 
     if (within24Hours) {
@@ -420,7 +506,7 @@ export async function GET(
       });
     }
 
-    const today = startOfDay(new Date());
+    const today = pacificDateKey(new Date());
     const calendarRows = buildCalendarRows(today, rows);
     const actualDays = flattenCalendarRows(calendarRows);
 
@@ -441,14 +527,21 @@ export async function GET(
       });
     }
 
-    const windowStart = startOfDay(actualDays[0]);
-    const windowEnd = addDays(startOfDay(actualDays[actualDays.length - 1]), 1);
+    const windowStart = pacificInstant(actualDays[0]);
+    const windowEnd = pacificInstant(addDaysToKey(actualDays[actualDays.length - 1], 1));
 
-    const events = (await fetchCalendarEvents({
+    const loadedEvents = (await fetchCalendarEvents({
       startIso: windowStart.toISOString(),
       endIso: windowEnd.toISOString(),
       tz,
-    })) as Array<{ id: string; s: Date; e: Date; allDay: boolean }>;
+    })) as Array<{ id: string; title?: string; s: Date; e: Date; allDay: boolean }>;
+    const events = removeCurrentAppointmentEvents({
+      events: loadedEvents,
+      calendarEventId,
+      location,
+      scheduledStart,
+      scheduledEnd,
+    });
 
     const slotsByDayMap = computeSlotsForDays({
       days: actualDays,
@@ -471,9 +564,7 @@ export async function GET(
         scheduled_start: clean(booking.scheduled_start),
         scheduled_end: clean(booking.scheduled_end),
       },
-      calendarRows: calendarRows.map((week) =>
-        week.map((d) => (d ? dayKeyLocal(d) : null))
-      ),
+      calendarRows,
       slotsByDay,
     });
   } catch (err) {
@@ -511,8 +602,9 @@ export async function POST(
       return NextResponse.json({ error: "Invalid action." }, { status: 400 });
     }
 
-    const { booking, durationMinutes } = await loadBookingContext(clean(id));
+    const { booking, site, location, durationMinutes } = await loadBookingContext(clean(id));
     const currentScheduledStart = clean(booking.scheduled_start);
+    const currentScheduledEnd = clean(booking.scheduled_end);
 
     if (currentScheduledStart && isWithin24Hours(currentScheduledStart)) {
       return NextResponse.json(
@@ -544,19 +636,55 @@ export async function POST(
         return NextResponse.json({ error: "Invalid appointment time." }, { status: 400 });
       }
 
-      const requestedDay = startOfDay(requestedStart);
-      const events = (await fetchCalendarEvents({
-        startIso: requestedDay.toISOString(),
-        endIso: addDays(requestedDay, 1).toISOString(),
-        tz: "America/Los_Angeles",
-      })) as Array<{ id: string; s: Date; e: Date; allDay: boolean }>;
+      if (requestedStart.toISOString() === currentScheduledStart) {
+        return NextResponse.json({
+          ok: true,
+          confirmed: true,
+          unchanged: true,
+          scheduled_start,
+          scheduled_end,
+        });
+      }
+
+      const siteData = asRecord(site?.site_data);
+      let calendarEventId = clean(siteData.calendar_event_id);
+      if (!calendarEventId && site?.id) {
+        const { data: ingestRow } = await supabase
+          .from("booking_ingest_events")
+          .select("payload")
+          .eq("site_id", site.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        calendarEventId = clean(asRecord(ingestRow?.payload).fulfillment_appointment_id);
+      }
+      if (!calendarEventId) {
+        return NextResponse.json(
+          { error: "We could not connect this appointment to the scheduling calendar. Please call (916) 432-3373." },
+          { status: 502 }
+        );
+      }
+
+      const requestedDay = pacificDateKey(requestedStart);
+      const loadedEvents = (await fetchCalendarEvents({
+        startIso: pacificInstant(requestedDay).toISOString(),
+        endIso: pacificInstant(addDaysToKey(requestedDay, 1)).toISOString(),
+        tz: BUSINESS_TIME_ZONE,
+      })) as Array<{ id: string; title?: string; s: Date; e: Date; allDay: boolean }>;
+      const events = removeCurrentAppointmentEvents({
+        events: loadedEvents,
+        calendarEventId,
+        location,
+        scheduledStart: currentScheduledStart,
+        scheduledEnd: currentScheduledEnd,
+      });
       const slots = computeSlotsForDays({
         days: [requestedDay],
         events,
         serviceMin: durationMinutes,
         now: new Date(),
         sameDayAllowed: false,
-      }).get(dayKeyLocal(requestedDay)) || [];
+      }).get(requestedDay) || [];
       const validSlot = slots.some(
         (slot) =>
           !slot.busy &&
@@ -570,6 +698,146 @@ export async function POST(
         );
       }
 
+      try {
+        const mainCalendarUpdate = await updateMicrosoftCalendarEvent({
+          eventId: calendarEventId,
+          scheduledStart: scheduled_start,
+          scheduledEnd: scheduled_end,
+        });
+        if (mainCalendarUpdate.updated !== true) throw new Error(clean(mainCalendarUpdate.reason));
+        const travelCalendarUpdate = await shiftMicrosoftCalendarTravelEvents({
+          propertyAddress: location,
+          previousStart: currentScheduledStart,
+          previousEnd: currentScheduledEnd,
+          nextStart: scheduled_start,
+          nextEnd: scheduled_end,
+        });
+        if (travelCalendarUpdate.updated !== true) throw new Error(clean(travelCalendarUpdate.reason));
+      } catch {
+        await updateMicrosoftCalendarEvent({
+          eventId: calendarEventId,
+          scheduledStart: currentScheduledStart,
+          scheduledEnd: currentScheduledEnd,
+        }).catch(() => undefined);
+        await shiftMicrosoftCalendarTravelEvents({
+          propertyAddress: location,
+          previousStart: scheduled_start,
+          previousEnd: scheduled_end,
+          nextStart: currentScheduledStart,
+          nextEnd: currentScheduledEnd,
+        }).catch(() => undefined);
+        return NextResponse.json(
+          { error: "Microsoft 365 could not confirm the new time. Your original appointment is still in place." },
+          { status: 502 }
+        );
+      }
+
+      const updatedAt = new Date().toISOString();
+      const { error: bookingUpdateError } = await supabase
+        .from("bookings")
+        .update({
+          scheduled_start,
+          scheduled_end,
+          scheduled_timezone: BUSINESS_TIME_ZONE,
+          reschedule_status: null,
+          updated_at: updatedAt,
+        })
+        .eq("id", clean(id));
+      let siteUpdateError: { message?: string } | null = null;
+      if (!bookingUpdateError && site?.id) {
+        const nextInvoiceItems = appointmentItemsAtTime(site.invoice_items, scheduled_start, scheduled_end);
+        const siteUpdate = await supabase
+          .from("sites")
+          .update({ invoice_items: nextInvoiceItems, updated_at: updatedAt })
+          .eq("id", site.id);
+        siteUpdateError = siteUpdate.error;
+      }
+
+      if (bookingUpdateError || siteUpdateError) {
+        if (!bookingUpdateError) {
+          await supabase
+            .from("bookings")
+            .update({
+              scheduled_start: currentScheduledStart,
+              scheduled_end: currentScheduledEnd,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", clean(id));
+        }
+        await updateMicrosoftCalendarEvent({
+          eventId: calendarEventId,
+          scheduledStart: currentScheduledStart,
+          scheduledEnd: currentScheduledEnd,
+        }).catch(() => undefined);
+        await shiftMicrosoftCalendarTravelEvents({
+          propertyAddress: location,
+          previousStart: scheduled_start,
+          previousEnd: scheduled_end,
+          nextStart: currentScheduledStart,
+          nextEnd: currentScheduledEnd,
+        }).catch(() => undefined);
+        return NextResponse.json(
+          { error: "The new time could not be saved. Your original appointment is still in place." },
+          { status: 500 }
+        );
+      }
+
+      let appointmentEmailScheduledFor: string | null = null;
+      const clientEmail = clean(booking.client_email);
+      if (clientEmail && site?.id) {
+        const pendingEmail = await scheduleAppointmentChangeEmail({
+          previousEmailId: clean(siteData.appointment_change_email_id),
+          bookingId: clean(id),
+          siteId: clean(site.id),
+          recipientEmail: clientEmail,
+          recipientName: [clean(booking.client_first_name), clean(booking.client_last_name)].filter(Boolean).join(" "),
+          propertyAddress: location,
+          scheduledStart: scheduled_start,
+          scheduledEnd: scheduled_end,
+        });
+        appointmentEmailScheduledFor = pendingEmail.scheduledFor;
+        const nextSiteData = {
+          ...siteData,
+          appointment_change_email_id: pendingEmail.emailId,
+          appointment_change_email_scheduled_for: pendingEmail.scheduledFor,
+          appointment_change_email_start: scheduled_start,
+        };
+        const { error: emailStateError } = await supabase
+          .from("sites")
+          .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
+          .eq("id", site.id);
+        if (emailStateError) {
+          await cancelScheduledAppointmentChangeEmail(pendingEmail.emailId);
+          return NextResponse.json(
+            { error: "Your appointment changed, but the confirmation email could not be scheduled. Please call (916) 432-3373." },
+            { status: 500 }
+          );
+        }
+      }
+
+      await supabase
+        .from("appointment_change_requests")
+        .update({ status: "superseded", updated_at: new Date().toISOString() })
+        .eq("booking_id", clean(id))
+        .eq("status", "pending");
+      await supabase.from("appointment_change_requests").insert({
+        booking_id: clean(id),
+        site_id: site?.id || null,
+        request_type: "reschedule",
+        requested_start: scheduled_start,
+        requested_end: scheduled_end,
+        customer_notes: notes || null,
+        status: "approved",
+        reviewed_at: new Date().toISOString(),
+      });
+
+      return NextResponse.json({
+        ok: true,
+        confirmed: true,
+        scheduled_start,
+        scheduled_end,
+        appointment_email_scheduled_for: appointmentEmailScheduledFor,
+      });
     }
 
     const { data: requestId, error } = await supabase.rpc(
@@ -577,8 +845,8 @@ export async function POST(
       {
         p_booking_id: clean(id),
         p_request_type: action,
-        p_requested_start: action === "reschedule" ? scheduled_start : null,
-        p_requested_end: action === "reschedule" ? scheduled_end : null,
+        p_requested_start: null,
+        p_requested_end: null,
         p_customer_notes: notes || null,
       }
     );

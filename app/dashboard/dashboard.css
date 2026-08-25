@@ -1522,6 +1522,49 @@
   transition: border-color .16s ease, background-color .16s ease;
 }
 
+.gsv-dash #gsv-calendar .gsv-upcoming__summary {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.gsv-dash #gsv-calendar .gsv-upcoming__change,
+.gsv-evmodal__reschedule {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(23, 35, 31, .16);
+  color: #17231f !important;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-decoration: none !important;
+  text-transform: uppercase;
+}
+
+.gsv-dash #gsv-calendar .gsv-upcoming__change:hover {
+  color: #806000 !important;
+}
+
+.gsv-evmodal__reschedule {
+  width: 100%;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border: 1px solid #ffc72c;
+  background: #ffc72c;
+}
+
+.gsv-evmodal__reschedule[hidden] { display: none; }
+
 .gsv-dash #gsv-calendar .gsv-upcoming__item::before {
   content: "";
   position: absolute;
@@ -1544,6 +1587,12 @@
   outline: 3px solid rgba(255, 199, 44, .42);
   outline-offset: 2px;
   box-shadow: none;
+}
+
+.gsv-dash #gsv-calendar .gsv-upcoming__summary:focus-visible,
+.gsv-dash #gsv-calendar .gsv-upcoming__change:focus-visible {
+  outline: 3px solid rgba(255, 199, 44, .55);
+  outline-offset: 4px;
 }
 
 .gsv-dash #gsv-calendar .gsv-upcoming__title {

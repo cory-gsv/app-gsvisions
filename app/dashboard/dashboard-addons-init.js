@@ -1036,6 +1036,7 @@ export async function initDashboardAddons() {
 
     const location = clean(ep?.location)
     const description = clean(ep?.description)
+    const rescheduleUrl = clean(ep?.reschedule_url)
 
     const addrHtml = location
       ? `<a href="https://www.google.com/search?q=${encodeURIComponent(
@@ -1049,6 +1050,12 @@ export async function initDashboardAddons() {
     safeText($("#gsv-ev-when"), when)
     safeHtml($("#gsv-ev-addr"), addrHtml)
     safeHtml($("#gsv-ev-desc"), descHtml)
+
+    const rescheduleLink = $("#gsv-ev-reschedule")
+    if (rescheduleLink) {
+      rescheduleLink.href = rescheduleUrl || "#"
+      rescheduleLink.hidden = !rescheduleUrl
+    }
 
     openModal("#gsv-event-modal")
   }
@@ -1305,11 +1312,15 @@ export async function initDashboardAddons() {
         .map((ev) => {
           const when = formatWhenForList(ev.start, ev.end, ev.allDay)
           const loc = clean(ev?.extendedProps?.location)
+          const rescheduleUrl = clean(ev?.extendedProps?.reschedule_url)
           return `
-            <button type="button" class="gsv-upcoming__item" data-ev-id="${escapeHtml(ev.id)}">
-              <div class="gsv-upcoming__title">${escapeHtml(ev.title || "Appointment")}</div>
-              <div class="gsv-upcoming__meta">${escapeHtml(when)}${loc ? ` • ${escapeHtml(loc)}` : ""}</div>
-            </button>
+            <article class="gsv-upcoming__item">
+              <button type="button" class="gsv-upcoming__summary" data-ev-id="${escapeHtml(ev.id)}">
+                <div class="gsv-upcoming__title">${escapeHtml(ev.title || "Appointment")}</div>
+                <div class="gsv-upcoming__meta">${escapeHtml(when)}${loc ? ` • ${escapeHtml(loc)}` : ""}</div>
+              </button>
+              ${rescheduleUrl ? `<a class="gsv-upcoming__change" href="${escapeHtml(rescheduleUrl)}">Change appointment <span aria-hidden="true">→</span></a>` : ""}
+            </article>
           `
         })
         .join("")
@@ -1317,7 +1328,7 @@ export async function initDashboardAddons() {
       listEl.addEventListener(
         "click",
         (e) => {
-          const btn = e.target.closest(".gsv-upcoming__item")
+          const btn = e.target.closest(".gsv-upcoming__summary")
           if (!btn) return
           const id = clean(btn.getAttribute("data-ev-id"))
           const ev = events.find((x) => String(x.id) === id)
