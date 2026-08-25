@@ -77,6 +77,7 @@ export async function scheduleAppointmentChangeEmail(args: {
   packageName?: string | null;
   squareFeet?: number | null;
   totalCents?: number | null;
+  sample?: boolean;
 }) {
   const apiKey = clean(process.env.RESEND_API_KEY);
   if (!apiKey) throw new Error("Appointment email delivery is not configured.");
@@ -92,7 +93,7 @@ export async function scheduleAppointmentChangeEmail(args: {
   const previousEmailId = clean(args.previousEmailId);
   if (previousEmailId) await resend.emails.cancel(previousEmailId).catch(() => undefined);
 
-  const scheduledFor = new Date(Date.now() + 2 * 60_000);
+  const scheduledFor = new Date(Date.now() + (args.sample ? 0 : 2 * 60_000));
   const dateLabel = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(start);
   const timeLabel = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" }).format(start);
   const firstName = clean(args.recipientName).split(/\s+/)[0] || "there";
@@ -133,10 +134,10 @@ export async function scheduleAppointmentChangeEmail(args: {
     cc: cc.length ? cc : undefined,
     bcc: [auditRecipient],
     replyTo: process.env.EMAIL_REPLY_TO || undefined,
-    subject: `Appointment updated – ${propertyAddress}`,
+    subject: `${args.sample ? "[SAMPLE] " : ""}Appointment updated – ${propertyAddress}`,
     html,
     text,
-    scheduledAt: scheduledFor.toISOString(),
+    scheduledAt: args.sample ? undefined : scheduledFor.toISOString(),
   });
   if (error || !data?.id) throw new Error(error?.message || "The appointment update email could not be scheduled.");
 
