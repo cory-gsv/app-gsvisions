@@ -24,7 +24,7 @@ export async function scheduleAppointmentChangeEmail(args: {
   const previousEmailId = clean(args.previousEmailId);
   if (previousEmailId) await resend.emails.cancel(previousEmailId).catch(() => undefined);
 
-  const scheduledFor = new Date(Date.now() + 5 * 60_000);
+  const scheduledFor = new Date(Date.now() + 2 * 60_000);
   const dateLabel = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Los_Angeles",
     weekday: "long",

@@ -182,7 +182,7 @@ export default function RescheduleForm({
         <p className="gsv-reschedule-eyebrow">Appointment confirmed</p>
         <h1>Your new time is set.</h1>
         <p className="gsv-reschedule-success__time">{appointmentLabel(selectedStart)} PT</p>
-        <p>Your portal and Cory&apos;s calendar are updated. A confirmation email will arrive in about five minutes.</p>
+        <p>Your portal and Cory&apos;s calendar are updated. A confirmation email will arrive in about two minutes.</p>
         <a className="gsv-reschedule-primary" href="/dashboard">Return to client portal</a>
       </section>
     );
