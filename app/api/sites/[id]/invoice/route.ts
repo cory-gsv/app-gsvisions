@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
-import { updateMicrosoftCalendarEventBody } from "@/lib/m365-calendar";
+import { shiftMicrosoftCalendarTravelEvents, updateMicrosoftCalendarEvent } from "@/lib/m365-calendar";
 import { cancelScheduledAppointmentChangeEmail, scheduleAppointmentChangeEmail } from "@/lib/appointment-change-email";
 
 function clean(v: unknown): string {
@@ -223,6 +223,9 @@ export async function PATCH(
     let customerEmail = "";
     let customerPhone = "";
     let appointmentEmailScheduledFor = "";
+    let appointmentChanged = false;
+    let nextAppointmentStart = "";
+    let nextAppointmentEnd = "";
 
     if (siteRow.booking_id) {
       const { data: bookingRow } = await supabase
@@ -366,6 +369,12 @@ export async function PATCH(
         bookingUpdatePayload.photographer_email = previousPhotographerEmail;
       }
 
+      appointmentChanged = Boolean(
+        nextScheduledStart && nextScheduledStart !== previousBookingScheduledStart
+      );
+      nextAppointmentStart = nextScheduledStart;
+      nextAppointmentEnd = nextScheduledEnd;
+
       const { error: bookingUpdateError } = await supabase
         .from("bookings")
         .update(bookingUpdatePayload)
@@ -378,32 +387,19 @@ export async function PATCH(
         );
       }
 
-      if (nextScheduledStart && nextScheduledStart !== previousBookingScheduledStart && customerEmail) {
-        const pendingEmail = await scheduleAppointmentChangeEmail({
-          previousEmailId: clean(currentSiteData.appointment_change_email_id),
-          bookingId: clean(siteRow.booking_id),
-          siteId: id,
-          recipientEmail: customerEmail,
-          recipientName: customerName,
-          propertyAddress: clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
-            clean(siteRow.property_address),
-            clean(siteRow.property_city),
-            [clean(siteRow.property_state), clean(siteRow.property_zip)].filter(Boolean).join(" "),
-          ].filter(Boolean).join(", "),
-          scheduledStart: nextScheduledStart,
-          scheduledEnd: nextScheduledEnd,
-        });
-        appointmentEmailScheduledFor = pendingEmail.scheduledFor;
-        nextSiteData.appointment_change_email_id = pendingEmail.emailId;
-        nextSiteData.appointment_change_email_scheduled_for = pendingEmail.scheduledFor;
-        nextSiteData.appointment_change_email_start = nextScheduledStart;
-        const { error: appointmentEmailStateError } = await supabase
+      if (appointmentChanged) {
+        nextSiteData.pending_appointment_change_start = nextScheduledStart;
+        nextSiteData.pending_appointment_change_end = nextScheduledEnd;
+        nextSiteData.pending_appointment_previous_start =
+          clean(currentSiteData.pending_appointment_previous_start) || previousBookingScheduledStart;
+        nextSiteData.pending_appointment_previous_end =
+          clean(currentSiteData.pending_appointment_previous_end) || previousBookingScheduledEnd;
+        const { error: pendingAppointmentError } = await supabase
           .from("sites")
           .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
           .eq("id", id);
-        if (appointmentEmailStateError) {
-          await cancelScheduledAppointmentChangeEmail(pendingEmail.emailId);
-          return NextResponse.json({ error: "The appointment changed, but its delayed confirmation could not be recorded." }, { status: 500 });
+        if (pendingAppointmentError) {
+          return NextResponse.json({ error: "The appointment changed, but its calendar update could not be queued." }, { status: 500 });
         }
       }
     }
@@ -418,6 +414,11 @@ export async function PATCH(
       .maybeSingle();
     const ingestPayload = asRecord(ingestRow?.payload);
     const calendarEventId = clean(nextSiteData.calendar_event_id) || clean(ingestPayload.fulfillment_appointment_id);
+    const propertyAddress = clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
+      clean(siteRow.property_address),
+      clean(siteRow.property_city),
+      [clean(siteRow.property_state), clean(siteRow.property_zip)].filter(Boolean).join(" "),
+    ].filter(Boolean).join(", ");
 
     if (calendarEventId) {
       const packageRow = invoiceItems.find((item) => clean(item.kind) === "package") || null;
@@ -445,11 +446,6 @@ export async function PATCH(
         .map((item) => `${clean(item.name)}${item.qty > 1 ? ` × ${item.qty}` : ""}`)
         .filter(Boolean);
       const travel = asRecord(ingestPayload.travel);
-      const propertyAddress = clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
-        clean(siteRow.property_address),
-        clean(siteRow.property_city),
-        [clean(siteRow.property_state), clean(siteRow.property_zip)].filter(Boolean).join(" "),
-      ].filter(Boolean).join(", ");
       const notes = buildCalendarNotes({
         customerName,
         customerEmail,
@@ -467,14 +463,101 @@ export async function PATCH(
         travelFee: Number(travel.fee || 0),
       });
       try {
-        calendarSync = await updateMicrosoftCalendarEventBody(calendarEventId, notes);
+        calendarSync = await updateMicrosoftCalendarEvent({
+          eventId: calendarEventId,
+          content: notes,
+          scheduledStart: nextAppointmentStart || previousBookingScheduledStart,
+          scheduledEnd: nextAppointmentEnd || previousBookingScheduledEnd,
+        });
       } catch (calendarError) {
         calendarSync = {
           updated: false,
           reason: calendarError instanceof Error ? calendarError.message : "calendar_update_failed",
         };
-        console.error("INVOICE_CALENDAR_NOTES_SYNC_FAILED", { siteId: id, calendarEventId, error: calendarSync.reason });
+        console.error("INVOICE_CALENDAR_SYNC_FAILED", { siteId: id, calendarEventId, error: calendarSync.reason });
       }
+    }
+
+    const pendingAppointmentStart = clean(nextSiteData.pending_appointment_change_start);
+    const pendingAppointmentEnd = clean(nextSiteData.pending_appointment_change_end);
+    const needsAppointmentConfirmation = Boolean(
+      siteRow.booking_id &&
+      nextAppointmentStart &&
+      (appointmentChanged || pendingAppointmentStart === nextAppointmentStart)
+    );
+
+    if (needsAppointmentConfirmation && calendarSync.updated === true) {
+      try {
+        const travelSync = await shiftMicrosoftCalendarTravelEvents({
+          propertyAddress,
+          previousStart: clean(nextSiteData.pending_appointment_previous_start) || previousBookingScheduledStart,
+          previousEnd: clean(nextSiteData.pending_appointment_previous_end) || previousBookingScheduledEnd,
+          nextStart: nextAppointmentStart,
+          nextEnd: nextAppointmentEnd || pendingAppointmentEnd,
+        });
+        calendarSync = { ...calendarSync, travel_events_updated: travelSync.count };
+      } catch (travelError) {
+        calendarSync = {
+          updated: false,
+          reason: travelError instanceof Error ? travelError.message : "calendar_travel_update_failed",
+        };
+        console.error("INVOICE_CALENDAR_TRAVEL_SYNC_FAILED", { siteId: id, calendarEventId, error: calendarSync.reason });
+      }
+    }
+
+    if (needsAppointmentConfirmation && calendarSync.updated !== true) {
+      const reason = clean(calendarSync.reason);
+      return NextResponse.json(
+        {
+          error: reason === "event_id_not_available"
+            ? "The appointment was saved, but its Microsoft 365 calendar event could not be found. The client email was not scheduled."
+            : "The appointment was saved, but Microsoft 365 did not confirm the calendar update. The client email was not scheduled.",
+          calendar_sync: calendarSync,
+        },
+        { status: 502 }
+      );
+    }
+
+    if (needsAppointmentConfirmation && customerEmail) {
+      const pendingEmail = await scheduleAppointmentChangeEmail({
+        previousEmailId: clean(currentSiteData.appointment_change_email_id),
+        bookingId: clean(siteRow.booking_id),
+        siteId: id,
+        recipientEmail: customerEmail,
+        recipientName: customerName,
+        propertyAddress: clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
+          clean(siteRow.property_address),
+          clean(siteRow.property_city),
+          [clean(siteRow.property_state), clean(siteRow.property_zip)].filter(Boolean).join(" "),
+        ].filter(Boolean).join(", "),
+        scheduledStart: nextAppointmentStart,
+        scheduledEnd: nextAppointmentEnd || pendingAppointmentEnd,
+      });
+      appointmentEmailScheduledFor = pendingEmail.scheduledFor;
+      nextSiteData.appointment_change_email_id = pendingEmail.emailId;
+      nextSiteData.appointment_change_email_scheduled_for = pendingEmail.scheduledFor;
+      nextSiteData.appointment_change_email_start = nextAppointmentStart;
+      delete nextSiteData.pending_appointment_change_start;
+      delete nextSiteData.pending_appointment_change_end;
+      delete nextSiteData.pending_appointment_previous_start;
+      delete nextSiteData.pending_appointment_previous_end;
+      const { error: appointmentEmailStateError } = await supabase
+        .from("sites")
+        .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (appointmentEmailStateError) {
+        await cancelScheduledAppointmentChangeEmail(pendingEmail.emailId);
+        return NextResponse.json({ error: "The calendar changed, but its delayed confirmation could not be recorded." }, { status: 500 });
+      }
+    } else if (needsAppointmentConfirmation) {
+      delete nextSiteData.pending_appointment_change_start;
+      delete nextSiteData.pending_appointment_change_end;
+      delete nextSiteData.pending_appointment_previous_start;
+      delete nextSiteData.pending_appointment_previous_end;
+      await supabase
+        .from("sites")
+        .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
+        .eq("id", id);
     }
 
     return NextResponse.json({
