@@ -127,7 +127,14 @@
   .gsv-reschedule-layout { display: block; }
   .gsv-reschedule-main { gap: 24px; }
   .gsv-reschedule-current { margin: 0 -18px; padding: 24px 20px; }
-  .gsv-reschedule-days { grid-template-columns: repeat(7, 76px); margin-right: -18px; }
+  .gsv-reschedule-days {
+    width: calc(100% + 18px);
+    max-width: calc(100% + 18px);
+    margin-right: -18px;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 76px;
+  }
   .gsv-reschedule-times { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .gsv-reschedule-review { position: fixed; z-index: 20; inset: auto 0 0; display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; padding: 13px 16px max(13px, env(safe-area-inset-bottom)); border-right: 0; border-bottom: 0; border-left: 0; background: rgba(247,245,238,.97); box-shadow: 0 -10px 30px rgba(23,35,31,.12); backdrop-filter: blur(12px); }
   .gsv-reschedule-review .gsv-reschedule-eyebrow,.gsv-reschedule-review dl,.gsv-reschedule-review__fine { display: none; }
