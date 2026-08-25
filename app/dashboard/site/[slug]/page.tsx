@@ -17,6 +17,7 @@ import PortalNavActions from "../../PortalNavActions";
 import "./property-workspace.css";
 import { makePropertySiteSlug, normalizePropertySiteSlug, propertySiteUrl } from "@/lib/property-site-slug";
 import { marketingEditorAllowsClientAccess, marketingEditorEnabled } from "@/lib/marketing-kit";
+import { createRescheduleToken } from "@/lib/reschedule-token";
 
 type Site = {
   id: string;
@@ -191,6 +192,25 @@ function formatEmailDateTime(value: string | null | undefined) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function formatAppointmentDate(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+function formatAppointmentTime(start: string, end?: string | null) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${formatter.format(new Date(start))}${end ? `–${formatter.format(new Date(end))}` : ""} PT`;
 }
 
 function emailEventLabel(value: string) {
@@ -1097,6 +1117,11 @@ export default async function SitePage({
     : [];
   const publicSiteUrl = propertySiteUrl(propertySiteSlug);
   const showMarketingKit = marketingEditorEnabled() && (viewerIsAdmin || marketingEditorAllowsClientAccess());
+  const appointmentStart = clean(booking?.scheduled_start);
+  const appointmentEnd = clean(booking?.scheduled_end);
+  const manageAppointmentUrl = appointmentStart && clean(booking?.id)
+    ? `/reschedule/${encodeURIComponent(clean(booking?.id))}?token=${encodeURIComponent(createRescheduleToken(clean(booking?.id)))}`
+    : "";
 
   return (
     <main
@@ -1183,6 +1208,19 @@ export default async function SitePage({
                 id: clean(coListerProfile.id), name: getProfileName(coListerProfile), firstName: clean(coListerProfile.first_name), lastName: clean(coListerProfile.last_name), photo: clean(coListerProfile.profile_photo_url), phone: clean(coListerProfile.phone), email: clean(coListerProfile.email), brokerage: clean(coListerProfile.brokerage_name), mlsLicense: clean(coListerProfile.mls_license), website: clean(coListerProfile.brokerage_website_url), facebook: clean(coListerProfile.facebook_url), instagram: clean(coListerProfile.instagram_url), linkedin: clean(coListerProfile.linkedin_url), twitter: clean(coListerProfile.twitter_url), youtube: clean(coListerProfile.youtube_url),
               }} canEdit={clean(coListerProfile.id) === viewerId} /> : null}</div>
             </div>
+            {manageAppointmentUrl ? (
+              <div className="gsv-site-appointment" aria-labelledby="gsv-site-appointment-title">
+                <div className="gsv-site-appointment__details">
+                  <div className="gsv-site-appointment__eyebrow">Your appointment</div>
+                  <h2 id="gsv-site-appointment-title">{formatAppointmentDate(appointmentStart)}</h2>
+                  <p>{formatAppointmentTime(appointmentStart, appointmentEnd)}</p>
+                </div>
+                <Link className="gsv-site-appointment__action" href={manageAppointmentUrl}>
+                  <span>Manage appointment</span>
+                  <span aria-hidden="true">→</span>
+                </Link>
+              </div>
+            ) : null}
             <div className="gsv-summary-hero">
               <MediaManager
                 siteId={site.id}

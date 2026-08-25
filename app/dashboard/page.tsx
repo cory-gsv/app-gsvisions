@@ -1293,7 +1293,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <a className="gsv-evmodal__reschedule" id="gsv-ev-reschedule" href="#" hidden>
-            Change appointment <span aria-hidden="true">→</span>
+            Manage appointment <span aria-hidden="true">→</span>
           </a>
         </div>
       </div>

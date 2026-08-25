@@ -1055,6 +1055,7 @@ export async function initDashboardAddons() {
     if (rescheduleLink) {
       rescheduleLink.href = rescheduleUrl || "#"
       rescheduleLink.hidden = !rescheduleUrl
+      rescheduleLink.innerHTML = `Manage appointment <span aria-hidden="true">→</span>`
     }
 
     openModal("#gsv-event-modal")
@@ -1319,7 +1320,7 @@ export async function initDashboardAddons() {
                 <div class="gsv-upcoming__title">${escapeHtml(ev.title || "Appointment")}</div>
                 <div class="gsv-upcoming__meta">${escapeHtml(when)}${loc ? ` • ${escapeHtml(loc)}` : ""}</div>
               </button>
-              ${rescheduleUrl ? `<a class="gsv-upcoming__change" href="${escapeHtml(rescheduleUrl)}">Change appointment <span aria-hidden="true">→</span></a>` : ""}
+              ${rescheduleUrl ? `<a class="gsv-upcoming__change" href="${escapeHtml(rescheduleUrl)}">Manage appointment <span aria-hidden="true">→</span></a>` : ""}
             </article>
           `
         })

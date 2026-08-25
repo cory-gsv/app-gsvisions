@@ -413,6 +413,62 @@
   position: relative;
 }
 
+.gsv-site-appointment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(23,35,31,.18);
+  background: #fff;
+}
+
+.gsv-site-appointment__eyebrow {
+  color: #806000;
+  font: 800 9px/1.3 var(--font-geist-mono), monospace;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.gsv-site-appointment h2 {
+  margin: 6px 0 0;
+  color: #17231f;
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.15;
+}
+
+.gsv-site-appointment p {
+  margin: 5px 0 0;
+  color: #59645f;
+  font-weight: 700;
+}
+
+.gsv-site-appointment__action {
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 19px;
+  border: 1px solid #17231f;
+  background: #17231f;
+  color: #fff;
+  font: 800 10px/1 var(--font-geist-mono), monospace;
+  letter-spacing: .09em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition: background .16s ease, border-color .16s ease, color .16s ease;
+}
+
+.gsv-site-appointment__action:hover,
+.gsv-site-appointment__action:focus-visible {
+  border-color: #ffc72c;
+  background: #ffc72c;
+  color: #17231f;
+  outline: 3px solid rgba(255,199,44,.35);
+  outline-offset: 3px;
+}
+
 .gsv-hero-download-button {
   position: absolute;
   left: 50%;
@@ -1207,6 +1263,14 @@
   }
 
   .gsv-summary-contacts { grid-template-columns: minmax(0, 1fr); }
+
+  .gsv-site-appointment {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 18px 20px;
+  }
+
+  .gsv-site-appointment__action { width: 100%; box-sizing: border-box; }
 
   .gsv-client-fields {
     grid-template-columns: minmax(0, 1fr);

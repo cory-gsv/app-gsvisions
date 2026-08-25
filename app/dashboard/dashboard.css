@@ -1504,12 +1504,16 @@
 
 .gsv-dash #gsv-calendar .gsv-upcoming__list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 
 .gsv-dash #gsv-calendar .gsv-upcoming__item {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 22px;
   min-height: 0 !important;
   height: auto !important;
   padding: 15px 18px 15px 21px;
@@ -1551,8 +1555,20 @@
   text-transform: uppercase;
 }
 
+.gsv-dash #gsv-calendar .gsv-upcoming__change {
+  min-height: 44px;
+  margin: 0;
+  padding: 0 16px;
+  border: 1px solid #17231f;
+  background: #17231f;
+  color: #fff !important;
+  white-space: nowrap;
+}
+
 .gsv-dash #gsv-calendar .gsv-upcoming__change:hover {
-  color: #806000 !important;
+  border-color: #ffc72c;
+  background: #ffc72c;
+  color: #17231f !important;
 }
 
 .gsv-evmodal__reschedule {
@@ -1564,6 +1580,40 @@
 }
 
 .gsv-evmodal__reschedule[hidden] { display: none; }
+
+/* Appointment details use the same light portal palette as the dashboard. */
+.gsv-dash .gsv-evmodal .gsv-modal__panel {
+  box-sizing: border-box;
+  border: 1px solid rgba(23,35,31,.2);
+  border-top: 5px solid #ffc72c;
+  border-radius: 0;
+  background: #fff;
+  color: #17231f;
+  box-shadow: 0 24px 70px rgba(23,35,31,.28);
+}
+.gsv-dash .gsv-evmodal__kicker { color: #806000; }
+.gsv-dash .gsv-evmodal__title { color: #17231f; }
+.gsv-dash .gsv-evmodal__when { color: #59645f; }
+.gsv-dash .gsv-evmodal__box {
+  border-color: rgba(23,35,31,.16);
+  border-radius: 0;
+  background: #f5f3ec;
+}
+.gsv-dash .gsv-evrow { border-color: rgba(23,35,31,.14); }
+.gsv-dash .gsv-evrow__label { color: #66706b; }
+.gsv-dash .gsv-evrow__value,
+.gsv-dash .gsv-evrow__value--pre { color: #17231f; }
+.gsv-dash #gsv-event-modal .gsv-evrow__value a { color: #806000 !important; }
+.gsv-dash #gsv-event-modal .gsv-evmodal__reschedule {
+  box-sizing: border-box;
+  min-height: 52px;
+  color: #17231f !important;
+}
+.gsv-dash .gsv-evmodal__x {
+  border-color: rgba(23,35,31,.2);
+  background: #f2f0e9;
+  color: #17231f;
+}
 
 .gsv-dash #gsv-calendar .gsv-upcoming__item::before {
   content: "";
@@ -1638,6 +1688,8 @@
 
 @media (max-width: 700px) {
   .gsv-dash #gsv-calendar .gsv-upcoming__list { grid-template-columns: 1fr; }
+  .gsv-dash #gsv-calendar .gsv-upcoming__item { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .gsv-dash #gsv-calendar .gsv-upcoming__change { width: 100%; }
   .gsv-dash__client-view { justify-content: space-between; padding: 11px 16px; }
   .gsv-dash__top { min-height: 0; margin-bottom: 24px; padding: 22px 20px; align-items: flex-start; }
   .gsv-dash__mark { width: 52px !important; height: 52px !important; }
