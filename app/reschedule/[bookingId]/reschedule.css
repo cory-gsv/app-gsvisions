@@ -125,12 +125,11 @@
   .gsv-reschedule-brand { padding: 0 18px 15px; }
   .gsv-reschedule-card { padding: 0 18px 24px; border-right: 0; border-left: 0; box-shadow: none; }
   .gsv-reschedule-layout { display: block; }
-  .gsv-reschedule-main { gap: 24px; }
+  .gsv-reschedule-main { width: 100%; max-width: 100%; gap: 24px; overflow: hidden; }
   .gsv-reschedule-current { margin: 0 -18px; padding: 24px 20px; }
   .gsv-reschedule-days {
-    width: calc(100% + 18px);
-    max-width: calc(100% + 18px);
-    margin-right: -18px;
+    width: 100%;
+    max-width: 100%;
     grid-template-columns: none;
     grid-auto-flow: column;
     grid-auto-columns: 76px;
