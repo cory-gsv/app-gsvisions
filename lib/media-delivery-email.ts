@@ -123,6 +123,14 @@ function customerFacingPackageName(value: unknown) {
   return name;
 }
 
+function customerFacingLineName(value: unknown) {
+  const name = clean(value);
+  if (/^twilight\s+photoshoot\b/i.test(name)) {
+    return name.replace(/\s*\([^)]*sq\.?\s*ft\.?[^)]*\)\s*$/i, "").trim();
+  }
+  return name;
+}
+
 function emailOrderLines(items: InvoiceItem[], booking: BookingRecord | null, packageTierLabel = "") {
   const packageRow = items.find((item) => item.kind === "package");
   const packageGroupId = clean(packageRow?.groupId);
@@ -151,7 +159,7 @@ function emailOrderLines(items: InvoiceItem[], booking: BookingRecord | null, pa
   items.forEach((item) => {
     if (item.kind === "package" || item.kind === "discount") return;
     if (packageGroupId && item.groupId === packageGroupId) return;
-    visibleRows.push({ name: item.name, priceCents: item.priceCents, qty: item.qty });
+    visibleRows.push({ name: customerFacingLineName(item.name), priceCents: item.priceCents, qty: item.qty });
   });
 
   if (!visibleRows.length) {
