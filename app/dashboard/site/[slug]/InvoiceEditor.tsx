@@ -1946,13 +1946,6 @@ export default function InvoiceEditor({
                       ) : null}
                       {refundableCents > 0 ? (
                         <>
-                          <button
-                            type="button"
-                            onClick={() => openRefund(payment)}
-                            style={{ ...coolActionStyle, minHeight: "38px", padding: "0 15px", justifyContent: "center", borderColor: "#b42318", color: "#b42318" }}
-                          >
-                            Refund
-                          </button>
                           {payment.method === "stripe" || payment.method === "paypal" ? (
                             <button
                               type="button"
@@ -1962,6 +1955,13 @@ export default function InvoiceEditor({
                               Correct record
                             </button>
                           ) : null}
+                          <button
+                            type="button"
+                            onClick={() => openRefund(payment)}
+                            style={{ ...coolActionStyle, minHeight: "38px", padding: "0 15px", justifyContent: "center", borderColor: "#b42318", color: "#b42318" }}
+                          >
+                            Refund
+                          </button>
                         </>
                       ) : null}
                     </div>
