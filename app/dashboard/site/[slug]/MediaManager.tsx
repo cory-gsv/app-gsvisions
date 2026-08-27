@@ -33,6 +33,8 @@ type Props = {
   fallbackFloorPlanUrl?: string | null;
   canManage?: boolean;
   previewLimit?: number;
+  previewHeroWithRandom?: boolean;
+  showPreviewWatermark?: boolean;
   disableLightbox?: boolean;
 };
 
@@ -319,6 +321,15 @@ function uploadS3WithProgress(
   });
 }
 
+function seededRank(value: string, seed: number): number {
+  let hash = seed || 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 async function uploadS3WithRetry(
   file: File,
   uploadUrl: string,
@@ -406,6 +417,8 @@ export default function MediaManager({
   fallbackFloorPlanUrl,
   canManage = false,
   previewLimit,
+  previewHeroWithRandom = false,
+  showPreviewWatermark = false,
   disableLightbox = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -443,6 +456,7 @@ export default function MediaManager({
   const [dragBox, setDragBox] = useState<DragBox | null>(null);
   const [reorder, setReorder] = useState<ReorderState | null>(null);
   const [previewGalleryItems, setPreviewGalleryItems] = useState<MediaAsset[] | null>(null);
+  const [previewSeed, setPreviewSeed] = useState(0);
 
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [lightboxMode, setLightboxMode] = useState<"gallery" | "floorplan" | null>(null);
@@ -464,6 +478,9 @@ export default function MediaManager({
       if (!res.ok) throw new Error(json?.error || "Failed to load media.");
 
       const nextItems = Array.isArray(json?.items) ? (json.items as MediaAsset[]) : [];
+      if (previewHeroWithRandom && typeof globalThis.crypto?.getRandomValues === "function") {
+        setPreviewSeed(globalThis.crypto.getRandomValues(new Uint32Array(1))[0] || 1);
+      }
       setItems(nextItems);
     } catch (err) {
       setStatusText(err instanceof Error ? err.message : "Failed to load media.");
@@ -624,8 +641,24 @@ export default function MediaManager({
       const bOrder = Number((b as PendingUpload).sortOrder ?? (b as MediaAsset).sort_order ?? 999999);
       return aOrder - bOrder;
     });
-    return previewLimit && previewLimit > 0 ? sorted.slice(0, previewLimit) : sorted;
-  }, [mode, galleryItems, pendingUploads, previewLimit]);
+    if (!previewLimit || previewLimit <= 0 || sorted.length <= previewLimit) return sorted;
+    if (!previewHeroWithRandom) return sorted.slice(0, previewLimit);
+
+    const [hero, ...remaining] = sorted;
+    const randomized = remaining
+      .map((item) => ({
+        item,
+        rank: seededRank(
+          "tempId" in item ? item.tempId : clean(item.id) || getMediaUrl(item),
+          previewSeed
+        ),
+      }))
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, previewLimit - 1)
+      .map(({ item }) => item);
+
+    return [hero, ...randomized];
+  }, [mode, galleryItems, pendingUploads, previewHeroWithRandom, previewLimit, previewSeed]);
 
   const lightboxItems = useMemo(() => {
     if (lightboxMode === "floorplan") return floorPlanItems;
@@ -2130,7 +2163,10 @@ if (mode === "floorplan") {
             {galleryDisplayItems.map((item, i) => {
               const isPending = "tempId" in item;
               const id = isPending ? item.tempId : clean(item.id);
-              const orderNumber = i + 1;
+              const originalGalleryIndex = isPending
+                ? -1
+                : galleryItems.findIndex((galleryItem) => clean(galleryItem.id) === clean(item.id));
+              const orderNumber = originalGalleryIndex >= 0 ? originalGalleryIndex + 1 : i + 1;
 
               if (isPending) {
                 return (
@@ -2326,6 +2362,26 @@ if (mode === "floorplan") {
                       transition: "opacity 160ms ease, filter 160ms ease",
                     }}
                   />
+
+                  {showPreviewWatermark ? (
+                    <img
+                      src="/gsv-preview-watermark.png"
+                      alt=""
+                      aria-hidden="true"
+                      draggable={false}
+                      style={{
+                        position: "absolute",
+                        inset: "5%",
+                        width: "90%",
+                        height: "90%",
+                        objectFit: "contain",
+                        opacity: 0.52,
+                        filter: "drop-shadow(0 1px 3px rgba(0,0,0,.42))",
+                        pointerEvents: "none",
+                        zIndex: 8,
+                      }}
+                    />
+                  ) : null}
 
                   <div style={orderBadgeStyle}>{orderNumber}</div>
 

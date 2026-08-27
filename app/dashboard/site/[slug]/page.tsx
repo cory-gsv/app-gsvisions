@@ -1424,7 +1424,7 @@ export default async function SitePage({
               <div className="gsv-media-payment-notice">
                 <div>
                   <span>Payment required</span>
-                  <strong>Preview six photos now. Unlock every file after payment.</strong>
+                  <strong>Preview nine photos now. Unlock every file after payment.</strong>
                   <p>Full-size viewing, downloads, video, 3D tours, and floor plans remain protected until the outstanding balance is paid.</p>
                 </div>
                 <Link href={invoicePublicUrl || "#invoice"} className="gsv-media-payment-button">
@@ -1437,7 +1437,9 @@ export default async function SitePage({
               siteId={site.id}
               mode="gallery"
               canManage={canEdit}
-              previewLimit={clientMediaLocked ? 6 : undefined}
+              previewLimit={clientMediaLocked ? 9 : undefined}
+              previewHeroWithRandom={clientMediaLocked}
+              showPreviewWatermark={clientMediaLocked}
               disableLightbox={clientMediaLocked}
             />
 
