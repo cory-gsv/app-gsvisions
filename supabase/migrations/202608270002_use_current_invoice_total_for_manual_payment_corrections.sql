@@ -39,10 +39,10 @@ begin
     raise exception 'Only successful check or cash payments can be adjusted';
   end if;
 
-  select greatest(coalesce(balance_due_cents, 0), 0)
+  select greatest(coalesce(s.balance_due_cents, 0), 0)
     into current_balance
-    from public.sites
-    where id = p_site_id
+    from public.sites s
+    where s.id = p_site_id
     for update;
   if not found then
     raise exception 'Site not found';

@@ -1,80 +1,3 @@
-create table if not exists public.manual_payment_adjustments (
-  id uuid primary key default gen_random_uuid(),
-  payment_id uuid not null references public.payments(id),
-  site_id uuid not null references public.sites(id),
-  adjusted_by uuid,
-  previous_amount_cents integer not null check (previous_amount_cents > 0),
-  next_amount_cents integer not null check (next_amount_cents > 0),
-  previous_reference text not null,
-  next_reference text not null,
-  created_at timestamptz not null default now()
-);
-
-alter table public.manual_payment_adjustments enable row level security;
-revoke all on public.manual_payment_adjustments from anon, authenticated;
-
-create or replace function public.apply_invoice_payment(
-  p_site_id uuid,
-  p_booking_id uuid,
-  p_payment_intent_id text,
-  p_amount_cents integer,
-  p_tip_cents integer,
-  p_currency text,
-  p_provider_created_at timestamptz
-) returns boolean
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  current_balance integer;
-  next_balance integer;
-begin
-  if p_amount_cents <= 0 then
-    raise exception 'Payment amount must be positive';
-  end if;
-
-  insert into public.payments (
-    site_id, booking_id, stripe_payment_intent_id, amount_cents,
-    tip_cents, currency, status, provider_created_at
-  ) values (
-    p_site_id, p_booking_id, p_payment_intent_id, p_amount_cents,
-    greatest(p_tip_cents, 0), lower(p_currency), 'succeeded', p_provider_created_at
-  ) on conflict (stripe_payment_intent_id) do nothing;
-
-  if not found then
-    return false;
-  end if;
-
-  select greatest(coalesce(s.balance_due_cents, 0), 0)
-    into current_balance
-    from public.sites s
-    where s.id = p_site_id
-    for update;
-
-  if not found then
-    raise exception 'Site not found';
-  end if;
-
-  next_balance := greatest(current_balance - p_amount_cents, 0);
-  update public.sites
-    set balance_due_cents = next_balance,
-        paid = next_balance = 0,
-        stripe_payment_intent_id = p_payment_intent_id,
-        updated_at = now()
-    where id = p_site_id;
-
-  if p_booking_id is not null then
-    update public.bookings
-      set payment_status = case when next_balance = 0 then 'paid' else 'invoice_requested' end,
-          updated_at = now()
-      where id = p_booking_id;
-  end if;
-
-  return true;
-end;
-$$;
-
 create or replace function public.adjust_manual_payment(
   p_payment_id uuid,
   p_site_id uuid,
@@ -129,14 +52,11 @@ begin
     from public.payments
     where site_id = p_site_id and status in ('succeeded', 'partially_refunded');
 
-  -- The site balance and payment ledger are the invoice source of truth. A
-  -- previous multi-table save may have left bookings.total_cents stale, so it
-  -- must not be used to reject an otherwise valid manual correction.
   invoice_total := current_balance + previous_paid_total;
 
   next_paid_total := previous_paid_total - existing_payment.amount_cents + p_amount_cents;
   if next_paid_total > invoice_total then
-    raise exception 'Corrected payments cannot exceed the order total';
+    raise exception 'Corrected payments cannot exceed the current invoice total';
   end if;
   next_balance := greatest(invoice_total - next_paid_total, 0);
 
@@ -181,11 +101,6 @@ begin
   return query select next_balance, next_paid_total;
 end;
 $$;
-
-revoke all on function public.apply_invoice_payment(uuid, uuid, text, integer, integer, text, timestamptz)
-  from public, anon, authenticated;
-grant execute on function public.apply_invoice_payment(uuid, uuid, text, integer, integer, text, timestamptz)
-  to service_role;
 
 revoke all on function public.adjust_manual_payment(uuid, uuid, integer, text, uuid)
   from public, anon, authenticated;
