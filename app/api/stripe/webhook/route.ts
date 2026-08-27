@@ -217,6 +217,29 @@ export async function POST(request: Request) {
     // without being misclassified as portal invoice payments.
   }
 
+  if (event.type === "refund.created" || event.type === "refund.updated") {
+    const refund = event.data.object as Stripe.Refund;
+    const requestId = String(refund.metadata?.refund_request_id || "").trim();
+    if (refund.metadata?.purpose === "invoice_refund" && requestId) {
+      const refundStatus = refund.status === "succeeded"
+        ? "succeeded"
+        : refund.status === "failed" || refund.status === "canceled"
+          ? "failed"
+          : "pending";
+      const { error } = await supabase.rpc("finalize_payment_refund", {
+        p_request_id: requestId,
+        p_provider_refund_id: refund.id,
+        p_status: refundStatus,
+        p_provider_created_at: new Date(refund.created * 1000).toISOString(),
+        p_failure_message: refundStatus === "failed" ? (refund.failure_reason || "Stripe reported that the refund failed.") : null,
+      });
+      if (error) {
+        await supabase.from("stripe_webhook_events").update({ processing_error: error.message }).eq("event_id", event.id);
+        return NextResponse.json({ error: "Refund processing failed." }, { status: 500 });
+      }
+    }
+  }
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
     if (session.metadata?.purpose === "custom_domain_purchase" && session.payment_status === "paid") {

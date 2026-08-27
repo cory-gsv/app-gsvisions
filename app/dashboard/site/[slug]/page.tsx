@@ -19,7 +19,7 @@ import { makePropertySiteSlug, normalizePropertySiteSlug, propertySiteUrl } from
 import { marketingEditorAllowsClientAccess, marketingEditorEnabled } from "@/lib/marketing-kit";
 import { createRescheduleToken } from "@/lib/reschedule-token";
 import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
-import { parseManualPaymentReference } from "@/lib/payment-history";
+import { parseManualPaymentReference, paymentReferenceLabel } from "@/lib/payment-history";
 
 type Site = {
   id: string;
@@ -138,12 +138,27 @@ type AdminUser = {
   email: string;
 };
 
-type ManualPayment = {
+type PaymentRecord = {
   id: string;
-  method: "check" | "cash";
+  reference: string;
+  label: string;
+  method: "stripe" | "paypal" | "check" | "cash";
   checkNumber: string;
   amountCents: number;
+  refundedCents: number;
+  pendingRefundCents: number;
+  currency: string;
+  status: string;
   paidAt: string;
+  refunds: Array<{
+    id: string;
+    amountCents: number;
+    status: string;
+    kind: string;
+    reason: string;
+    providerRefundId: string;
+    createdAt: string;
+  }>;
 };
 
 type MediaAsset = {
@@ -818,28 +833,61 @@ export default async function SitePage({
   // The payment ledger is authoritative. Invoice totals can change, but that
   // must never cause the UI to manufacture or erase money already received.
   let recordedPaidCents = 0;
-  let initialManualPayments: ManualPayment[] = [];
+  let initialPayments: PaymentRecord[] = [];
   const { data: paymentRows } = await adminSb
     .from("payments")
-    .select("id,stripe_payment_intent_id,amount_cents,status,provider_created_at,created_at")
+    .select("id,stripe_payment_intent_id,amount_cents,refunded_cents,currency,status,provider_created_at,created_at")
     .eq("site_id", site.id)
-    .in("status", ["succeeded", "partially_refunded"])
+    .in("status", ["succeeded", "partially_refunded", "refunded"])
     .order("provider_created_at", { ascending: false, nullsFirst: false });
   if (Array.isArray(paymentRows) && paymentRows.length > 0) {
+    const { data: refundRows } = await adminSb
+      .from("payment_refunds")
+      .select("id,payment_id,provider_refund_id,amount_cents,status,kind,reason,provider_created_at,created_at")
+      .eq("site_id", site.id)
+      .order("created_at", { ascending: false });
+    const refundsByPayment = new Map<string, PaymentRecord["refunds"]>();
+    for (const refund of Array.isArray(refundRows) ? refundRows : []) {
+      const paymentId = clean(refund.payment_id);
+      const list = refundsByPayment.get(paymentId) || [];
+      list.push({
+        id: clean(refund.id),
+        amountCents: Math.max(0, Number(refund.amount_cents ?? 0) || 0),
+        status: clean(refund.status),
+        kind: clean(refund.kind) || "provider_refund",
+        reason: clean(refund.reason),
+        providerRefundId: clean(refund.provider_refund_id),
+        createdAt: clean(refund.provider_created_at) || clean(refund.created_at),
+      });
+      refundsByPayment.set(paymentId, list);
+    }
     recordedPaidCents = paymentRows.reduce(
-      (sum, payment) => sum + Math.max(0, Number(payment.amount_cents ?? 0) || 0),
+      (sum, payment) => sum + Math.max(
+        0,
+        (Number(payment.amount_cents ?? 0) || 0) - (Number(payment.refunded_cents ?? 0) || 0)
+      ),
       0
     );
-    initialManualPayments = paymentRows.flatMap((payment) => {
-      const parsed = parseManualPaymentReference(clean(payment.stripe_payment_intent_id));
-      if (!parsed || clean(payment.status) !== "succeeded") return [];
-      return [{
+    initialPayments = paymentRows.map((payment) => {
+      const reference = clean(payment.stripe_payment_intent_id);
+      const parsed = parseManualPaymentReference(reference);
+      const refunds = refundsByPayment.get(clean(payment.id)) || [];
+      return {
         id: clean(payment.id),
-        method: parsed.method,
-        checkNumber: parsed.checkNumber,
+        reference,
+        label: paymentReferenceLabel(reference),
+        method: parsed?.method || (reference.toLowerCase().startsWith("paypal:") ? "paypal" : "stripe"),
+        checkNumber: parsed?.checkNumber || "",
         amountCents: Math.max(0, Number(payment.amount_cents ?? 0) || 0),
+        refundedCents: Math.max(0, Number(payment.refunded_cents ?? 0) || 0),
+        pendingRefundCents: refunds
+          .filter((refund) => refund.status === "pending")
+          .reduce((sum, refund) => sum + refund.amountCents, 0),
+        currency: clean(payment.currency) || "usd",
+        status: clean(payment.status),
         paidAt: clean(payment.provider_created_at) || clean(payment.created_at),
-      }];
+        refunds,
+      };
     });
   } else {
     // Legacy orders may predate the payment ledger. Preserve their already
@@ -1272,7 +1320,7 @@ export default async function SitePage({
             canEdit={canEdit}
             sitePaid={!!site.paid}
             recordedPaidCents={recordedPaidCents}
-            initialManualPayments={initialManualPayments}
+            initialPayments={initialPayments}
             adminUsers={adminUsers}
             invoicePublicUrl={invoicePublicUrl}
             customerNotes={clean(siteData.customer_notes)}

@@ -1,20 +1,27 @@
 const clean = (value: unknown) => String(value ?? "").trim();
 
 export type PaymentLedgerRow = {
+  id?: string | null;
   stripe_payment_intent_id?: string | null;
   amount_cents?: number | null;
+  refunded_cents?: number | null;
   tip_cents?: number | null;
   currency?: string | null;
+  status?: string | null;
   provider_created_at?: string | null;
   created_at?: string | null;
 };
 
 export type PaymentHistoryEntry = {
+  id: string;
   reference: string;
   label: string;
   amountCents: number;
+  refundedCents: number;
+  netAmountCents: number;
   tipCents: number;
   currency: string;
+  status: string;
   paidAt: string;
 };
 
@@ -48,7 +55,7 @@ export function paymentReferenceLabel(reference: string) {
   }
   const normalized = clean(reference).toLowerCase();
   if (normalized.startsWith("paypal:")) return "PayPal";
-  return "Credit or debit card";
+  return "Stripe card / wallet";
 }
 
 export function paymentTimeLabel(value: string) {
@@ -64,17 +71,26 @@ export function paymentTimeLabel(value: string) {
 export function normalizePaymentHistory(rows: PaymentLedgerRow[] | null | undefined): PaymentHistoryEntry[] {
   return (Array.isArray(rows) ? rows : []).map((payment) => {
     const reference = clean(payment.stripe_payment_intent_id);
+    const amountCents = Math.max(0, Number(payment.amount_cents || 0));
+    const refundedCents = Math.min(
+      amountCents,
+      Math.max(0, Number(payment.refunded_cents || 0))
+    );
     return {
+      id: clean(payment.id),
       reference,
       label: paymentReferenceLabel(reference),
-      amountCents: Math.max(0, Number(payment.amount_cents || 0)),
+      amountCents,
+      refundedCents,
+      netAmountCents: Math.max(0, amountCents - refundedCents),
       tipCents: Math.max(0, Number(payment.tip_cents || 0)),
       currency: clean(payment.currency) || "usd",
+      status: clean(payment.status) || "succeeded",
       paidAt: clean(payment.provider_created_at) || clean(payment.created_at),
     };
   }).sort((left, right) => new Date(left.paidAt).getTime() - new Date(right.paidAt).getTime());
 }
 
 export function totalPaymentsReceived(entries: PaymentHistoryEntry[]) {
-  return entries.reduce((sum, payment) => sum + payment.amountCents, 0);
+  return entries.reduce((sum, payment) => sum + payment.netAmountCents, 0);
 }

@@ -18,12 +18,27 @@ type AdminUser = {
   email: string;
 };
 
-type ManualPayment = {
+type PaymentRecord = {
   id: string;
-  method: "check" | "cash";
+  reference: string;
+  label: string;
+  method: "stripe" | "paypal" | "check" | "cash";
   checkNumber: string;
   amountCents: number;
+  refundedCents: number;
+  pendingRefundCents: number;
+  currency: string;
+  status: string;
   paidAt: string;
+  refunds: Array<{
+    id: string;
+    amountCents: number;
+    status: string;
+    kind: string;
+    reason: string;
+    providerRefundId: string;
+    createdAt: string;
+  }>;
 };
 
 type InvoiceItem = {
@@ -68,7 +83,7 @@ type Props = {
   canEdit: boolean;
   sitePaid: boolean;
   recordedPaidCents: number;
-  initialManualPayments: ManualPayment[];
+  initialPayments: PaymentRecord[];
   adminUsers: AdminUser[];
   invoicePublicUrl?: string | null;
   invoiceViewUrl?: string | null;
@@ -514,7 +529,7 @@ export default function InvoiceEditor({
   canEdit,
   sitePaid,
   recordedPaidCents,
-  initialManualPayments,
+  initialPayments,
   adminUsers,
   invoicePublicUrl,
   invoiceViewUrl,
@@ -537,6 +552,13 @@ export default function InvoiceEditor({
   const [manualPaymentEditingId, setManualPaymentEditingId] = useState("");
   const [manualPaymentState, setManualPaymentState] = useState<"idle" | "saving" | "error">("idle");
   const [manualPaymentMessage, setManualPaymentMessage] = useState("");
+  const [refundPayment, setRefundPayment] = useState<PaymentRecord | null>(null);
+  const [refundAmount, setRefundAmount] = useState("");
+  const [refundReason, setRefundReason] = useState("");
+  const [refundRequestId, setRefundRequestId] = useState("");
+  const [refundRecordOnly, setRefundRecordOnly] = useState(false);
+  const [refundState, setRefundState] = useState<"idle" | "saving" | "error">("idle");
+  const [refundMessage, setRefundMessage] = useState("");
   const [suppressAppointmentEmail, setSuppressAppointmentEmail] = useState(false);
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [adminNotes, setAdminNotes] = useState(clean(initialAdminNotes));
@@ -609,6 +631,17 @@ export default function InvoiceEditor({
 
   const hasBalanceDue = balanceDueCents > 0;
   const isFullyPaid = sitePaid && !hasBalanceDue;
+
+  const manualPayments = useMemo(
+    () => initialPayments.filter((payment) => payment.method === "check" || payment.method === "cash"),
+    [initialPayments]
+  );
+  const paymentMethodSummary = useMemo(() => {
+    const methods = Array.from(new Set(initialPayments.map((payment) => payment.label).filter(Boolean)));
+    if (methods.length === 1) return methods[0];
+    if (methods.length > 1) return "Multiple methods";
+    return clean(booking?.payment_method) || "—";
+  }, [booking?.payment_method, initialPayments]);
 
   const resolvedInvoicePublicUrl = clean(invoicePublicUrl);
   const resolvedInvoiceViewUrl = deriveInvoiceViewUrl(invoiceViewUrl, invoicePublicUrl);
@@ -1010,7 +1043,7 @@ export default function InvoiceEditor({
 
   async function handleManualPayment() {
     const amountCents = parseMoneyInputToCents(manualPaymentAmount);
-    const editingPayment = initialManualPayments.find((payment) => payment.id === manualPaymentEditingId) || null;
+    const editingPayment = manualPayments.find((payment) => payment.id === manualPaymentEditingId) || null;
     const maximumAmountCents = balanceDueCents + (editingPayment?.amountCents || 0);
     if (amountCents <= 0 || amountCents > maximumAmountCents) {
       setManualPaymentState("error");
@@ -1052,6 +1085,69 @@ export default function InvoiceEditor({
     } catch (error) {
       setManualPaymentState("error");
       setManualPaymentMessage(error instanceof Error ? error.message : "Manual payment could not be recorded.");
+    }
+  }
+
+  function openRefund(payment: PaymentRecord, recordOnly = false) {
+    const refundableCents = Math.max(
+      0,
+      payment.amountCents - payment.refundedCents - payment.pendingRefundCents
+    );
+    setRefundPayment(payment);
+    setRefundAmount((refundableCents / 100).toFixed(2));
+    setRefundReason("");
+    setRefundRecordOnly(recordOnly);
+    setRefundRequestId(crypto.randomUUID());
+    setRefundState("idle");
+    setRefundMessage("");
+  }
+
+  async function handleRefund() {
+    if (!refundPayment) return;
+    const amountCents = parseMoneyInputToCents(refundAmount);
+    const refundableCents = Math.max(
+      0,
+      refundPayment.amountCents - refundPayment.refundedCents - refundPayment.pendingRefundCents
+    );
+    if (amountCents <= 0 || amountCents > refundableCents) {
+      setRefundState("error");
+      setRefundMessage(`Enter an amount from $0.01 to ${money(refundableCents)}.`);
+      return;
+    }
+    if (refundRecordOnly && !refundReason.trim()) {
+      setRefundState("error");
+      setRefundMessage("Enter an internal reason for removing this payment from the portal ledger.");
+      return;
+    }
+
+    try {
+      setRefundState("saving");
+      setRefundMessage("");
+      const response = await authenticatedFetch(
+        `/api/sites/${encodeURIComponent(siteId)}/payments/${encodeURIComponent(refundPayment.id)}/refund`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            request_id: refundRequestId || crypto.randomUUID(),
+            amount_cents: amountCents,
+            reason: refundReason.trim(),
+            record_only: refundRecordOnly,
+          }),
+        }
+      );
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok && response.status !== 202) {
+        throw new Error(payload?.error || "Refund could not be completed.");
+      }
+      setRefundPayment(null);
+      setRefundState("idle");
+      setSendState("sent");
+      setSendMessage(payload?.message || "Refund recorded · no email sent");
+      router.refresh();
+    } catch (error) {
+      setRefundState("error");
+      setRefundMessage(error instanceof Error ? error.message : "Refund could not be completed.");
     }
   }
 
@@ -1229,7 +1325,7 @@ export default function InvoiceEditor({
           <strong>{clean(booking?.payment_status) || "—"}</strong>
 
           <div style={{ color: "#666" }}>Payment Method</div>
-          <strong>{clean(booking?.payment_method) || "—"}</strong>
+          <strong>{paymentMethodSummary}</strong>
 
           <div style={{ color: "#666" }}>Photographer</div>
           <strong>{clean(booking?.photographer_name) || "Unassigned"}</strong>
@@ -1781,19 +1877,23 @@ export default function InvoiceEditor({
               </a>
             ) : null}
             </div>
-            {canEdit && initialManualPayments.length ? (
+            {canEdit && initialPayments.length ? (
               <div style={{ marginTop: "4px", display: "grid", gap: "8px" }}>
                 <div style={{ color: "#69736e", fontSize: "11px", fontWeight: 900, letterSpacing: ".1em", textTransform: "uppercase" }}>
-                  Check and cash payments
+                  Payment history
                 </div>
-                {initialManualPayments.map((payment) => (
+                {initialPayments.map((payment) => {
+                  const refundableCents = Math.max(0, payment.amountCents - payment.refundedCents - payment.pendingRefundCents);
+                  const netCents = Math.max(0, payment.amountCents - payment.refundedCents);
+                  const canEditManual = (payment.method === "check" || payment.method === "cash") && payment.refundedCents === 0 && payment.pendingRefundCents === 0;
+                  return (
                   <div
                     key={payment.id}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: "12px",
+                      display: "grid",
+                      gridTemplateColumns: "minmax(0, 1fr) auto",
+                      alignItems: "start",
+                      gap: "14px",
                       padding: "11px 13px",
                       border: "1px solid #dfe3e1",
                       borderRadius: "10px",
@@ -1802,29 +1902,72 @@ export default function InvoiceEditor({
                   >
                     <div style={{ minWidth: 0 }}>
                       <strong style={{ display: "block", color: "#17231f", fontSize: "14px" }}>
-                        {payment.method === "check" ? `Check${payment.checkNumber ? ` #${payment.checkNumber}` : ""}` : "Cash"} · {money(payment.amountCents)}
+                        {payment.label} · {money(payment.amountCents)}
                       </strong>
-                      <span style={{ color: "#6d7672", fontSize: "12px" }}>
+                      <span style={{ display: "block", marginTop: "3px", color: "#6d7672", fontSize: "12px" }}>
                         {payment.paidAt ? new Date(payment.paidAt).toLocaleString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "short" }) : "Date unavailable"}
                       </span>
+                      <span style={{ display: "block", marginTop: "3px", color: "#6d7672", font: "500 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace", overflowWrap: "anywhere" }}>
+                        {payment.reference}
+                      </span>
+                      {payment.refundedCents > 0 ? (
+                        <span style={{ display: "block", marginTop: "6px", color: "#a33a2b", fontSize: "12px", fontWeight: 800 }}>
+                          Refunded {money(payment.refundedCents)} · Net received {money(netCents)}
+                        </span>
+                      ) : null}
+                      {payment.pendingRefundCents > 0 ? (
+                        <span style={{ display: "block", marginTop: "6px", color: "#8a6710", fontSize: "12px", fontWeight: 800 }}>
+                          Refund pending {money(payment.pendingRefundCents)}
+                        </span>
+                      ) : null}
+                      {payment.refunds.map((refund) => (
+                        <span key={refund.id} style={{ display: "block", marginTop: "3px", color: "#6d7672", fontSize: "11px" }}>
+                          {refund.kind === "record_correction" ? "Record correction" : "Refund"} {money(refund.amountCents)} · {refund.status}{refund.providerRefundId ? ` · ${refund.providerRefundId}` : ""}
+                        </span>
+                      ))}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setManualPaymentEditingId(payment.id);
-                        setManualPaymentMethod(payment.method);
-                        setManualPaymentAmount((payment.amountCents / 100).toFixed(2));
-                        setManualPaymentCheckNumber(payment.checkNumber);
-                        setManualPaymentMessage("");
-                        setManualPaymentState("idle");
-                        setManualPaymentOpen(true);
-                      }}
-                      style={{ ...coolActionStyle, minHeight: "38px", padding: "0 15px", justifyContent: "center" }}
-                    >
-                      Edit amount
-                    </button>
+                    <div style={{ display: "flex", gap: "7px", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      {canEditManual ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setManualPaymentEditingId(payment.id);
+                            setManualPaymentMethod(payment.method as "check" | "cash");
+                            setManualPaymentAmount((payment.amountCents / 100).toFixed(2));
+                            setManualPaymentCheckNumber(payment.checkNumber);
+                            setManualPaymentMessage("");
+                            setManualPaymentState("idle");
+                            setManualPaymentOpen(true);
+                          }}
+                          style={{ ...coolActionStyle, minHeight: "38px", padding: "0 15px", justifyContent: "center" }}
+                        >
+                          Edit amount
+                        </button>
+                      ) : null}
+                      {refundableCents > 0 ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openRefund(payment)}
+                            style={{ ...coolActionStyle, minHeight: "38px", padding: "0 15px", justifyContent: "center", borderColor: "#b42318", color: "#b42318" }}
+                          >
+                            Refund
+                          </button>
+                          {payment.method === "stripe" || payment.method === "paypal" ? (
+                            <button
+                              type="button"
+                              onClick={() => openRefund(payment, true)}
+                              style={{ ...coolActionStyle, minHeight: "38px", padding: "0 15px", justifyContent: "center" }}
+                            >
+                              Correct record
+                            </button>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             ) : null}
           </div>
@@ -1919,6 +2062,46 @@ export default function InvoiceEditor({
               <button type="button" disabled={manualPaymentState === "saving"} onClick={() => setManualPaymentOpen(false)} style={{ ...coolActionStyle, justifyContent: "center" }}>Cancel</button>
               <button type="button" disabled={manualPaymentState === "saving"} onClick={handleManualPayment} style={{ ...blackPill, height: "46px", borderRadius: "10px", background: "#17231f" }}>
                 {manualPaymentState === "saving" ? "Saving…" : manualPaymentEditingId ? "Save payment correction" : "Record & email receipt"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {refundPayment ? (
+        <div role="dialog" aria-modal="true" aria-label="Refund payment" style={{ position: "fixed", inset: 0, zIndex: 10000, display: "grid", placeItems: "center", padding: "20px", background: "rgba(0,0,0,.62)" }}>
+          <div style={{ width: "min(480px, 100%)", borderRadius: "18px", borderTop: "6px solid #ffc72c", background: "#fff", padding: "26px", boxShadow: "0 24px 70px rgba(0,0,0,.35)" }}>
+            <div style={{ fontSize: "12px", fontWeight: 900, letterSpacing: ".12em", color: "#8a6710", textTransform: "uppercase" }}>{refundRecordOnly ? "Payment record correction" : "Payment refund"}</div>
+            <h2 style={{ margin: "8px 0 8px", fontSize: "28px" }}>{refundRecordOnly ? `Correct ${refundPayment.label} record` : `Refund ${refundPayment.label}`}</h2>
+            <div style={{ color: "#66706b", fontSize: "13px", lineHeight: 1.5, overflowWrap: "anywhere" }}>
+              Original payment: <strong>{money(refundPayment.amountCents)}</strong><br />
+              Already refunded: <strong>{money(refundPayment.refundedCents)}</strong><br />
+              Available to refund: <strong>{money(Math.max(0, refundPayment.amountCents - refundPayment.refundedCents - refundPayment.pendingRefundCents))}</strong>
+            </div>
+            <label style={{ display: "grid", gap: "7px", marginTop: "18px", fontSize: "13px", fontWeight: 800 }}>
+              Refund amount
+              <input inputMode="decimal" value={refundAmount} onChange={(event) => setRefundAmount(event.target.value)} style={{ ...inputStyle, height: "48px", fontSize: "18px" }} />
+            </label>
+            <label style={{ display: "grid", gap: "7px", marginTop: "14px", fontSize: "13px", fontWeight: 800 }}>
+              Reason <span style={{ color: "#777", fontWeight: 600 }}>{refundRecordOnly ? "(required, internal)" : "(optional, internal)"}</span>
+              <textarea value={refundReason} onChange={(event) => setRefundReason(event.target.value.slice(0, 500))} rows={3} style={{ ...inputStyle, minHeight: "74px", paddingTop: "12px", resize: "vertical" }} />
+            </label>
+            <div style={{ marginTop: "14px", padding: "12px 13px", borderLeft: "4px solid #ffc72c", background: "#fff7d8", color: "#473b1c", fontSize: "13px", lineHeight: 1.5 }}>
+              {refundRecordOnly
+                ? "This only removes the invalid payment from the portal paid total. It does not contact PayPal or Stripe and it does not move money. Use this for sandbox, test, or incorrectly imported payments only."
+                : refundPayment.method === "check" || refundPayment.method === "cash"
+                ? "This records a refund in the portal. Only continue after you have returned the cash or issued the check refund."
+                : `This sends the refund to the original ${refundPayment.label} payment method.`}
+              <strong style={{ display: "block", marginTop: "5px" }}>No email will be sent.</strong>
+            </div>
+            {refundMessage ? <div style={{ marginTop: "12px", color: "#b42318", fontWeight: 800 }}>{refundMessage}</div> : null}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "22px", flexWrap: "wrap" }}>
+              <button type="button" disabled={refundState === "saving"} onClick={() => setRefundPayment(null)} style={{ ...coolActionStyle, justifyContent: "center" }}>Cancel</button>
+              <button type="button" disabled={refundState === "saving"} onClick={handleRefund} style={{ ...blackPill, minHeight: "46px", borderRadius: "10px", background: "#b42318" }}>
+                {refundState === "saving"
+                  ? refundRecordOnly ? "Correcting record…" : "Processing refund…"
+                  : refundRecordOnly
+                    ? `Remove ${money(parseMoneyInputToCents(refundAmount))} from paid total`
+                    : `Issue ${money(parseMoneyInputToCents(refundAmount))} refund`}
               </button>
             </div>
           </div>

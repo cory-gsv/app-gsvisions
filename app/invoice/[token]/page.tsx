@@ -404,9 +404,9 @@ export default async function InvoicePublicPage({
 
   const { data: paymentRows } = await supabase
     .from("payments")
-    .select("stripe_payment_intent_id,amount_cents,tip_cents,currency,provider_created_at,created_at,status")
+    .select("id,stripe_payment_intent_id,amount_cents,refunded_cents,tip_cents,currency,provider_created_at,created_at,status")
     .eq("site_id", site.id)
-    .in("status", ["succeeded", "partially_refunded"])
+    .in("status", ["succeeded", "partially_refunded", "refunded"])
     .order("provider_created_at", { ascending: true })
     .order("created_at", { ascending: true });
   const paymentHistory = normalizePaymentHistory(paymentRows);
@@ -632,7 +632,7 @@ export default async function InvoicePublicPage({
                     <tr key={`print-payment-${payment.reference}`}>
                       <td>{paymentTimeLabel(payment.paidAt)} PT</td>
                       <td>{payment.label}</td>
-                      <td>{money(payment.amountCents)}{payment.tipCents ? <small>Tip: {money(payment.tipCents)}</small> : null}</td>
+                      <td>{money(payment.netAmountCents)}{payment.refundedCents ? <small>Refunded: {money(payment.refundedCents)}</small> : null}{payment.tipCents ? <small>Tip: {money(payment.tipCents)}</small> : null}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -930,7 +930,7 @@ export default async function InvoicePublicPage({
                   {paymentHistory.map((payment) => (
                     <div key={`payment-${payment.reference}`} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "12px", padding: "12px 14px", borderTop: "1px solid #f0d982", fontSize: "12px" }}>
                       <div><strong>{payment.label}</strong><div style={{ marginTop: "3px", color: "#68726d" }}>{paymentTimeLabel(payment.paidAt)} PT</div></div>
-                      <div style={{ textAlign: "right", fontWeight: 800 }}>{money(payment.amountCents)}{payment.tipCents ? <div style={{ marginTop: "3px", color: "#68726d", fontSize: "10px", fontWeight: 500 }}>Tip: {money(payment.tipCents)}</div> : null}</div>
+                      <div style={{ textAlign: "right", fontWeight: 800 }}>{money(payment.netAmountCents)}{payment.refundedCents ? <div style={{ marginTop: "3px", color: "#a33a2b", fontSize: "10px", fontWeight: 700 }}>Refunded: {money(payment.refundedCents)}</div> : null}{payment.tipCents ? <div style={{ marginTop: "3px", color: "#68726d", fontSize: "10px", fontWeight: 500 }}>Tip: {money(payment.tipCents)}</div> : null}</div>
                     </div>
                   ))}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "12px", padding: "12px 14px", borderTop: "2px solid #ffc72c", fontSize: "12px", fontWeight: 900 }}><span>Total received</span><span>{money(paidCents)}</span></div>

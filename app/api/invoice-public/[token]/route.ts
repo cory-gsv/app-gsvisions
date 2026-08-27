@@ -232,9 +232,9 @@ export async function GET(
 
     const { data: paymentRows, error: paymentRowsError } = await supabase
       .from("payments")
-      .select("stripe_payment_intent_id,amount_cents,tip_cents,currency,provider_created_at,created_at,status")
+      .select("id,stripe_payment_intent_id,amount_cents,refunded_cents,tip_cents,currency,provider_created_at,created_at,status")
       .eq("site_id", site.id)
-      .in("status", ["succeeded", "partially_refunded"])
+      .in("status", ["succeeded", "partially_refunded", "refunded"])
       .order("provider_created_at", { ascending: true })
       .order("created_at", { ascending: true });
     if (paymentRowsError) throw new Error(`Payment history could not be loaded: ${paymentRowsError.message}`);
@@ -288,6 +288,9 @@ export async function GET(
         payment_history: paymentHistory.map((payment) => ({
           method: payment.label,
           amount_cents: payment.amountCents,
+          refunded_cents: payment.refundedCents,
+          net_amount_cents: payment.netAmountCents,
+          status: payment.status,
           tip_cents: payment.tipCents,
           currency: payment.currency,
           paid_at: payment.paidAt,

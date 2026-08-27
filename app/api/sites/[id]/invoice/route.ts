@@ -271,12 +271,15 @@ export async function PATCH(
 
     const { data: paymentRows } = await supabase
       .from("payments")
-      .select("amount_cents,status")
+      .select("amount_cents,refunded_cents,status")
       .eq("site_id", id)
-      .in("status", ["succeeded", "partially_refunded"]);
+      .in("status", ["succeeded", "partially_refunded", "refunded"]);
     const ledgerPaidCents = Array.isArray(paymentRows)
       ? paymentRows.reduce(
-          (sum, payment) => sum + Math.max(0, Number(payment.amount_cents ?? 0) || 0),
+          (sum, payment) => sum + Math.max(
+            0,
+            (Number(payment.amount_cents ?? 0) || 0) - (Number(payment.refunded_cents ?? 0) || 0)
+          ),
           0
         )
       : 0;

@@ -62,9 +62,9 @@ export async function sendPaymentReceivedEmail(args: {
   const methodLabel = paymentMethodLabel(args.paymentMethod || "stripe", args.checkNumber);
   const paidTime = paymentTimeLabel(args.paidAt);
   const { data: recordedPayments, error: paymentsError } = await args.admin.from("payments")
-    .select("stripe_payment_intent_id,amount_cents,tip_cents,currency,provider_created_at,created_at,status")
+    .select("id,stripe_payment_intent_id,amount_cents,refunded_cents,tip_cents,currency,provider_created_at,created_at,status")
     .eq("site_id", site.id)
-    .eq("status", "succeeded")
+    .in("status", ["succeeded", "partially_refunded", "refunded"])
     .order("provider_created_at", { ascending: true })
     .order("created_at", { ascending: true });
   if (paymentsError) throw new Error(`The property payment history could not be loaded: ${paymentsError.message}`);
@@ -72,17 +72,21 @@ export async function sendPaymentReceivedEmail(args: {
   const paymentHistory = normalizePaymentHistory(recordedPayments);
   if (!paymentHistory.some((payment) => payment.reference === clean(args.paymentReference))) {
     paymentHistory.push({
+      id: "",
       reference: clean(args.paymentReference),
       label: methodLabel,
       amountCents: Math.max(0, args.amountCents),
+      refundedCents: 0,
+      netAmountCents: Math.max(0, args.amountCents),
       tipCents: tip,
       currency: clean(args.currency) || "usd",
+      status: "succeeded",
       paidAt: args.paidAt,
     });
   }
   paymentHistory.sort((left, right) => new Date(left.paidAt).getTime() - new Date(right.paidAt).getTime());
   const totalPaymentsReceived = sumPaymentsReceived(paymentHistory);
-  const paymentHistoryRows = paymentHistory.map((payment) => `<tr><td style="padding:15px 18px;border-bottom:1px solid #ffc72c"><strong>${esc(payment.label)}</strong><div style="margin-top:3px;color:#75807b;font-size:12px">${esc(paymentTimeLabel(payment.paidAt))} PT${payment.tipCents ? ` · Tip ${esc(money(payment.tipCents, payment.currency))}` : ""}</div></td><td align="right" style="padding:15px 18px;border-bottom:1px solid #ffc72c;font-weight:700;white-space:nowrap">${esc(money(payment.amountCents, payment.currency))}</td></tr>`).join("");
+  const paymentHistoryRows = paymentHistory.map((payment) => `<tr><td style="padding:15px 18px;border-bottom:1px solid #ffc72c"><strong>${esc(payment.label)}</strong><div style="margin-top:3px;color:#75807b;font-size:12px">${esc(paymentTimeLabel(payment.paidAt))} PT${payment.tipCents ? ` · Tip ${esc(money(payment.tipCents, payment.currency))}` : ""}${payment.refundedCents ? ` · Refunded ${esc(money(payment.refundedCents, payment.currency))}` : ""}</div></td><td align="right" style="padding:15px 18px;border-bottom:1px solid #ffc72c;font-weight:700;white-space:nowrap">${esc(money(payment.netAmountCents, payment.currency))}</td></tr>`).join("");
   const appBase = (clean(process.env.NEXT_PUBLIC_APP_URL) || "https://app.gsvisions.co").replace(/\/$/, "");
   const invoiceUrl = clean(site.invoice_public_token) ? `${appBase}/invoice/${encodeURIComponent(clean(site.invoice_public_token))}` : "";
   const propertyDetailsUrl = clean(site.invoice_public_token)
@@ -104,7 +108,7 @@ export async function sendPaymentReceivedEmail(args: {
         ...(invoiceUrl ? [`View invoice: ${invoiceUrl}`] : []),
         `Download media: ${propertyDetailsUrl}`,
       ];
-  const paymentHistoryLines = paymentHistory.map((payment) => `${paymentReferenceLabel(payment.reference)} · ${paymentTimeLabel(payment.paidAt)} PT · ${money(payment.amountCents, payment.currency)}${payment.tipCents ? ` (+ ${money(payment.tipCents, payment.currency)} tip)` : ""}`);
+  const paymentHistoryLines = paymentHistory.map((payment) => `${paymentReferenceLabel(payment.reference)} · ${paymentTimeLabel(payment.paidAt)} PT · ${money(payment.netAmountCents, payment.currency)} net${payment.refundedCents ? ` (${money(payment.refundedCents, payment.currency)} refunded)` : ""}${payment.tipCents ? ` (+ ${money(payment.tipCents, payment.currency)} tip)` : ""}`);
   const text = [`Hi ${firstName},`, "", `We received your payment of ${money(totalReceived, args.currency)} for ${address}.`, `Payment method: ${methodLabel}`, `Paid at: ${paidTime} PT`, "", "Payment history", ...paymentHistoryLines, `Total payments received: ${money(totalPaymentsReceived, args.currency)}`, `${statusHeading}: ${statusLabel}`, ...(actionLines.length ? ["", ...actionLines] : []), "", "Cory", "Golden State Visions · (916) 432-3373 · gsvisions.co"].join("\n");
   const auditRecipient = clean(process.env.EMAIL_AUDIT_BCC) || "cory@gsvisions.co";
   const notificationRecipient = clean(process.env.PAYMENT_NOTIFICATION_EMAIL);
