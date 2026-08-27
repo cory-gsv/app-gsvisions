@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
 import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
+import { isMediaPaymentLocked } from "@/lib/media-access";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -74,8 +75,7 @@ export async function GET(req: NextRequest) {
       }
 
       for (const site of Array.isArray(sites) ? sites : []) {
-        const balanceDueCents = Math.max(0, Number(site?.balance_due_cents ?? 0) || 0);
-        if (site?.paid !== true && balanceDueCents > 0) {
+        if (isMediaPaymentLocked(site)) {
           lockedSiteIds.add(clean(site?.id));
         }
       }

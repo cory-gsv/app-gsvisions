@@ -4,11 +4,16 @@ import { createClient } from "@supabase/supabase-js";
 import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
 import { createRescheduleToken } from "@/lib/reschedule-token";
 import { assistantCcEmails } from "@/lib/portal-access";
+import { requireOutboundEmailApiKey } from "@/lib/outbound-email";
+
+const BUSINESS_TIME_ZONE = "America/Los_Angeles";
+const GREEN_TILE_URL =
+  "https://res.cloudinary.com/dqcgvorw1/image/upload/b_rgb:17231f,c_pad,h_16,w_16/e_colorize:100,co_rgb:17231f/v1773956428/Wide-w-House_mip8se.png";
+const YELLOW_TILE_URL =
+  "https://res.cloudinary.com/dqcgvorw1/image/upload/b_rgb:ffc72c,c_pad,h_16,w_16/e_colorize:100,co_rgb:ffc72c/v1773956428/Wide-w-House_mip8se.png";
 
 function getResend() {
-  const apiKey = process.env.RESEND_API_KEY || "";
-  if (!apiKey) throw new Error("Email delivery is not configured.");
-  return new Resend(apiKey);
+  return new Resend(requireOutboundEmailApiKey());
 }
 
 function clean(v: unknown): string {
@@ -331,6 +336,7 @@ export async function POST(req: Request) {
           month: "long",
           day: "numeric",
           year: "numeric",
+          timeZone: BUSINESS_TIME_ZONE,
         }).format(new Date(apptStart))
       : "To be scheduled";
 
@@ -338,6 +344,7 @@ export async function POST(req: Request) {
       ? new Intl.DateTimeFormat("en-US", {
           hour: "numeric",
           minute: "2-digit",
+          timeZone: BUSINESS_TIME_ZONE,
         }).format(new Date(apptStart))
       : "";
 
@@ -410,7 +417,7 @@ export async function POST(req: Request) {
         : "";
 
     const buttonStyle =
-      "display:inline-block;background:#ffffff;color:#171717;text-decoration:none;padding:8px 12px;border-radius:999px;font-size:12px;font-weight:700;border:2px solid #171717;line-height:1.2;width:190px;box-sizing:border-box;text-align:center;";
+      `display:inline-block;background:#17231f;background-image:url(${GREEN_TILE_URL});background-repeat:repeat;color:#ffffff;-webkit-text-fill-color:#ffffff;text-decoration:none;padding:11px 14px;border-radius:0;font-size:12px;font-weight:800;border:2px solid #17231f;line-height:1.2;width:190px;box-sizing:border-box;text-align:center;text-transform:uppercase;letter-spacing:.04em;`;
 
     const html = `
 <!doctype html>
@@ -418,7 +425,34 @@ export async function POST(req: Request) {
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
     <style>
+      :root { color-scheme: light dark; supported-color-schemes: light dark; }
+      .gsv-page { background-color:#e9e6dc !important; }
+      .gsv-paper { background-color:#ffffff !important; color:#17231f !important; }
+      .gsv-green {
+        background-color:#17231f !important;
+        background-image:url(${GREEN_TILE_URL}) !important;
+        background-repeat:repeat !important;
+        color:#ffffff !important;
+      }
+      .gsv-green td, .gsv-green div, .gsv-green span, .gsv-green strong,
+      .gsv-green li { color:#ffffff !important; -webkit-text-fill-color:#ffffff !important; }
+      .gsv-green .gsv-yellow-text {
+        color:#ffc72c !important;
+        -webkit-text-fill-color:#ffc72c !important;
+      }
+      .gsv-yellow {
+        background-color:#ffc72c !important;
+        background-image:url(${YELLOW_TILE_URL}) !important;
+        background-repeat:repeat !important;
+        color:#17231f !important;
+      }
+      .gsv-yellow td, .gsv-yellow div, .gsv-yellow span, .gsv-yellow strong {
+        color:#17231f !important;
+        -webkit-text-fill-color:#17231f !important;
+      }
       @media only screen and (max-width: 600px) {
         .gsv-button-row {
           width: 100% !important;
@@ -438,15 +472,26 @@ export async function POST(req: Request) {
           max-width: 260px !important;
         }
       }
+      @media (prefers-color-scheme: dark) {
+        .gsv-page { background-color:#111111 !important; }
+        .gsv-paper { background-color:#111111 !important; color:#ffffff !important; }
+        .gsv-copy, .gsv-copy strong, .gsv-copy h1 { color:#ffffff !important; -webkit-text-fill-color:#ffffff !important; }
+      }
+      [data-ogsc] .gsv-page { background-color:#111111 !important; }
+      [data-ogsc] .gsv-paper { background-color:#111111 !important; color:#ffffff !important; }
+      [data-ogsc] .gsv-copy, [data-ogsc] .gsv-copy strong, [data-ogsc] .gsv-copy h1 {
+        color:#ffffff !important;
+        -webkit-text-fill-color:#ffffff !important;
+      }
     </style>
   </head>
-  <body style="margin:0;padding:0;background:#f6f6f6;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f6f6f6;padding:20px 0;font-family:Arial,sans-serif;">
+  <body style="margin:0;padding:0;background:#e9e6dc;">
+    <table class="gsv-page" bgcolor="#e9e6dc" width="100%" cellpadding="0" cellspacing="0" style="background:#e9e6dc;padding:20px 0;font-family:Arial,sans-serif;">
       <tr>
         <td align="center" style="padding:0 14px;">
-          <table width="720" cellpadding="0" cellspacing="0" style="width:720px;max-width:100%;background:#ffffff;border:1px solid #e8e8e8;border-radius:18px;overflow:hidden;">
+          <table class="gsv-paper" bgcolor="#ffffff" width="720" cellpadding="0" cellspacing="0" style="width:720px;max-width:100%;background:#ffffff;border:1px solid #d8d5cb;overflow:hidden;">
             <tr>
-              <td align="center" style="padding:26px 24px 36px 24px;background:#ffffff;">
+              <td class="gsv-green" bgcolor="#17231f" align="center" style="padding:30px 24px;background:#17231f;background-image:url(${GREEN_TILE_URL});background-repeat:repeat;">
                 <img
                   src="https://res.cloudinary.com/dqcgvorw1/image/upload/v1773956428/Wide-w-House_mip8se.png"
                   alt="Golden State Visions"
@@ -457,7 +502,7 @@ export async function POST(req: Request) {
             </tr>
 
             <tr>
-              <td align="center" style="padding:0 32px 22px 32px;text-align:center;">
+              <td class="gsv-copy" align="center" style="padding:30px 32px 22px 32px;text-align:center;color:#17231f;">
                 <h1 style="margin:0;font-size:34px;line-height:1.15;color:#171717;font-weight:800;text-align:center;">
                   Your appointment is confirmed
                 </h1>
@@ -465,7 +510,7 @@ export async function POST(req: Request) {
             </tr>
 
             <tr>
-              <td style="padding:0 32px 28px 32px;color:#4b5563;font-size:16px;line-height:1.65;">
+              <td class="gsv-copy" style="padding:0 32px 28px 32px;color:#4b5563;font-size:16px;line-height:1.65;">
                 Hi ${greetingName},<br /><br />
                 Thanks for booking with <strong style="color:#171717;">Golden State Visions</strong>. We’re all set for your appointment.
               </td>
@@ -473,10 +518,10 @@ export async function POST(req: Request) {
 
             <tr>
               <td style="padding:0 32px 18px 32px;">
-                <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #f0e2b2;border-radius:18px;background:#fffaf0;">
+                <table class="gsv-yellow" bgcolor="#ffc72c" width="100%" cellpadding="0" cellspacing="0" style="border-left:4px solid #17231f;background:#ffc72c;background-image:url(${YELLOW_TILE_URL});background-repeat:repeat;">
                   <tr>
                     <td align="center" style="padding:20px 20px 12px 20px;">
-                      <div style="font-size:12px;font-weight:800;letter-spacing:.14em;color:#b8860b;text-transform:uppercase;margin-bottom:8px;">
+                      <div style="font-size:12px;font-weight:800;letter-spacing:.14em;color:#17231f;text-transform:uppercase;margin-bottom:8px;">
                         Appointment
                       </div>
                       <div style="font-size:28px;line-height:1.2;font-weight:800;color:#171717;">
@@ -486,18 +531,18 @@ export async function POST(req: Request) {
                         appointmentTimeOnly
                           ? `
                       <div style="font-size:23px;line-height:1.2;font-weight:700;color:#171717;margin-top:4px;">
-                        ${appointmentTimeOnly}
+                        ${appointmentTimeOnly} PT
                       </div>
                       `
                           : ""
                       }
-                      <div style="font-size:15px;line-height:1.65;color:#4b5563;margin-top:10px;">
+                      <div style="font-size:15px;line-height:1.65;color:#17231f;margin-top:10px;">
                         ${propertyAddress}
                       </div>
                       ${
                         estimatedDuration
                           ? `
-                      <div style="font-size:14px;line-height:1.55;color:#6b7280;margin-top:4px;">
+                      <div style="font-size:14px;line-height:1.55;color:#17231f;margin-top:4px;">
                         Estimated duration: ${estimatedDuration}
                       </div>
                       `
@@ -536,12 +581,12 @@ export async function POST(req: Request) {
             ${twilightDateDisplay && twilightTime ? `
             <tr>
               <td style="padding:0 32px 18px 32px;">
-                <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #d9c56f;border-radius:18px;background:#fffdf5;">
+                <table class="gsv-green" bgcolor="#17231f" width="100%" cellpadding="0" cellspacing="0" style="border-left:4px solid #ffc72c;background:#17231f;background-image:url(${GREEN_TILE_URL});background-repeat:repeat;">
                   <tr><td align="center" style="padding:20px;">
-                    <div style="font-size:12px;font-weight:800;letter-spacing:.14em;color:#8a6900;text-transform:uppercase;margin-bottom:8px;">Twilight return visit</div>
-                    <div style="font-size:22px;line-height:1.25;font-weight:800;color:#171717;">${twilightDateDisplay}</div>
-                    <div style="font-size:19px;line-height:1.25;font-weight:700;color:#171717;margin-top:4px;">${twilightTime}</div>
-                    <div style="font-size:14px;line-height:1.55;color:#6b7280;margin-top:8px;">This is a separate one-hour on-location appointment.</div>
+                    <div class="gsv-yellow-text" style="font-size:12px;font-weight:800;letter-spacing:.14em;color:#ffc72c;text-transform:uppercase;margin-bottom:8px;">Twilight return visit</div>
+                    <div style="font-size:22px;line-height:1.25;font-weight:800;color:#ffffff;">${twilightDateDisplay}</div>
+                    <div style="font-size:19px;line-height:1.25;font-weight:700;color:#ffffff;margin-top:4px;">${twilightTime}</div>
+                    <div style="font-size:14px;line-height:1.55;color:#ffffff;margin-top:8px;">This is a separate one-hour on-location appointment.</div>
                   </td></tr>
                 </table>
               </td>
@@ -549,58 +594,45 @@ export async function POST(req: Request) {
 
             <tr>
               <td style="padding:0 32px 22px 32px;">
-                <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e8e8e8;border-radius:16px;background:#fafafa;">
+                <table class="gsv-green" bgcolor="#17231f" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #17231f;background:#17231f;background-image:url(${GREEN_TILE_URL});background-repeat:repeat;">
                   <tr>
-                    <td style="padding:18px 18px 10px 18px;font-size:15px;line-height:1.8;color:#171717;">
-                      <div><strong>Package:</strong> ${packageName}</div>
-                      <div><strong>Photographer:</strong> ${clean(booking.photographer_name) || "Assigned soon"}</div>
-                      <div><strong>Total:</strong> ${money(booking.total_cents)}</div>
+                    <td style="padding:22px 24px;font-size:15px;line-height:1.8;color:#ffffff;">
+                      <div class="gsv-yellow-text" style="font-size:12px;font-weight:800;letter-spacing:.16em;color:#ffc72c;text-transform:uppercase;margin-bottom:10px;">Your order</div>
+                      <div><strong class="gsv-yellow-text" style="color:#ffc72c;">Package:</strong> ${packageName}</div>
+                      <div><strong class="gsv-yellow-text" style="color:#ffc72c;">Photographer:</strong> ${clean(booking.photographer_name) || "Assigned soon"}</div>
+                      <div><strong class="gsv-yellow-text" style="color:#ffc72c;">Total:</strong> ${money(booking.total_cents)}</div>
+                      ${
+                        services.length
+                          ? `<div class="gsv-yellow-text" style="font-size:12px;font-weight:800;letter-spacing:.14em;color:#ffc72c;text-transform:uppercase;margin-top:18px;margin-bottom:6px;">Services</div>
+                      <div style="color:#ffffff;line-height:1.8;">${services
+                        .map((service) => `<span class="gsv-yellow-text" style="color:#ffc72c;font-weight:800;">+</span> ${service}`)
+                        .join("<br />")}</div>`
+                          : ""
+                      }
+                      ${
+                        addons.length
+                          ? `<div class="gsv-yellow-text" style="font-size:12px;font-weight:800;letter-spacing:.14em;color:#ffc72c;text-transform:uppercase;margin-top:18px;margin-bottom:6px;">Add-ons</div>
+                      <div style="color:#ffffff;line-height:1.8;">${addons
+                        .map((addon) => `<span class="gsv-yellow-text" style="color:#ffc72c;font-weight:800;">+</span> ${addon}`)
+                        .join("<br />")}</div>`
+                          : ""
+                      }
                     </td>
                   </tr>
                 </table>
               </td>
             </tr>
 
-            ${
-              services.length
-                ? `
-            <tr>
-              <td style="padding:0 32px 18px 32px;">
-                <div style="font-size:18px;font-weight:700;color:#171717;margin-bottom:10px;">Services</div>
-                <ul style="margin:0;padding-left:18px;color:#4b5563;font-size:15px;line-height:1.8;">
-                  ${services.map((s) => `<li>${s}</li>`).join("")}
-                </ul>
-              </td>
-            </tr>
-            `
-                : ""
-            }
-
-            ${
-              addons.length
-                ? `
-            <tr>
-              <td style="padding:0 32px 18px 32px;">
-                <div style="font-size:18px;font-weight:700;color:#171717;margin-bottom:10px;">Add-ons</div>
-                <ul style="margin:0;padding-left:18px;color:#4b5563;font-size:15px;line-height:1.8;">
-                  ${addons.map((a) => `<li>${a}</li>`).join("")}
-                </ul>
-              </td>
-            </tr>
-            `
-                : ""
-            }
-
             <tr>
               <td style="padding:0 32px 24px 32px;">
                 <a href="${prepChecklistUrl}" style="text-decoration:none;display:block;">
-                  <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #f0e2b2;border-radius:16px;background:#fffaf0;">
+                  <table class="gsv-yellow" bgcolor="#ffc72c" width="100%" cellpadding="0" cellspacing="0" style="border-left:4px solid #17231f;background:#ffc72c;background-image:url(${YELLOW_TILE_URL});background-repeat:repeat;">
                     <tr>
-                      <td style="padding:18px 20px;color:#4b5563;font-size:14px;line-height:1.7;">
-                        <div style="font-size:17px;font-weight:700;color:#171717;margin-bottom:6px;">
-                          Help us capture the best results →
+                      <td style="padding:18px 20px;color:#17231f;font-size:14px;line-height:1.7;">
+                        <div style="font-size:12px;font-weight:800;letter-spacing:.14em;color:#17231f;text-transform:uppercase;margin-bottom:6px;">
+                          Photoshoot Checklist →
                         </div>
-                        Before we arrive, please take a moment to review our quick <span style="color:#b8860b;font-weight:700;">Photo Prep Checklist</span>. It outlines simple tips to ensure your listing is ready to shine.
+                        <strong style="font-size:17px;color:#17231f;">Help us capture the best results.</strong><br />Before we arrive, review the printable checklist so your listing is ready to shine.
                       </td>
                     </tr>
                   </table>
@@ -609,29 +641,36 @@ export async function POST(req: Request) {
             </tr>
 
             <tr>
-              <td style="padding:0 32px 28px 32px;color:#4b5563;font-size:15px;line-height:1.7;">
+              <td class="gsv-copy" style="padding:0 32px 28px 32px;color:#4b5563;font-size:15px;line-height:1.7;">
                 If you need anything before the shoot, just reply to this email or give us a call.
               </td>
             </tr>
 
             <tr>
-              <td style="padding:0 32px 20px 32px;border-top:1px solid #eeeeee;">
+              <td style="padding:22px 32px;background:#ffffff;border-top:1px solid #e2dfd5;">
                 <table width="100%" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td style="padding-top:22px;vertical-align:top;">
-                      <div style="font-size:15px;font-weight:700;color:#171717;">Cory</div>
-                      <div style="font-size:15px;color:#4b5563;">(916) 432-3373</div>
-                      <div style="padding-top:14px;">
-                        <img
-                          src="https://res.cloudinary.com/dqcgvorw1/image/upload/v1773956828/GSVME_umbfcz.jpg"
-                          alt="Cory"
-                          width="200"
-                          style="display:block;border-radius:14px;width:120px;height:auto;border:0;"
-                        />
-                      </div>
+                    <td width="92" style="vertical-align:middle;">
+                      <img
+                        src="https://res.cloudinary.com/dqcgvorw1/image/upload/v1773956828/GSVME_umbfcz.jpg"
+                        alt="Cory"
+                        width="74"
+                        style="display:block;border-radius:50%;width:74px;height:74px;object-fit:cover;border:0;"
+                      />
+                    </td>
+                    <td style="vertical-align:middle;color:#59645f;font-size:13px;line-height:1.55;">
+                      <strong style="display:block;font-size:15px;color:#17231f;">Cory</strong>
+                      Golden State Visions<br />
+                      <a href="tel:+19164323373" style="color:#59645f;text-decoration:none;">(916) 432-3373</a> ·
+                      <a href="https://www.gsvisions.co" style="color:#59645f;text-decoration:none;">gsvisions.co</a>
                     </td>
                   </tr>
                 </table>
+              </td>
+            </tr>
+            <tr>
+              <td class="gsv-green" bgcolor="#17231f" align="center" style="padding:18px 24px;background:#17231f;background-image:url(${GREEN_TILE_URL});background-repeat:repeat;color:#ffffff;font-size:11px;">
+                © 2026 Golden State Visions Real Estate Media
               </td>
             </tr>
           </table>

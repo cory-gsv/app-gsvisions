@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import { sendPaymentReceivedEmail } from "@/lib/payment-received-email";
 
 export const runtime = "nodejs";
 
@@ -170,12 +171,32 @@ export async function POST(
 
     if (refreshError) throw refreshError;
 
+    let emailSent = true;
+    try {
+      await sendPaymentReceivedEmail({
+        admin: supabase,
+        siteId: site.id,
+        bookingId: site.booking_id,
+        paymentReference: paymentIntent.id,
+        amountCents: invoiceAmountCents,
+        tipCents,
+        currency: paymentIntent.currency,
+        paidAt: new Date(paymentIntent.created * 1000).toISOString(),
+        paymentMethod: "stripe",
+      });
+    } catch (emailError) {
+      emailSent = false;
+      console.error("STRIPE_PAYMENT_RECEIPT_FAIL", { siteId: site.id, paymentIntentId: paymentIntent.id, error: emailError });
+    }
+
     return NextResponse.json({
       ok: true,
       status: "succeeded",
       payment_intent_id: paymentIntent.id,
       paid: !!updatedSite?.paid,
       balance_due_cents: asCents(updatedSite?.balance_due_cents),
+      email_sent: emailSent,
+      warning: emailSent ? undefined : "Payment was recorded, but its receipt could not be emailed.",
       message: "Payment received and recorded.",
     });
   } catch (error) {

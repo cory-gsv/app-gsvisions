@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { paypalConfigured, paypalRequest } from "@/lib/paypal";
+import { sendPaymentReceivedEmail } from "@/lib/payment-received-email";
 
 type Capture = { id?: string; status?: string; purchase_units?: Array<{ reference_id?: string; amount?: { currency_code?: string; value?: string }; payments?: { captures?: Array<{ id?: string; status?: string; amount?: { currency_code?: string; value?: string }; create_time?: string }> } }> ; message?: string };
 function admin() {
@@ -43,7 +44,23 @@ export async function POST(request: Request, context: { params: Promise<{ token:
       p_provider_created_at: capture.create_time || new Date().toISOString(),
     });
     if (error) throw new Error("PayPal payment was captured but could not be recorded. Contact support.");
-    return NextResponse.json({ paid: true, payment_id: capture.id || orderId });
+    try {
+      await sendPaymentReceivedEmail({
+        admin: db,
+        siteId: site.id,
+        bookingId: site.booking_id || null,
+        paymentReference: reference,
+        amountCents: amount,
+        tipCents: tip,
+        currency: "usd",
+        paidAt: capture.create_time || new Date().toISOString(),
+        paymentMethod: "paypal",
+      });
+    } catch (emailError) {
+      console.error("PAYPAL_PAYMENT_RECEIPT_FAIL", { siteId: site.id, reference, error: emailError });
+      return NextResponse.json({ paid: true, payment_id: capture.id || orderId, email_sent: false, warning: "Payment was recorded, but its receipt could not be emailed." });
+    }
+    return NextResponse.json({ paid: true, payment_id: capture.id || orderId, email_sent: true });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "PayPal payment confirmation failed." }, { status: 502 });
   }

@@ -3,13 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/lib/authz";
 import { assistantCcEmails, portalUserOwnsSite } from "@/lib/portal-access";
+import { isOutboundEmailEnabled } from "@/lib/outbound-email";
+import { propertyLeadEmailHtml, propertyLeadEmailText } from "@/lib/property-lead-email";
 
 export const runtime = "nodejs";
 
 function clean(value: unknown) { return String(value ?? "").trim(); }
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" })[character] || character);
-}
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -49,7 +48,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const propertyAddress = clean(site.property_full_address) || clean(site.address_full) || clean(site.property_address) || clean(site.site_name) || clean(site.name) || "Property listing";
     const { data: lead, error: insertError } = await admin.from("property_leads").insert({
       site_id: site.id, client_id: clientId, name, email, phone: phone || null, message,
-      property_address: propertyAddress, source: "property_site", status: "new", email_status: process.env.RESEND_API_KEY ? "pending" : "not_configured",
+      property_address: propertyAddress, source: "property_site", status: "new", email_status: isOutboundEmailEnabled() && process.env.RESEND_API_KEY ? "pending" : "not_configured",
     }).select("id").single();
     if (insertError || !lead) {
       console.error("PROPERTY_LEAD_INSERT_FAILED", insertError);
@@ -57,14 +56,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     let notified = false;
-    if (process.env.RESEND_API_KEY) {
+    if (isOutboundEmailEnabled() && process.env.RESEND_API_KEY) {
       const assistantEmails = await assistantCcEmails(admin, clientId);
       const clientName = clean(client?.full_name) || [clean(client?.first_name), clean(client?.last_name)].filter(Boolean).join(" ") || "there";
       const subject = `New property inquiry: ${propertyAddress}`;
-      const html = `<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#17231f"><div style="height:8px;background:#ffc72c"></div><div style="padding:32px"><p style="font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#986f00">New property website lead</p><h1 style="font-size:30px;margin:10px 0 18px">${escapeHtml(propertyAddress)}</h1><p>Hi ${escapeHtml(clientName)},</p><p>A visitor sent you a message from your Golden State Visions property website.</p><div style="margin:24px 0;padding:20px;background:#f3f1ea;border-left:5px solid #ffc72c"><strong>${escapeHtml(name)}</strong><br><a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>${phone ? `<br>${escapeHtml(phone)}` : ""}<p style="white-space:pre-wrap;line-height:1.6">${escapeHtml(message)}</p></div><p>Reply directly to this email to contact ${escapeHtml(name)}.</p></div></div>`;
+      const html = propertyLeadEmailHtml({ clientName, propertyAddress, leadName: name, leadEmail: email, leadPhone: phone, message });
       const { data: sent, error: sendError } = await new Resend(process.env.RESEND_API_KEY).emails.send({
         from: process.env.EMAIL_FROM || "Golden State Visions <onboarding@resend.dev>", to: clientEmail, cc: assistantEmails.length ? assistantEmails : undefined, bcc: [clean(process.env.EMAIL_AUDIT_BCC) || "cory@gsvisions.co"], replyTo: email, subject, html,
-        text: `Hi ${clientName},\n\nA visitor sent a message from the property website for ${propertyAddress}.\n\nName: ${name}\nEmail: ${email}${phone ? `\nPhone: ${phone}` : ""}\n\n${message}`,
+        text: propertyLeadEmailText({ clientName, propertyAddress, leadName: name, leadEmail: email, leadPhone: phone, message }),
       }, { idempotencyKey: `property-lead/${lead.id}` });
       notified = !sendError;
       await admin.from("property_leads").update({ email_status: sendError ? "failed" : "sent", email_provider_id: sent?.id || null, email_error: sendError ? clean(sendError.message).slice(0, 1000) : null, updated_at: new Date().toISOString() }).eq("id", lead.id);

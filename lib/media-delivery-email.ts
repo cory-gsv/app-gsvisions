@@ -2,6 +2,7 @@ import { Resend } from "resend";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { addFirstPartyEmailTracking } from "@/lib/email-tracking";
 import { assistantCcEmails } from "@/lib/portal-access";
+import { requireOutboundEmailApiKey } from "@/lib/outbound-email";
 
 type SupabaseAdmin = SupabaseClient;
 
@@ -208,6 +209,7 @@ export async function buildMediaReadyEmailDraft({
   const mediaUrl = `${appBase}/dashboard/site/${encodeURIComponent(site.id)}#download-media`;
   const balance = Math.max(0, asNumber(site.balance_due_cents));
   const paymentUrl = clean(site.invoice_public_token) ? `${appBase}/invoice/${encodeURIComponent(site.invoice_public_token)}` : "";
+  const mediaAccessUrl = clean(site.invoice_public_token) ? `${appBase}/media-access/${encodeURIComponent(site.invoice_public_token)}` : mediaUrl;
   const showPayment = site.paid !== true && balance > 0 && Boolean(paymentUrl);
   const items = normalizeInvoiceItems(site.invoice_items);
   const lines = emailOrderLines(items, booking);
@@ -235,11 +237,14 @@ export async function buildMediaReadyEmailDraft({
     : "";
 
   const html = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Type" content="text/html; charset=UTF-8"><meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only"><style>:root{color-scheme:light only!important;supported-color-schemes:light only!important}.gsv-page{background-color:#e9e6dc!important}.gsv-paper{background-color:#f7f4eb!important;color:#17231f!important}.gsv-white{background-color:#ffffff!important;color:#17231f!important}.gsv-green{background-color:#17231f!important}.gsv-yellow{background-color:#ffc72c!important;color:#17231f!important}[data-ogsc] .gsv-page{background-color:#e9e6dc!important}[data-ogsc] .gsv-paper{background-color:#f7f4eb!important;color:#17231f!important}[data-ogsc] .gsv-white{background-color:#ffffff!important;color:#17231f!important}[data-ogsc] .gsv-green{background-color:#17231f!important}[data-ogsc] .gsv-yellow{background-color:#ffc72c!important;color:#17231f!important}@media only screen and (max-width:620px){.gsv-wrap{width:100%!important}.gsv-pad{padding-left:22px!important;padding-right:22px!important}.gsv-two td{display:block!important;width:100%!important;box-sizing:border-box!important}.gsv-two .gsv-right{border-left:0!important;border-top:1px solid #e2dfd5!important}.gsv-button{display:block!important;width:100%!important;box-sizing:border-box!important;margin:0 0 10px!important}}</style></head><body style="margin:0;padding:0;background:#e9e6dc;background-image:linear-gradient(#e9e6dc,#e9e6dc);font-family:Arial,Helvetica,sans-serif;color:#17231f"><table role="presentation" class="gsv-page" bgcolor="#e9e6dc" width="100%" cellspacing="0" cellpadding="0" style="background:#e9e6dc;background-image:linear-gradient(#e9e6dc,#e9e6dc)"><tr><td align="center" style="padding:24px 12px"><table role="presentation" class="gsv-wrap gsv-paper" bgcolor="#f7f4eb" width="680" cellspacing="0" cellpadding="0" style="width:680px;max-width:100%;background:#f7f4eb;background-image:linear-gradient(#f7f4eb,#f7f4eb);border:1px solid #d8d5cb"><tr><td class="gsv-green" bgcolor="#17231f" align="center" style="padding:30px 24px;background:#17231f;background-image:linear-gradient(#17231f,#17231f)"><img src="${LOGO_URL}" alt="Golden State Visions" width="230" style="display:block;width:230px;max-width:80%;height:auto;border:0"></td></tr><tr><td class="gsv-pad" style="padding:30px 42px 18px"><div style="font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#9b7410">Media ready</div><h1 style="margin:8px 0 0;font-size:34px;line-height:1.08;font-weight:500">Your property media is ready.</h1></td></tr><tr><td class="gsv-pad" style="padding:0 42px 26px;color:#505b57;font-size:16px;line-height:1.65">Hi ${esc(firstName)},<br><br><!--GSV_MESSAGE_START-->${emailMessageHtml(message)}<!--GSV_MESSAGE_END--></td></tr><tr><td class="gsv-pad" style="padding:0 42px 30px"><table role="presentation" class="gsv-yellow" bgcolor="#ffc72c" width="100%" cellspacing="0" cellpadding="0" style="background:#ffc72c;background-image:linear-gradient(#ffc72c,#ffc72c);border-left:4px solid #17231f"><tr><td style="padding:22px 24px"><div style="font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:#5c480f">Property media</div><div style="margin-top:7px;font-size:25px;line-height:1.25;font-weight:700">Your media is ready to view</div></td></tr></table></td></tr><tr><td class="gsv-pad" style="padding:0 42px 30px"><table role="presentation" class="gsv-two gsv-white" bgcolor="#ffffff" width="100%" cellspacing="0" cellpadding="0" style="background:#fff;background-image:linear-gradient(#ffffff,#ffffff);border:1px solid #e2dfd5"><tr><td width="50%" style="padding:21px 22px;vertical-align:top"><div style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#75807b">Property location</div><div style="margin-top:8px;font-size:16px;line-height:1.5;font-weight:700">${esc(street)}${locality ? `<br><span style="font-weight:400">${esc(locality)}</span>` : ""}</div>${squareFeet ? `<div style="margin-top:7px;color:#75807b;font-size:13px">${esc(squareFeet.toLocaleString())} sq. ft.</div>` : ""}</td><td width="50%" class="gsv-right" style="padding:21px 22px;border-left:1px solid #e2dfd5;vertical-align:top"><div style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#75807b">Your order ${esc(orderNumber)}</div><div style="margin-top:8px;font-size:16px;line-height:1.5;font-weight:700">${esc(primaryLine?.name || "Real estate media")}</div><div style="margin-top:7px;color:#75807b;font-size:13px">Travel: Included</div></td></tr></table></td></tr><tr><td class="gsv-pad gsv-green" bgcolor="#17231f" style="padding:28px 42px 30px;background:#17231f;background-image:linear-gradient(#17231f,#17231f)"><div style="font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:#ffc72c">What you ordered</div><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:8px">${orderRowsHtml(lines)}<tr><td style="padding-top:18px;color:#bec8c3">${esc(financialLabel)}</td><td align="right" style="padding-top:18px;color:#ffc72c;font-size:28px;font-weight:700">${esc(money(financialAmount))}</td></tr></table></td></tr><tr><td class="gsv-pad" align="center" style="padding:30px 42px 10px"><a href="${esc(mediaUrl)}" class="gsv-button" style="display:inline-block;margin:0 5px 10px;padding:14px 22px;background:#ffc72c;color:#17231f;text-decoration:none;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase">View and download media</a>${paymentButton}</td></tr><tr><td class="gsv-pad" style="padding:12px 42px 28px;color:#59645f;font-size:14px;line-height:1.65;text-align:center">If anything changes or you have questions, reply to this email or call <a href="tel:+19164323373" style="color:#17231f;font-weight:700;text-decoration:none">(916) 432-3373</a>.</td></tr><tr><td class="gsv-pad gsv-white" bgcolor="#ffffff" style="padding:24px 42px;background:#fff;background-image:linear-gradient(#ffffff,#ffffff);border-top:1px solid #e2dfd5"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td width="92" style="vertical-align:top"><img src="${CORY_PHOTO_URL}" alt="Cory" width="74" style="display:block;width:74px;height:74px;object-fit:cover;border-radius:50%;border:0"></td><td style="vertical-align:middle;color:#59645f;font-size:13px;line-height:1.55"><strong style="display:block;color:#17231f;font-size:15px">Cory</strong>Golden State Visions<br><a href="tel:+19164323373" style="color:#59645f;text-decoration:none">(916) 432-3373</a> · <a href="https://www.gsvisions.co" style="color:#59645f;text-decoration:none">gsvisions.co</a></td></tr></table></td></tr><tr><td align="center" style="padding:18px 24px;background:#17231f;color:#8f9b96;font-size:11px">© 2026 Golden State Visions Real Estate Media</td></tr></table></td></tr></table></body></html>`;
+  const routedHtml = (mediaAccessUrl !== mediaUrl
+    ? html.replace(`href="${esc(mediaUrl)}"`, `href="${esc(mediaAccessUrl)}"`)
+    : html).replace(">View and download media</a>", ">Download media</a>");
 
   const text = [
     `Hi ${firstName},`, "", message, "", fullAddress,
     ...lines.map((line) => `${line.name}${line.qty > 1 ? ` × ${line.qty}` : ""}: ${money(line.priceCents * line.qty)}`),
-    `${financialLabel}: ${money(financialAmount)}`, "", `View and download media: ${mediaUrl}`,
+    `${financialLabel}: ${money(financialAmount)}`, "", `Download media: ${mediaAccessUrl}`,
     ...(showPayment ? [`Pay balance (${money(balance)}): ${paymentUrl}`] : []),
     "", "Golden State Visions | (916) 432-3373 | gsvisions.co",
   ].join("\n");
@@ -251,7 +256,7 @@ export async function buildMediaReadyEmailDraft({
     cc,
     subject,
     message,
-    html,
+    html: routedHtml,
     text,
     showPayment,
     balanceCents: balance,
@@ -273,6 +278,7 @@ export async function sendMediaReadyEmail({
   overrides?: MediaReadyEmailOverrides;
   scheduledAt?: string;
 }) {
+  const apiKey = requireOutboundEmailApiKey();
   const draft = await buildMediaReadyEmailDraft({ admin, siteId, sampleRecipient, overrides });
   const isSample = Boolean(clean(sampleRecipient));
   const idempotencyKey = isSample
@@ -296,7 +302,7 @@ export async function sendMediaReadyEmail({
   }
 
   const auditRecipient = clean(process.env.EMAIL_AUDIT_BCC || process.env.MEDIA_DELIVERY_BCC) || "cory@gsvisions.co";
-  const result = await new Resend(clean(process.env.RESEND_API_KEY)).emails.send({
+  const result = await new Resend(apiKey).emails.send({
     from: clean(process.env.EMAIL_FROM) || "Golden State Visions <onboarding@resend.dev>",
     to: draft.to,
     cc: draft.cc.length ? draft.cc : undefined,

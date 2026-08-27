@@ -204,6 +204,7 @@ export async function POST(request: Request) {
           tipCents: Number.isSafeInteger(tipCents) ? tipCents : 0,
           currency: intent.currency,
           paidAt: new Date(intent.created * 1000).toISOString(),
+          paymentMethod: "stripe",
         });
       } catch (notificationError) {
         const message = notificationError instanceof Error ? notificationError.message : "Payment notification failed.";

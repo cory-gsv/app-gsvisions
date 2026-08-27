@@ -234,12 +234,10 @@ export async function GET(
       booking?.subtotal_cents ??
       computeSubtotalFromInvoiceItems(invoiceItems);
 
-    const packageDiscountCents = Math.max(0, Number(booking?.discount_cents ?? 0) || 0);
     const additionalDiscountCents = computeAdditionalDiscountFromInvoiceItems(invoiceItems);
-
     const totalCents =
       booking?.total_cents ??
-      Math.max(0, subtotalCents - packageDiscountCents - additionalDiscountCents);
+      Math.max(0, subtotalCents - additionalDiscountCents);
 
     const balanceDueCents = Math.max(0, Number(site.balance_due_cents ?? totalCents) || 0);
     const paidCents = Math.max(0, totalCents - balanceDueCents);
@@ -269,7 +267,6 @@ export async function GET(
         invoice_items: invoiceItems,
 
         subtotal_cents: subtotalCents,
-        package_discount_cents: packageDiscountCents,
         additional_discount_cents: additionalDiscountCents,
         total_cents: totalCents,
         paid_cents: paidCents,

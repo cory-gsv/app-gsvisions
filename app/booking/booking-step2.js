@@ -472,7 +472,7 @@ export function initBookingStep2() {
   function shouldLockLargeProperty() {
     const acres = getLotAcresSmart();
     const lotSqft = getLotSqftAny();
-    return acres >= 1 || lotSqft >= 43560;
+    return acres > 1 || lotSqft > 43560;
   }
 
   let ACTIVE_COL = "active";

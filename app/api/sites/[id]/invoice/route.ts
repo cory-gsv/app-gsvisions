@@ -4,6 +4,7 @@ import { authorizationErrorResponse, requireAdmin } from "@/lib/authz";
 import { createMicrosoftCalendarEvent, shiftMicrosoftCalendarTravelEvents, updateMicrosoftCalendarEvent } from "@/lib/m365-calendar";
 import { cancelScheduledAppointmentChangeEmail, scheduleAppointmentChangeEmail } from "@/lib/appointment-change-email";
 import { assistantCcEmails } from "@/lib/portal-access";
+import { isOutboundEmailEnabled } from "@/lib/outbound-email";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -188,18 +189,19 @@ export async function PATCH(
     const body = await req.json().catch(() => ({}));
     const invoiceItems = normalizeInvoiceItems(body?.invoice_items);
     const adminNotes = clean(body?.admin_notes).slice(0, 4000);
+    const saveRequestId = clean(body?.save_request_id) || crypto.randomUUID();
+    // Invoice autosaves are intentionally not appointment changes. The client
+    // sets this only when an admin directly changes an appointment control.
+    const appointmentChangeRequested = body?.appointment_change_requested === true;
 
-    const packageDiscountCents = Math.max(
-      0,
-      Number(body?.package_discount_cents ?? 0) || 0
-    );
+    // Manual discounts are invoice rows. Recompute them server-side so a
+    // stale or repeated client value can never be added a second time.
+    const additionalDiscountCents = invoiceItems.reduce((sum, item) => {
+      if (clean(item.kind) !== "discount") return sum;
+      return sum + Math.abs(signedInteger(item.price_cents)) * Math.max(1, signedInteger(item.qty) || 1);
+    }, 0);
 
-    const additionalDiscountCents = Math.max(
-      0,
-      Number(body?.additional_discount_cents ?? 0) || 0
-    );
-
-    const discountCents = packageDiscountCents + additionalDiscountCents;
+    const discountCents = additionalDiscountCents;
 
     const { data: siteRow, error: siteLookupError } = await supabase
       .from("sites")
@@ -224,6 +226,7 @@ export async function PATCH(
     let customerEmail = "";
     let customerPhone = "";
     let appointmentEmailScheduledFor = "";
+    let appointmentEmailWarning = "";
     let appointmentChanged = false;
     let nextAppointmentStart = "";
     let nextAppointmentEnd = "";
@@ -265,8 +268,19 @@ export async function PATCH(
       Number(siteRow.balance_due_cents ?? 0) || 0
     );
 
-    const previousPaidCents = siteRow.paid
-      ? previousBookingTotalCents
+    const { data: paymentRows } = await supabase
+      .from("payments")
+      .select("amount_cents,status")
+      .eq("site_id", id)
+      .in("status", ["succeeded", "partially_refunded"]);
+    const ledgerPaidCents = Array.isArray(paymentRows)
+      ? paymentRows.reduce(
+          (sum, payment) => sum + Math.max(0, Number(payment.amount_cents ?? 0) || 0),
+          0
+        )
+      : 0;
+    const previousPaidCents = ledgerPaidCents > 0
+      ? ledgerPaidCents
       : Math.max(0, previousBookingTotalCents - previousBalanceDueCents);
 
     const chargedPackageGroups = new Set(
@@ -292,6 +306,13 @@ export async function PATCH(
       return sum + lineTotal;
     }, 0);
 
+    if (discountCents > subtotalCents) {
+      return NextResponse.json(
+        { error: "Discounts cannot exceed the invoice subtotal. No changes were saved." },
+        { status: 422 }
+      );
+    }
+
     const totalCents = Math.max(0, subtotalCents - discountCents);
 
     const balanceDueCents = Math.max(
@@ -299,17 +320,23 @@ export async function PATCH(
       totalCents - Math.min(previousPaidCents, totalCents)
     );
 
-    const isFullyPaid = balanceDueCents <= 0;
+    // An invoice edit may create a new balance, but it may never promote an
+    // order to paid. Only a recorded payment transaction can do that.
+    const nextPaid = balanceDueCents > 0 ? false : Boolean(siteRow.paid);
 
     const currentSiteData = asRecord(siteRow.site_data);
-    const nextSiteData: Record<string, unknown> = { ...currentSiteData, admin_notes: adminNotes };
+    const nextSiteData: Record<string, unknown> = {
+      ...currentSiteData,
+      admin_notes: adminNotes,
+    };
+    delete nextSiteData.package_discount_cents;
 
     const { error: siteUpdateError } = await supabase
       .from("sites")
       .update({
         invoice_items: invoiceItems,
         balance_due_cents: balanceDueCents,
-        paid: isFullyPaid,
+        paid: nextPaid,
         site_data: nextSiteData,
         updated_at: new Date().toISOString(),
       })
@@ -336,7 +363,7 @@ export async function PATCH(
       let nextScheduledStart = previousBookingScheduledStart;
       let nextScheduledEnd = previousBookingScheduledEnd;
 
-      if (masterStart) {
+      if (appointmentChangeRequested && masterStart) {
         const startDate = parseIso(masterStart);
         if (startDate) {
           nextScheduledStart = startDate.toISOString();
@@ -350,14 +377,22 @@ export async function PATCH(
         subtotal_cents: subtotalCents,
         discount_cents: discountCents,
         total_cents: totalCents,
-        payment_status: isFullyPaid ? "paid" : "invoice_requested",
         updated_at: new Date().toISOString(),
       };
 
-      if (nextScheduledStart) bookingUpdatePayload.status = "scheduled";
+      if (balanceDueCents > 0) {
+        bookingUpdatePayload.payment_status = previousPaidCents > 0
+          ? "partially_paid"
+          : "invoice_requested";
+      }
 
-      if (nextScheduledStart) bookingUpdatePayload.scheduled_start = nextScheduledStart;
-      if (nextScheduledEnd) bookingUpdatePayload.scheduled_end = nextScheduledEnd;
+      if (appointmentChangeRequested && nextScheduledStart) {
+        bookingUpdatePayload.status = "scheduled";
+        bookingUpdatePayload.scheduled_start = nextScheduledStart;
+      }
+      if (appointmentChangeRequested && nextScheduledEnd) {
+        bookingUpdatePayload.scheduled_end = nextScheduledEnd;
+      }
       if (previousBookingTimezone) {
         bookingUpdatePayload.scheduled_timezone = previousBookingTimezone;
       }
@@ -373,7 +408,9 @@ export async function PATCH(
       }
 
       appointmentChanged = Boolean(
-        nextScheduledStart && nextScheduledStart !== previousBookingScheduledStart
+        appointmentChangeRequested &&
+        nextScheduledStart &&
+        nextScheduledStart !== previousBookingScheduledStart
       );
       nextAppointmentStart = nextScheduledStart;
       nextAppointmentEnd = nextScheduledEnd;
@@ -509,13 +546,24 @@ export async function PATCH(
 
     const pendingAppointmentStart = clean(nextSiteData.pending_appointment_change_start);
     const pendingAppointmentEnd = clean(nextSiteData.pending_appointment_change_end);
+    const pendingEmailScheduledAt = new Date(clean(currentSiteData.appointment_change_email_scheduled_for)).getTime();
+    const canReplacePendingAppointmentEmail = Boolean(
+      clean(currentSiteData.appointment_change_email_id) &&
+      Number.isFinite(pendingEmailScheduledAt) &&
+      pendingEmailScheduledAt > Date.now() &&
+      clean(currentSiteData.appointment_change_email_start) === nextAppointmentStart
+    );
     const needsAppointmentConfirmation = Boolean(
       siteRow.booking_id &&
       nextAppointmentStart &&
-      (appointmentChanged || pendingAppointmentStart === nextAppointmentStart)
+      new Date(nextAppointmentStart).getTime() > Date.now() &&
+      (
+        (appointmentChangeRequested && (appointmentChanged || pendingAppointmentStart === nextAppointmentStart)) ||
+        canReplacePendingAppointmentEmail
+      )
     );
 
-    if (needsAppointmentConfirmation && calendarSync.updated === true && !calendarEventCreated) {
+    if (appointmentChangeRequested && needsAppointmentConfirmation && calendarSync.updated === true && !calendarEventCreated) {
       try {
         const travelSync = await shiftMicrosoftCalendarTravelEvents({
           propertyAddress,
@@ -534,7 +582,7 @@ export async function PATCH(
       }
     }
 
-    if (needsAppointmentConfirmation && calendarSync.updated !== true) {
+    if (appointmentChangeRequested && needsAppointmentConfirmation && calendarSync.updated !== true) {
       const reason = clean(calendarSync.reason);
       return NextResponse.json(
         {
@@ -547,33 +595,70 @@ export async function PATCH(
       );
     }
 
-    if (needsAppointmentConfirmation && customerEmail) {
+    if (needsAppointmentConfirmation && customerEmail && isOutboundEmailEnabled() && clean(process.env.RESEND_API_KEY)) {
       const assistantEmails = await assistantCcEmails(supabase, clean(siteRow.client_id) || clean(siteRow.client_ms_id));
-      const pendingEmail = await scheduleAppointmentChangeEmail({
-        previousEmailId: clean(currentSiteData.appointment_change_email_id),
-        bookingId: clean(siteRow.booking_id),
-        siteId: id,
-        recipientEmail: customerEmail,
-        ccEmails: assistantEmails,
-        recipientName: customerName,
-        propertyAddress: clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
-          clean(siteRow.property_address),
-          clean(siteRow.property_city),
-          [clean(siteRow.property_state), clean(siteRow.property_zip)].filter(Boolean).join(" "),
-        ].filter(Boolean).join(", "),
-        scheduledStart: nextAppointmentStart,
-        scheduledEnd: nextAppointmentEnd || pendingAppointmentEnd,
-        balanceCents: balanceDueCents,
-        invoiceToken: clean(siteRow.invoice_public_token),
-        invoiceItems,
-        packageName: clean(packageRow?.name),
-        squareFeet: Number(siteRow.sqft || siteRow.property_sqft || 0),
-        totalCents,
+      const emailPropertyAddress = clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
+        clean(siteRow.property_address),
+        clean(siteRow.property_city),
+        [clean(siteRow.property_state), clean(siteRow.property_zip)].filter(Boolean).join(" "),
+      ].filter(Boolean).join(", ");
+      // A retry of the same manual save is idempotent. A later manual save gets
+      // a new key, cancels the still-pending provider message, and replaces it
+      // with one email containing the latest appointment and invoice details.
+      const idempotencyKey = `appointment-change:${clean(siteRow.booking_id)}:${saveRequestId}`;
+      const subject = `Appointment updated – ${emailPropertyAddress}`;
+      const { data: messageId, error: claimError } = await supabase.rpc("claim_outbound_message", {
+        p_idempotency_key: idempotencyKey,
+        p_message_type: "appointment_change",
+        p_booking_id: clean(siteRow.booking_id),
+        p_site_id: id,
+        p_recipient_email: customerEmail,
+        p_subject: subject,
       });
-      appointmentEmailScheduledFor = pendingEmail.scheduledFor;
-      nextSiteData.appointment_change_email_id = pendingEmail.emailId;
-      nextSiteData.appointment_change_email_scheduled_for = pendingEmail.scheduledFor;
-      nextSiteData.appointment_change_email_start = nextAppointmentStart;
+      if (claimError) {
+        return NextResponse.json({ error: "The appointment changed, but its notification could not be secured." }, { status: 503 });
+      }
+
+      if (messageId) {
+        try {
+          const pendingEmail = await scheduleAppointmentChangeEmail({
+            previousEmailId: clean(currentSiteData.appointment_change_email_id),
+            bookingId: clean(siteRow.booking_id),
+            siteId: id,
+            recipientEmail: customerEmail,
+            ccEmails: assistantEmails,
+            recipientName: customerName,
+            propertyAddress: emailPropertyAddress,
+            scheduledStart: nextAppointmentStart,
+            scheduledEnd: nextAppointmentEnd || pendingAppointmentEnd,
+            balanceCents: balanceDueCents,
+            invoiceToken: clean(siteRow.invoice_public_token),
+            invoiceItems,
+            packageName: clean(packageRow?.name),
+            squareFeet: Number(siteRow.sqft || siteRow.property_sqft || 0),
+            totalCents,
+          });
+          appointmentEmailScheduledFor = pendingEmail.scheduledFor;
+          nextSiteData.appointment_change_email_id = pendingEmail.emailId;
+          nextSiteData.appointment_change_email_scheduled_for = pendingEmail.scheduledFor;
+          nextSiteData.appointment_change_email_start = nextAppointmentStart;
+          await supabase.from("outbound_messages").update({
+            status: "sent",
+            provider_message_id: pendingEmail.emailId,
+            sent_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq("id", messageId);
+        } catch (emailError) {
+          await supabase.from("outbound_messages").update({
+            status: "failed",
+            last_error: emailError instanceof Error ? emailError.message : "Appointment email failed.",
+            updated_at: new Date().toISOString(),
+          }).eq("id", messageId);
+          appointmentEmailWarning = emailError instanceof Error
+            ? emailError.message
+            : "The appointment was saved, but its delayed email was not replaced.";
+        }
+      }
       delete nextSiteData.pending_appointment_change_start;
       delete nextSiteData.pending_appointment_change_end;
       delete nextSiteData.pending_appointment_previous_start;
@@ -583,14 +668,31 @@ export async function PATCH(
         .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
         .eq("id", id);
       if (appointmentEmailStateError) {
-        await cancelScheduledAppointmentChangeEmail(pendingEmail.emailId);
+        await cancelScheduledAppointmentChangeEmail(clean(nextSiteData.appointment_change_email_id));
         return NextResponse.json({ error: "The calendar changed, but its delayed confirmation could not be recorded." }, { status: 500 });
       }
     } else if (needsAppointmentConfirmation) {
+      if (!isOutboundEmailEnabled() || !clean(process.env.RESEND_API_KEY)) {
+        appointmentEmailWarning = "Email delivery is disabled. The appointment was saved without sending a customer email.";
+      }
       delete nextSiteData.pending_appointment_change_start;
       delete nextSiteData.pending_appointment_change_end;
       delete nextSiteData.pending_appointment_previous_start;
       delete nextSiteData.pending_appointment_previous_end;
+      await supabase
+        .from("sites")
+        .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
+        .eq("id", id);
+    } else if (appointmentChangeRequested) {
+      // Historical/completed appointments may still be corrected by an admin,
+      // but they must never leave a delayed customer notification behind.
+      delete nextSiteData.pending_appointment_change_start;
+      delete nextSiteData.pending_appointment_change_end;
+      delete nextSiteData.pending_appointment_previous_start;
+      delete nextSiteData.pending_appointment_previous_end;
+      await cancelScheduledAppointmentChangeEmail(clean(currentSiteData.appointment_change_email_id));
+      delete nextSiteData.appointment_change_email_id;
+      delete nextSiteData.appointment_change_email_scheduled_for;
       await supabase
         .from("sites")
         .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
@@ -600,7 +702,6 @@ export async function PATCH(
     return NextResponse.json({
       ok: true,
       subtotal_cents: subtotalCents,
-      package_discount_cents: packageDiscountCents,
       additional_discount_cents: additionalDiscountCents,
       discount_cents: discountCents,
       total_cents: totalCents,
@@ -608,6 +709,7 @@ export async function PATCH(
       balance_due_cents: balanceDueCents,
       invoice_items: invoiceItems,
       appointment_email_scheduled_for: appointmentEmailScheduledFor || null,
+      appointment_email_warning: appointmentEmailWarning || null,
       calendar_sync: calendarSync,
     });
   } catch (err) {

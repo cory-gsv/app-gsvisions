@@ -59,8 +59,7 @@ type Props = {
   initialInvoiceItems: InvoiceItem[];
   canEdit: boolean;
   sitePaid: boolean;
-  siteBalanceDueCents: number | null;
-  packageDiscountCents: number;
+  recordedPaidCents: number;
   adminUsers: AdminUser[];
   invoicePublicUrl?: string | null;
   invoiceViewUrl?: string | null;
@@ -505,8 +504,7 @@ export default function InvoiceEditor({
   initialInvoiceItems,
   canEdit,
   sitePaid,
-  siteBalanceDueCents,
-  packageDiscountCents,
+  recordedPaidCents,
   adminUsers,
   invoicePublicUrl,
   invoiceViewUrl,
@@ -522,11 +520,17 @@ export default function InvoiceEditor({
   const [saveMessage, setSaveMessage] = useState("");
   const [sendState, setSendState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [sendMessage, setSendMessage] = useState("");
+  const [manualPaymentOpen, setManualPaymentOpen] = useState(false);
+  const [manualPaymentMethod, setManualPaymentMethod] = useState<"check" | "cash">("check");
+  const [manualPaymentAmount, setManualPaymentAmount] = useState("");
+  const [manualPaymentState, setManualPaymentState] = useState<"idle" | "saving" | "error">("idle");
+  const [manualPaymentMessage, setManualPaymentMessage] = useState("");
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [adminNotes, setAdminNotes] = useState(clean(initialAdminNotes));
-  const firstRenderRef = useRef(true);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedPayloadRef = useRef("");
+  const saveInFlightRef = useRef(false);
+  const pendingSaveRequestIdRef = useRef("");
+  const appointmentChangePendingRef = useRef(false);
 
   const packageOptions = useMemo(
     () => products.filter((p) => clean(p.kind) === "package"),
@@ -580,20 +584,18 @@ export default function InvoiceEditor({
     }, 0);
   }, [invoiceItems]);
 
-  const totalCents = Math.max(
-    0,
-    subtotalCents - packageDiscountCents - additionalDiscountCents
-  );
+  const totalDiscountCents = additionalDiscountCents;
+  const hasInvalidDiscount = totalDiscountCents > subtotalCents;
+  const totalCents = Math.max(0, subtotalCents - totalDiscountCents);
 
-  const paidCents = Math.max(
-    0,
-    totalCents - Math.max(0, Number(siteBalanceDueCents ?? 0) || 0)
-  );
+  // Payments are immutable financial records. Editing an invoice must not
+  // manufacture a larger paid amount merely because the total changed.
+  const paidCents = Math.max(0, Number(recordedPaidCents ?? 0) || 0);
 
   const balanceDueCents = Math.max(0, totalCents - paidCents);
 
   const hasBalanceDue = balanceDueCents > 0;
-  const isFullyPaid = !hasBalanceDue || sitePaid;
+  const isFullyPaid = sitePaid && !hasBalanceDue;
 
   const resolvedInvoicePublicUrl = clean(invoicePublicUrl);
   const resolvedInvoiceViewUrl = deriveInvoiceViewUrl(invoiceViewUrl, invoicePublicUrl);
@@ -785,6 +787,7 @@ export default function InvoiceEditor({
   }
 
   function updateAppointment(id: string, iso: string) {
+    appointmentChangePendingRef.current = true;
     const row = invoiceItems.find((item) => clean(item.id) === clean(id));
     if (row && clean(row.kind) === "package") {
       cascadePackageChange(id, { appt_start: iso }, "appointment");
@@ -896,38 +899,59 @@ export default function InvoiceEditor({
   }
 
   async function saveInvoicePayload(payloadString: string, showSavedMessage = true) {
+    if (saveInFlightRef.current) throw new Error("A save is already in progress.");
+    if (hasInvalidDiscount) throw new Error("Discounts cannot exceed the invoice subtotal.");
+    saveInFlightRef.current = true;
     const payload = JSON.parse(payloadString);
+    pendingSaveRequestIdRef.current ||= crypto.randomUUID();
+    payload.save_request_id = pendingSaveRequestIdRef.current;
+    const appointmentChangeRequested = appointmentChangePendingRef.current;
+    // Consume the intent before starting the request so a network retry cannot
+    // turn one appointment edit into several notifications.
+    if (appointmentChangeRequested) appointmentChangePendingRef.current = false;
+    payload.appointment_change_requested = appointmentChangeRequested;
 
-    const res = await authenticatedFetch(`/api/sites/${siteId}/invoice`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    let res: Response;
+    try {
+      res = await authenticatedFetch(`/api/sites/${siteId}/invoice`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    } catch (error) {
+      if (appointmentChangeRequested) appointmentChangePendingRef.current = true;
+      saveInFlightRef.current = false;
+      throw error;
+    }
 
     const json = await res.json().catch(() => ({}));
 
     if (!res.ok) {
+      if (appointmentChangeRequested) appointmentChangePendingRef.current = true;
+      saveInFlightRef.current = false;
       throw new Error(json?.error || "Failed to save invoice.");
     }
 
     lastSavedPayloadRef.current = payloadString;
-    setSaveState("saved");
+    pendingSaveRequestIdRef.current = "";
+    saveInFlightRef.current = false;
+    const emailWarning = clean(json?.appointment_email_warning);
+    setSaveState(emailWarning ? "error" : "saved");
     setSaveMessage(showSavedMessage
-      ? (clean(json?.appointment_email_scheduled_for) ? "Saved · client email sends in about 2 min" : "Saved")
+      ? emailWarning || (clean(json?.appointment_email_scheduled_for) ? "Saved · one client email sends in about 5 min" : "Saved")
       : "");
-    router.refresh();
 
     return json;
   }
 
-  async function autosaveInvoice(payloadString: string) {
+  async function handleSaveChanges() {
     try {
       setSaveState("saving");
       setSaveMessage("Saving…");
-      await saveInvoicePayload(payloadString, true);
+      await saveInvoicePayload(invoicePayload, true);
     } catch (err) {
       setSaveState("error");
-      setSaveMessage(err instanceof Error ? err.message : "Autosave failed.");
+      setSaveMessage(err instanceof Error ? err.message : "Save failed.");
     }
   }
 
@@ -936,15 +960,10 @@ export default function InvoiceEditor({
       setSendState("sending");
       setSendMessage("Sending...");
 
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = null;
-      }
-
-      if (autosavePayload !== lastSavedPayloadRef.current) {
+      if (invoicePayload !== lastSavedPayloadRef.current) {
         setSaveState("saving");
         setSaveMessage("Saving…");
-        await saveInvoicePayload(autosavePayload, false);
+        await saveInvoicePayload(invoicePayload, false);
       }
 
       const res = await authenticatedFetch("/api/emails/booking-confirmation", {
@@ -970,42 +989,61 @@ export default function InvoiceEditor({
     }
   }
 
-  const autosavePayload = useMemo(
+  async function handleManualPayment() {
+    const amountCents = parseMoneyInputToCents(manualPaymentAmount);
+    if (amountCents <= 0 || amountCents > balanceDueCents) {
+      setManualPaymentState("error");
+      setManualPaymentMessage(`Enter an amount from $0.01 to ${money(balanceDueCents)}.`);
+      return;
+    }
+
+    try {
+      setManualPaymentState("saving");
+      setManualPaymentMessage("");
+      if (invoicePayload !== lastSavedPayloadRef.current) {
+        await saveInvoicePayload(invoicePayload, false);
+      }
+      const response = await authenticatedFetch(`/api/sites/${encodeURIComponent(siteId)}/payments/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ method: manualPaymentMethod, amount_cents: amountCents }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.error || "Manual payment could not be recorded.");
+      setManualPaymentOpen(false);
+      setManualPaymentState("idle");
+      setSendState(payload?.email_sent === false ? "error" : "sent");
+      setSendMessage(payload?.email_sent === false
+        ? "Payment recorded, but the customer receipt needs attention."
+        : `${manualPaymentMethod === "check" ? "Check" : "Cash"} payment recorded · receipt emailed`);
+      router.refresh();
+    } catch (error) {
+      setManualPaymentState("error");
+      setManualPaymentMessage(error instanceof Error ? error.message : "Manual payment could not be recorded.");
+    }
+  }
+
+  const invoicePayload = useMemo(
     () =>
       JSON.stringify({
         invoice_items: invoiceItems,
-        package_discount_cents: packageDiscountCents,
-        additional_discount_cents: additionalDiscountCents,
-        balance_due_cents: balanceDueCents,
         admin_notes: adminNotes,
       }),
-    [invoiceItems, packageDiscountCents, additionalDiscountCents, balanceDueCents, adminNotes]
+    [invoiceItems, adminNotes]
   );
 
+  if (!lastSavedPayloadRef.current) lastSavedPayloadRef.current = invoicePayload;
+  const hasUnsavedChanges = invoicePayload !== lastSavedPayloadRef.current;
+
   useEffect(() => {
-    if (!canEdit) {
-      lastSavedPayloadRef.current = autosavePayload;
-      return;
-    }
-
-    if (firstRenderRef.current) {
-      firstRenderRef.current = false;
-      lastSavedPayloadRef.current = autosavePayload;
-      return;
-    }
-
-    if (autosavePayload === lastSavedPayloadRef.current) return;
-
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-
-    saveTimerRef.current = setTimeout(() => {
-      autosaveInvoice(autosavePayload);
-    }, 700);
-
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    if (!canEdit || !hasUnsavedChanges) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
     };
-  }, [autosavePayload, canEdit]);
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [canEdit, hasUnsavedChanges]);
 
   function getPriceDisplay(item: InvoiceItem) {
     if (priceDrafts[item.id] != null) return priceDrafts[item.id];
@@ -1135,21 +1173,11 @@ export default function InvoiceEditor({
           Invoice / Order Details
         </h2>
 
-        <div
-          style={{
-            minWidth: "140px",
-            textAlign: "right",
-            fontWeight: 800,
-            color:
-              saveState === "error"
-                ? "#c62828"
-                : saveState === "saved"
-                  ? "#1f8f4e"
-                  : "#777",
-          }}
-        >
-          {canEdit ? saveMessage || "Autosave on" : "Read only"}
-        </div>
+        {!canEdit ? (
+          <div style={{ color: "#777", fontSize: "13px", fontWeight: 800 }}>
+            Read only
+          </div>
+        ) : null}
       </div>
 
       <div style={metaBoxStyle}>
@@ -1191,24 +1219,27 @@ export default function InvoiceEditor({
           gap: "14px",
         }}
       >
-        <label style={{ display: "grid", gap: "8px", color: "#66706b", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
+        <label style={{ display: "grid", gridTemplateRows: "auto minmax(92px, 1fr) auto", alignContent: "start", gap: "8px", color: "#66706b", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
           Customer notes
-          <div style={{ minHeight: "92px", padding: "13px 14px", border: "1px solid #dedede", borderRadius: "10px", background: "#f7f7f7", color: "#17231f", fontSize: "14px", fontWeight: 500, lineHeight: 1.55, textTransform: "none", letterSpacing: 0, whiteSpace: "pre-wrap" }}>
+          <div style={{ minHeight: "92px", height: "100%", boxSizing: "border-box", padding: "13px 14px", border: "1px solid #dedede", borderRadius: "10px", background: "#f7f7f7", color: "#17231f", fontSize: "14px", fontWeight: 500, lineHeight: 1.55, textTransform: "none", letterSpacing: 0, whiteSpace: "pre-wrap" }}>
             {clean(customerNotes) || "No customer notes were added at booking."}
           </div>
+          {canEdit ? (
+            <small aria-hidden="true" style={{ visibility: "hidden", color: "#7a817e", fontSize: "11px", fontWeight: 500, lineHeight: 1.4, textTransform: "none", letterSpacing: 0 }}>Saved to the order and Microsoft 365 appointment notes when you select Save order changes.</small>
+          ) : null}
         </label>
 
         {canEdit ? (
-          <label style={{ display: "grid", gap: "8px", color: "#66706b", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
+          <label style={{ display: "grid", gridTemplateRows: "auto minmax(92px, 1fr) auto", alignContent: "start", gap: "8px", color: "#66706b", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: ".08em" }}>
             Admin notes
             <textarea
               value={adminNotes}
               onChange={(event) => setAdminNotes(event.target.value.slice(0, 4000))}
               placeholder="Add internal instructions, access details, shot priorities, or follow-up notes…"
               rows={4}
-              style={{ minHeight: "92px", padding: "13px 14px", border: "1px solid #cfcfcf", borderRadius: "10px", background: "#fff", color: "#17231f", font: "500 14px/1.55 Arial, sans-serif", resize: "vertical", textTransform: "none", letterSpacing: 0 }}
+              style={{ minHeight: "92px", height: "100%", boxSizing: "border-box", padding: "13px 14px", border: "1px solid #cfcfcf", borderRadius: "10px", background: "#fff", color: "#17231f", font: "500 14px/1.55 Arial, sans-serif", resize: "vertical", textTransform: "none", letterSpacing: 0 }}
             />
-            <small style={{ color: "#7a817e", fontSize: "11px", fontWeight: 500, lineHeight: 1.4, textTransform: "none", letterSpacing: 0 }}>Autosaves to the order and Microsoft 365 appointment notes.</small>
+            <small style={{ color: "#7a817e", fontSize: "11px", fontWeight: 500, lineHeight: 1.4, textTransform: "none", letterSpacing: 0 }}>Saved to the order and Microsoft 365 appointment notes when you select Save order changes.</small>
           </label>
         ) : null}
       </div>
@@ -1533,6 +1564,71 @@ export default function InvoiceEditor({
         )}
       </div>
 
+      {canEdit ? (
+        <div
+          style={{
+            marginTop: "18px",
+            padding: "16px 18px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "16px",
+            flexWrap: "wrap",
+            border: "1px solid #d8ddd9",
+            borderLeft: `6px solid ${hasInvalidDiscount ? "#c62828" : hasUnsavedChanges ? "#ffc72c" : "#1f8f4e"}`,
+            borderRadius: "14px",
+            background: hasInvalidDiscount ? "#fff1f1" : hasUnsavedChanges ? "#fff8df" : "#f4f7f5",
+            boxShadow: hasUnsavedChanges ? "0 10px 26px rgba(23,35,31,.1)" : "none",
+          }}
+        >
+          <div style={{ minWidth: "220px", flex: "1 1 360px" }}>
+            <div
+              style={{
+                color: hasInvalidDiscount ? "#c62828" : hasUnsavedChanges ? "#8a6710" : "#1f6f43",
+                fontSize: "12px",
+                fontWeight: 900,
+                letterSpacing: ".1em",
+                textTransform: "uppercase",
+              }}
+            >
+              {hasInvalidDiscount
+                ? "Fix required"
+                : hasUnsavedChanges
+                  ? "Unsaved order changes"
+                  : "Order changes saved"}
+            </div>
+            <div style={{ marginTop: "4px", color: "#515a56", fontSize: "14px", fontWeight: 600, lineHeight: 1.45 }}>
+              {hasInvalidDiscount
+                ? "Reduce the discount before saving this order."
+                : hasUnsavedChanges
+                  ? "Review the order and totals, then save once when you are finished editing."
+                  : saveMessage || "This order is up to date."}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleSaveChanges}
+            disabled={!hasUnsavedChanges || saveState === "saving" || hasInvalidDiscount}
+            style={{
+              minWidth: "230px",
+              minHeight: "52px",
+              padding: "0 26px",
+              border: "1px solid transparent",
+              borderRadius: "10px",
+              background: hasUnsavedChanges && !hasInvalidDiscount ? "#ffc72c" : "#dfe4e1",
+              color: hasUnsavedChanges && !hasInvalidDiscount ? "#17231f" : "#68716d",
+              cursor: hasUnsavedChanges && !hasInvalidDiscount ? "pointer" : "not-allowed",
+              fontSize: "14px",
+              fontWeight: 900,
+              letterSpacing: ".04em",
+              boxShadow: hasUnsavedChanges && !hasInvalidDiscount ? "0 8px 20px rgba(255,199,44,.28)" : "none",
+            }}
+          >
+            {saveState === "saving" ? "Saving…" : hasUnsavedChanges ? "Save order changes" : "Saved"}
+          </button>
+        </div>
+      ) : null}
+
       <div
         style={{
           marginTop: "18px",
@@ -1543,34 +1639,29 @@ export default function InvoiceEditor({
         }}
       >
         <div style={{ display: "grid", gap: "14px" }}>
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
-            {canEdit ? (
-              <button onClick={addProductLine} style={blackPill} type="button">
-                + Add Product Line
-              </button>
-            ) : null}
-            {canEdit ? (
-              <button onClick={addCustomLine} style={blackPill} type="button">
-                + Add Custom Product
-              </button>
-            ) : null}
-          </div>
+          {canEdit ? (
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ color: "#69736e", fontSize: "11px", fontWeight: 900, letterSpacing: ".1em", textTransform: "uppercase" }}>
+                Edit order
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
+                <button onClick={addProductLine} style={blackPill} type="button">
+                  + Add Product Line
+                </button>
+                <button onClick={addCustomLine} style={blackPill} type="button">
+                  + Add Custom Product
+                </button>
+              </div>
+            </div>
+          ) : null}
 
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              flexWrap: "wrap",
-              alignItems: "center",
-            }}
-          >
+          <div style={{ display: "grid", gap: "8px" }}>
+            {canEdit ? (
+              <div style={{ color: "#69736e", fontSize: "11px", fontWeight: 900, letterSpacing: ".1em", textTransform: "uppercase" }}>
+                Payment and communication
+              </div>
+            ) : null}
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
             {hasBalanceDue && resolvedInvoicePublicUrl ? (
               <a href={resolvedInvoicePublicUrl} style={primaryPaymentStyle}>
                 <span style={{ ...coolIconStyle, background: "rgba(19,37,31,.1)" }}>→</span>
@@ -1598,7 +1689,17 @@ export default function InvoiceEditor({
                   <span>{sendState === "sending" ? "Sending..." : "Send Confirmation"}</span>
                 </button>
 
-                <button type="button" style={coolActionStyle}>
+                <button
+                  type="button"
+                  style={{ ...coolActionStyle, opacity: hasBalanceDue ? 1 : 0.5 }}
+                  disabled={!hasBalanceDue}
+                  onClick={() => {
+                    setManualPaymentAmount((balanceDueCents / 100).toFixed(2));
+                    setManualPaymentMessage("");
+                    setManualPaymentState("idle");
+                    setManualPaymentOpen(true);
+                  }}
+                >
                   <span style={coolIconStyle}>$</span>
                   <span>Record Check / Cash</span>
                 </button>
@@ -1616,6 +1717,7 @@ export default function InvoiceEditor({
                 <span>{canEdit ? "View / Send Invoice" : "View Paid Invoice"}</span>
               </a>
             ) : null}
+            </div>
           </div>
 
           {sendMessage ? (
@@ -1648,9 +1750,6 @@ export default function InvoiceEditor({
             <div style={{ color: "#444" }}>Subtotal</div>
             <strong>{money(subtotalCents)}</strong>
 
-            <div style={{ color: "#444" }}>Package Discount</div>
-            <strong>-{money(packageDiscountCents)}</strong>
-
             {additionalDiscountCents > 0 ? (
               <>
                 <div style={{ color: "#444" }}>Additional Discount</div>
@@ -1667,8 +1766,35 @@ export default function InvoiceEditor({
             <div style={{ color: "#444" }}>Balance Due</div>
             <strong>{money(balanceDueCents)}</strong>
           </div>
+          {hasInvalidDiscount ? (
+            <div style={{ marginTop: "14px", color: "#c62828", fontSize: "13px", fontWeight: 800 }}>
+              Reduce the discounts before saving. The system will not turn an invalid invoice into a $0 paid order.
+            </div>
+          ) : null}
         </div>
       </div>
+      {manualPaymentOpen ? (
+        <div role="dialog" aria-modal="true" aria-label="Record manual payment" style={{ position: "fixed", inset: 0, zIndex: 10000, display: "grid", placeItems: "center", padding: "20px", background: "rgba(0,0,0,.62)" }}>
+          <div style={{ width: "min(440px, 100%)", borderRadius: "18px", borderTop: "6px solid #ffc72c", background: "#fff", padding: "26px", boxShadow: "0 24px 70px rgba(0,0,0,.35)" }}>
+            <div style={{ fontSize: "12px", fontWeight: 900, letterSpacing: ".12em", color: "#8a6710", textTransform: "uppercase" }}>Manual payment</div>
+            <h2 style={{ margin: "8px 0 18px", fontSize: "28px" }}>Record check or cash</h2>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+              {(["check", "cash"] as const).map((method) => (
+                <button key={method} type="button" onClick={() => setManualPaymentMethod(method)} style={{ height: "46px", border: `2px solid ${manualPaymentMethod === method ? "#17231f" : "#d8d8d8"}`, borderRadius: "10px", background: manualPaymentMethod === method ? "#ffc72c" : "#fff", color: "#17231f", fontWeight: 900, textTransform: "capitalize" }}>{method}</button>
+              ))}
+            </div>
+            <label style={{ display: "grid", gap: "7px", fontSize: "13px", fontWeight: 800 }}>Amount received
+              <input inputMode="decimal" value={manualPaymentAmount} onChange={(event) => setManualPaymentAmount(event.target.value)} style={{ ...inputStyle, height: "48px", fontSize: "18px" }} />
+            </label>
+            <div style={{ marginTop: "8px", color: "#666", fontSize: "13px" }}>Current balance: {money(balanceDueCents)}. Recording the payment emails a branded receipt to the customer and BCCs Cory.</div>
+            {manualPaymentMessage ? <div style={{ marginTop: "12px", color: "#b42318", fontWeight: 800 }}>{manualPaymentMessage}</div> : null}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "22px" }}>
+              <button type="button" disabled={manualPaymentState === "saving"} onClick={() => setManualPaymentOpen(false)} style={{ ...coolActionStyle, justifyContent: "center" }}>Cancel</button>
+              <button type="button" disabled={manualPaymentState === "saving"} onClick={handleManualPayment} style={{ ...blackPill, height: "46px", borderRadius: "10px", background: "#17231f" }}>{manualPaymentState === "saving" ? "Recording…" : "Record & email receipt"}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

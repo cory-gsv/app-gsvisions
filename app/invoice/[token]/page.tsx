@@ -407,7 +407,6 @@ export default async function InvoicePublicPage({
     buildPublicInvoiceLines(booking, invoiceItems);
 
   const subtotalCents = Math.max(0, asNum(booking?.subtotal_cents));
-  const packageDiscountCents = Math.max(0, asNum(booking?.discount_cents));
   const totalCents = Math.max(0, asNum(booking?.total_cents));
   const balanceDueCents = Math.max(0, asNum(site.balance_due_cents));
   const paidCents = Math.max(0, totalCents - balanceDueCents);
@@ -609,7 +608,6 @@ export default async function InvoicePublicPage({
 
           <div className="gsv-print-doc-totals">
             <div><span>Subtotal</span><strong>{money(subtotalCents)}</strong></div>
-            {packageDiscountCents > 0 ? <div><span>Package discount</span><strong>-{money(packageDiscountCents)}</strong></div> : null}
             {additionalDiscountCents > 0 ? <div><span>Additional discount</span><strong>-{money(additionalDiscountCents)}</strong></div> : null}
             <div><span>Total</span><strong>{money(totalCents)}</strong></div>
             <div><span>Paid</span><strong>{money(paidCents)}</strong></div>
@@ -844,9 +842,6 @@ export default async function InvoicePublicPage({
               >
                 <div style={{ color: "#555" }}>Subtotal</div>
                 <strong>{money(subtotalCents)}</strong>
-
-                <div style={{ color: "#555" }}>Package Discount</div>
-                <strong>-{money(packageDiscountCents)}</strong>
 
                 {additionalDiscountCents > 0 ? (
                   <>

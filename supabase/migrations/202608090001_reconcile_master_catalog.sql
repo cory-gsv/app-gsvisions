@@ -42,7 +42,7 @@ begin
     select * from (values
       ('photoshoot', 'Photoshoot', 'Interior and exterior MLS-ready listing photography.', array[16500,23500,33500,45000,60000]::integer[], array[45,60,90,120,150]::integer[]),
       ('cinematic-video-tour', 'Cinematic video tour', 'A professionally filmed walkthrough highlighting flow and features.', array[40000,50000,60000,70000,90000]::integer[], array[75,105,135,165,240]::integer[]),
-      ('twilight-photoshoot', 'Twilight photoshoot', 'On-location exterior photography during dusk.', array[20000,25000,30000,35000,45000]::integer[], array[60,60,60,60,60]::integer[]),
+      ('twilight-photoshoot', 'Twilight photoshoot', 'On-location exterior photography during dusk.', array[22500,22500,22500,30000,30000]::integer[], array[60,60,60,60,60]::integer[]),
       ('matterport-scanning', '3D Matterport scanning', 'An immersive room-by-room 3D property tour.', array[20000,27000,35000,42000,56000]::integer[], array[35,40,60,75,120]::integer[]),
       ('floor-plan', '2D floor plan', 'A measured floor plan showing layout and scale.', array[15000,17000,19000,21000,25000]::integer[], array[15,20,25,30,40]::integer[]),
       ('aerial-photography', 'Aerial drone photography', 'High-resolution aerial images of the property and surroundings.', array[15000,15000,15000,15000,15000]::integer[], array[40,40,40,40,40]::integer[]),

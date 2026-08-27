@@ -22,7 +22,7 @@ const packageFamilies = [
 const serviceFamilies = [
   { key: "photoshoot", name: "Photoshoot", description: "Interior and exterior MLS-ready listing photography.", prices: [165, 235, 335, 450, 600], minutes: [45, 60, 90, 120, 150] },
   { key: "cinematic-video-tour", name: "Cinematic video tour", description: "A professionally filmed walkthrough highlighting flow and features.", prices: [400, 500, 600, 700, 900], minutes: [75, 105, 135, 165, 240] },
-  { key: "twilight-photoshoot", name: "Twilight photoshoot", description: "On-location exterior photography during dusk.", prices: [200, 250, 300, 350, 450], minutes: [60, 60, 60, 60, 60] },
+  { key: "twilight-photoshoot", name: "Twilight photoshoot", description: "On-location exterior photography during dusk.", prices: [225, 225, 225, 300, 300], minutes: [60, 60, 60, 60, 60] },
   { key: "matterport-scanning", name: "3D Matterport scanning", description: "An immersive room-by-room 3D property tour.", prices: [200, 270, 350, 420, 560], minutes: [35, 40, 60, 75, 120] },
   { key: "floor-plan", name: "2D floor plan", description: "A measured floor plan showing layout and scale.", prices: [150, 170, 190, 210, 250], minutes: [15, 20, 25, 30, 40] },
   { key: "aerial-photography", name: "Aerial drone photography", description: "High-resolution aerial images of the property and surroundings.", prices: [150, 150, 150, 150, 150], minutes: [40, 40, 40, 40, 40] },

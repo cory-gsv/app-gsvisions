@@ -535,46 +535,6 @@ function buildInitialInvoiceItems(booking: Booking | null, products: Product[]):
   return items;
 }
 
-function parseDiscountTextToCents(v: unknown): number {
-  const s = clean(v).replace(/[^\d.-]/g, "");
-  if (!s) return 0;
-  const n = Number(s);
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(Math.abs(n) * 100);
-}
-
-function derivePackageDiscountCents(site: Site, booking: Booking | null): number {
-  const siteData = asRecord(site.site_data);
-  const factsRaw = asRecord(site.facts_raw);
-  const summary = asRecord(factsRaw.summary);
-
-  const candidates = [
-    siteData.package_discount_cents,
-    siteData.discount_cents,
-    summary.package_discount_cents,
-    summary.discount_cents,
-    booking?.discount_cents,
-  ];
-
-  for (const candidate of candidates) {
-    const n = Number(candidate);
-    if (Number.isFinite(n) && n > 0) return Math.round(n);
-  }
-
-  const textCandidates = [
-    siteData.package_discount,
-    siteData.discount,
-    summary.discount,
-  ];
-
-  for (const candidate of textCandidates) {
-    const cents = parseDiscountTextToCents(candidate);
-    if (cents > 0) return cents;
-  }
-
-  return 0;
-}
-
 function getInvoicePublicUrl(site: Site): string | null {
   const token = clean(site.invoice_public_token);
   const enabled = site.invoice_public_enabled === true;
@@ -846,6 +806,29 @@ export default async function SitePage({
         : null;
   }
 
+  // The payment ledger is authoritative. Invoice totals can change, but that
+  // must never cause the UI to manufacture or erase money already received.
+  let recordedPaidCents = 0;
+  const { data: paymentRows } = await adminSb
+    .from("payments")
+    .select("amount_cents,status")
+    .eq("site_id", site.id)
+    .in("status", ["succeeded", "partially_refunded"]);
+  if (Array.isArray(paymentRows) && paymentRows.length > 0) {
+    recordedPaidCents = paymentRows.reduce(
+      (sum, payment) => sum + Math.max(0, Number(payment.amount_cents ?? 0) || 0),
+      0
+    );
+  } else {
+    // Legacy orders may predate the payment ledger. Preserve their already
+    // recorded paid amount without deriving it from the editor's next total.
+    recordedPaidCents = Math.max(
+      0,
+      (Number(booking?.total_cents ?? 0) || 0) -
+        Math.max(0, Number(site.balance_due_cents ?? 0) || 0)
+    );
+  }
+
   const { data: productData } = await adminSb
     .from("products")
     .select(`
@@ -1088,7 +1071,6 @@ export default async function SitePage({
       ? savedInvoiceItems
       : buildInitialInvoiceItems(booking, products);
 
-  const packageDiscountCents = derivePackageDiscountCents(site, booking);
   // Every authorized order needs a stable customer payment URL. Older and
   // admin-created sites may predate public invoice token creation, so repair
   // that state when the workspace is opened.
@@ -1267,8 +1249,7 @@ export default async function SitePage({
             initialInvoiceItems={initialInvoiceItems}
             canEdit={canEdit}
             sitePaid={!!site.paid}
-            siteBalanceDueCents={site.balance_due_cents}
-            packageDiscountCents={packageDiscountCents}
+            recordedPaidCents={recordedPaidCents}
             adminUsers={adminUsers}
             invoicePublicUrl={invoicePublicUrl}
             customerNotes={clean(siteData.customer_notes)}

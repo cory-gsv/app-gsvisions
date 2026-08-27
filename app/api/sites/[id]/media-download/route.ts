@@ -7,6 +7,7 @@ import { PassThrough } from "node:stream";
 import sharp from "sharp";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
 import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
+import { isMediaPaymentLocked } from "@/lib/media-access";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -66,7 +67,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     if (!isStaff && !portalUserOwnsSite(site, user.id, profile) && !coListerAccess) {
       return Response.json({ error: "You do not have access to this media." }, { status: 403 });
     }
-    if (!isStaff && site.paid !== true && Math.max(0, Number(site.balance_due_cents || 0)) > 0) {
+    if (!isStaff && isMediaPaymentLocked(site)) {
       return Response.json({ error: "Media downloads are locked until the invoice is paid." }, { status: 402 });
     }
 

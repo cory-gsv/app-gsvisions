@@ -3,6 +3,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { NextResponse } from "next/server";
 import { authorizationErrorResponse, requireUser } from "@/lib/authz";
 import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
+import { isMediaAssetReleased, isMediaPaymentLocked } from "@/lib/media-access";
 
 function clean(value: unknown) {
   return String(value ?? "").trim();
@@ -36,14 +37,11 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         return NextResponse.json({ error: "You do not have access to this media." }, { status: 403 });
       }
 
-      const assetStatus = clean(asset.status).toLowerCase();
-      const isReleased = asset.is_published === true && (!assetStatus || assetStatus === "ready");
-      if (!isReleased) {
+      if (!isMediaAssetReleased(asset)) {
         return NextResponse.json({ error: "This media has not been released." }, { status: 403 });
       }
 
-      const balanceDueCents = Math.max(0, Number(site?.balance_due_cents || 0));
-      if (site?.paid !== true && balanceDueCents > 0) {
+      if (isMediaPaymentLocked(site)) {
         return NextResponse.json(
           { error: "Media downloads are locked until the invoice is paid." },
           { status: 402 }
