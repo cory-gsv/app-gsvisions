@@ -12,12 +12,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const body = await request.json().catch(() => ({}));
     const method = clean(body?.method).toLowerCase();
     const amountCents = Math.max(0, Math.round(Number(body?.amount_cents) || 0));
+    const checkNumber = method === "check" ? clean(body?.check_number) : "";
 
     if (!siteId || !["check", "cash"].includes(method)) {
       return NextResponse.json({ error: "Choose check or cash." }, { status: 400 });
     }
     if (amountCents <= 0) {
       return NextResponse.json({ error: "Payment amount must be greater than zero." }, { status: 400 });
+    }
+    if (checkNumber.length > 40) {
+      return NextResponse.json({ error: "Check number must be 40 characters or fewer." }, { status: 400 });
     }
 
     const { data: site, error: siteError } = await admin.from("sites")
@@ -31,7 +35,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       return NextResponse.json({ error: "Payment cannot exceed the current balance." }, { status: 409 });
     }
 
-    const reference = `manual:${method}:${crypto.randomUUID()}`;
+    const reference = `manual:${method}:${checkNumber ? `${encodeURIComponent(checkNumber)}:` : ""}${crypto.randomUUID()}`;
     const paidAt = new Date().toISOString();
     const { error: paymentError } = await admin.rpc("apply_invoice_payment", {
       p_site_id: site.id,
@@ -59,6 +63,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         currency: "usd",
         paidAt,
         paymentMethod: method as "check" | "cash",
+        checkNumber: checkNumber || undefined,
       });
     } catch (emailError) {
       emailSent = false;
@@ -69,6 +74,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       ok: true,
       payment_reference: reference,
       amount_cents: amountCents,
+      check_number: checkNumber || null,
       balance_due_cents: Math.max(0, balanceDue - amountCents),
       email_sent: emailSent,
       warning: emailSent ? undefined : "Payment was recorded, but its receipt could not be emailed.",

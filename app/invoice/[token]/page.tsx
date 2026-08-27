@@ -1,6 +1,7 @@
 import Script from "next/script";
 import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
+import { normalizePaymentHistory, paymentTimeLabel, totalPaymentsReceived } from "@/lib/payment-history";
 
 type SiteRow = {
   id: string;
@@ -401,6 +402,15 @@ export default async function InvoicePublicPage({
     booking = bookingData as BookingRow | null;
   }
 
+  const { data: paymentRows } = await supabase
+    .from("payments")
+    .select("stripe_payment_intent_id,amount_cents,tip_cents,currency,provider_created_at,created_at,status")
+    .eq("site_id", site.id)
+    .in("status", ["succeeded", "partially_refunded"])
+    .order("provider_created_at", { ascending: true })
+    .order("created_at", { ascending: true });
+  const paymentHistory = normalizePaymentHistory(paymentRows);
+
   const invoiceItems = normalizeInvoiceItems(site.invoice_items);
 
   const { lines: publicLines, additionalDiscountCents } =
@@ -409,7 +419,9 @@ export default async function InvoicePublicPage({
   const subtotalCents = Math.max(0, asNum(booking?.subtotal_cents));
   const totalCents = Math.max(0, asNum(booking?.total_cents));
   const balanceDueCents = Math.max(0, asNum(site.balance_due_cents));
-  const paidCents = Math.max(0, totalCents - balanceDueCents);
+  const paidCents = paymentHistory.length
+    ? totalPaymentsReceived(paymentHistory)
+    : Math.max(0, totalCents - balanceDueCents);
 
   const address = getDisplayAddress(site);
   const clientName = getClientName(booking);
@@ -515,6 +527,10 @@ export default async function InvoicePublicPage({
           .gsv-print-doc-table ul { margin: 6px 0 0 !important; padding: 0 !important; list-style: none !important; color: #68726d !important; }
           .gsv-print-doc-table li { margin-top: 3px !important; }
           .gsv-print-doc-table li::before { content: "+"; margin-right: 6px; color: #b88700; font-weight: 700; }
+          .gsv-print-doc-payment-history { margin-top: 18px !important; }
+          .gsv-print-doc-payment-history h2 { margin: 0 0 8px !important; color: #8b6a0b !important; font-size: 9px !important; letter-spacing: .16em !important; text-transform: uppercase !important; }
+          .gsv-print-doc-payment-history .gsv-print-doc-table { margin-top: 0 !important; }
+          .gsv-print-doc-payment-history small { display: block !important; margin-top: 3px !important; color: #68726d !important; font-size: 8px !important; }
 
           .gsv-print-doc-totals { width: 285px !important; margin: 18px 0 0 auto !important; }
           .gsv-print-doc-totals div { display: flex !important; justify-content: space-between !important; gap: 20px !important; padding: 6px 0 !important; color: #5d6863 !important; font-size: 10px !important; }
@@ -605,6 +621,24 @@ export default async function InvoicePublicPage({
               ))}
             </tbody>
           </table>
+
+          {paymentHistory.length ? (
+            <section className="gsv-print-doc-payment-history">
+              <h2>Payments received</h2>
+              <table className="gsv-print-doc-table">
+                <thead><tr><th>Date</th><th>Method</th><th>Amount</th></tr></thead>
+                <tbody>
+                  {paymentHistory.map((payment) => (
+                    <tr key={`print-payment-${payment.reference}`}>
+                      <td>{paymentTimeLabel(payment.paidAt)} PT</td>
+                      <td>{payment.label}</td>
+                      <td>{money(payment.amountCents)}{payment.tipCents ? <small>Tip: {money(payment.tipCents)}</small> : null}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          ) : null}
 
           <div className="gsv-print-doc-totals">
             <div><span>Subtotal</span><strong>{money(subtotalCents)}</strong></div>
@@ -889,6 +923,19 @@ export default async function InvoicePublicPage({
               <p style={{ margin: "0 0 24px", color: "#68726d", fontSize: "12px", lineHeight: 1.55 }}>
                 Choose card, a supported wallet, or PayPal to securely pay this invoice.
               </p>
+
+              {paymentHistory.length ? (
+                <div style={{ marginBottom: "22px", border: "1px solid #ffc72c", background: "#fff" }}>
+                  <div style={{ padding: "11px 14px", background: "#fff8df", color: "#8b6a0b", fontSize: "10px", fontWeight: 900, letterSpacing: ".12em", textTransform: "uppercase" }}>Payments received</div>
+                  {paymentHistory.map((payment) => (
+                    <div key={`payment-${payment.reference}`} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: "12px", padding: "12px 14px", borderTop: "1px solid #f0d982", fontSize: "12px" }}>
+                      <div><strong>{payment.label}</strong><div style={{ marginTop: "3px", color: "#68726d" }}>{paymentTimeLabel(payment.paidAt)} PT</div></div>
+                      <div style={{ textAlign: "right", fontWeight: 800 }}>{money(payment.amountCents)}{payment.tipCents ? <div style={{ marginTop: "3px", color: "#68726d", fontSize: "10px", fontWeight: 500 }}>Tip: {money(payment.tipCents)}</div> : null}</div>
+                    </div>
+                  ))}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "12px", padding: "12px 14px", borderTop: "2px solid #ffc72c", fontSize: "12px", fontWeight: 900 }}><span>Total received</span><span>{money(paidCents)}</span></div>
+                </div>
+              ) : null}
 
               {invoiceAlreadyPaid ? (
                 <div

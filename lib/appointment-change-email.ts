@@ -147,6 +147,7 @@ export async function scheduleAppointmentChangeEmail(args: {
   packageName?: string | null;
   squareFeet?: number | null;
   totalCents?: number | null;
+  idempotencyKey?: string | null;
   sample?: boolean;
 }) {
   const apiKey = requireOutboundEmailApiKey();
@@ -169,7 +170,7 @@ export async function scheduleAppointmentChangeEmail(args: {
     }
   }
 
-  const scheduledFor = new Date(Date.now() + (args.sample ? 0 : 5 * 60_000));
+  const sentAt = new Date();
   const dateLabel = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(start);
   const timeLabel = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" }).format(start);
   const firstName = clean(args.recipientName).split(/\s+/)[0] || "there";
@@ -204,7 +205,7 @@ export async function scheduleAppointmentChangeEmail(args: {
   ].join("\n");
   const themedHtml = applyEmailTheme(html);
 
-  const { data, error } = await resend.emails.send({
+  const emailRequest = {
     from: process.env.EMAIL_FROM || "Golden State Visions <onboarding@resend.dev>",
     to: [recipient],
     cc: cc.length ? cc : undefined,
@@ -213,15 +214,36 @@ export async function scheduleAppointmentChangeEmail(args: {
     subject: `${args.sample ? "[SAMPLE] " : ""}Appointment updated – ${propertyAddress}`,
     html: themedHtml,
     text,
-    scheduledAt: args.sample ? undefined : scheduledFor.toISOString(),
-  });
-  if (error || !data?.id) throw new Error(error?.message || "The appointment update email could not be scheduled.");
+  };
+  const idempotencyKey = clean(args.idempotencyKey);
+  const { data, error } = await resend.emails.send(
+    emailRequest,
+    idempotencyKey && !args.sample ? { idempotencyKey } : undefined
+  );
+  if (error || !data?.id) throw new Error(error?.message || "The appointment update email could not be sent.");
 
-  return { emailId: data.id, scheduledFor: scheduledFor.toISOString() };
+  return { emailId: data.id, sentAt: sentAt.toISOString() };
 }
 
-export async function cancelScheduledAppointmentChangeEmail(emailId: string) {
+export async function cancelScheduledAppointmentChangeEmail(
+  emailId: string,
+  options: { strict?: boolean } = {}
+) {
   const apiKey = clean(process.env.RESEND_API_KEY);
-  if (!apiKey || !clean(emailId)) return;
-  await new Resend(apiKey).emails.cancel(clean(emailId)).catch(() => undefined);
+  if (!clean(emailId)) return true;
+  if (!apiKey) {
+    if (options.strict) throw new Error("The order was saved, but the pending client email could not be canceled because email credentials are unavailable.");
+    return false;
+  }
+
+  try {
+    const { error } = await new Resend(apiKey).emails.cancel(clean(emailId));
+    if (error) throw new Error(error.message || "Email provider rejected the cancellation.");
+    return true;
+  } catch (error) {
+    if (options.strict) {
+      throw new Error(`The order was saved, but the pending client email could not be canceled: ${error instanceof Error ? error.message : "unknown provider error"}`);
+    }
+    return false;
+  }
 }

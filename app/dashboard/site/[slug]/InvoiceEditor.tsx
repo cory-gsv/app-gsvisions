@@ -523,8 +523,10 @@ export default function InvoiceEditor({
   const [manualPaymentOpen, setManualPaymentOpen] = useState(false);
   const [manualPaymentMethod, setManualPaymentMethod] = useState<"check" | "cash">("check");
   const [manualPaymentAmount, setManualPaymentAmount] = useState("");
+  const [manualPaymentCheckNumber, setManualPaymentCheckNumber] = useState("");
   const [manualPaymentState, setManualPaymentState] = useState<"idle" | "saving" | "error">("idle");
   const [manualPaymentMessage, setManualPaymentMessage] = useState("");
+  const [suppressAppointmentEmail, setSuppressAppointmentEmail] = useState(false);
   const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [adminNotes, setAdminNotes] = useState(clean(initialAdminNotes));
   const lastSavedPayloadRef = useRef("");
@@ -910,6 +912,7 @@ export default function InvoiceEditor({
     // turn one appointment edit into several notifications.
     if (appointmentChangeRequested) appointmentChangePendingRef.current = false;
     payload.appointment_change_requested = appointmentChangeRequested;
+    payload.suppress_appointment_email = appointmentChangeRequested && suppressAppointmentEmail;
 
     let res: Response;
     try {
@@ -935,10 +938,15 @@ export default function InvoiceEditor({
     lastSavedPayloadRef.current = payloadString;
     pendingSaveRequestIdRef.current = "";
     saveInFlightRef.current = false;
+    if (appointmentChangeRequested) setSuppressAppointmentEmail(false);
     const emailWarning = clean(json?.appointment_email_warning);
     setSaveState(emailWarning ? "error" : "saved");
     setSaveMessage(showSavedMessage
-      ? emailWarning || (clean(json?.appointment_email_scheduled_for) ? "Saved · one client email sends in about 5 min" : "Saved")
+      ? emailWarning || (json?.appointment_email_suppressed === true
+        ? "Saved · client appointment email not sent"
+        : json?.appointment_email_sent === true
+          ? "Saved · client appointment email sent"
+          : "Saved")
       : "");
 
     return json;
@@ -1006,7 +1014,11 @@ export default function InvoiceEditor({
       const response = await authenticatedFetch(`/api/sites/${encodeURIComponent(siteId)}/payments/manual`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ method: manualPaymentMethod, amount_cents: amountCents }),
+        body: JSON.stringify({
+          method: manualPaymentMethod,
+          amount_cents: amountCents,
+          check_number: manualPaymentMethod === "check" ? manualPaymentCheckNumber.trim() : "",
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "Manual payment could not be recorded.");
@@ -1604,6 +1616,35 @@ export default function InvoiceEditor({
                   ? "Review the order and totals, then save once when you are finished editing."
                   : saveMessage || "This order is up to date."}
             </div>
+            {hasUnsavedChanges ? (
+              <label
+                style={{
+                  marginTop: "10px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "9px",
+                  color: "#29332f",
+                  cursor: saveState === "saving" ? "not-allowed" : "pointer",
+                  fontSize: "13px",
+                  fontWeight: 800,
+                  lineHeight: 1.35,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={suppressAppointmentEmail}
+                  disabled={saveState === "saving"}
+                  onChange={(event) => setSuppressAppointmentEmail(event.target.checked)}
+                  style={{ width: "18px", height: "18px", margin: 0, accentColor: "#17231f" }}
+                />
+                <span>
+                  Do not email the client about this save
+                  <span style={{ display: "block", color: "#69736e", fontSize: "11px", fontWeight: 600 }}>
+                    The order and Microsoft 365 calendar will still be updated.
+                  </span>
+                </span>
+              </label>
+            ) : null}
           </div>
           <button
             type="button"
@@ -1695,6 +1736,7 @@ export default function InvoiceEditor({
                   disabled={!hasBalanceDue}
                   onClick={() => {
                     setManualPaymentAmount((balanceDueCents / 100).toFixed(2));
+                    setManualPaymentCheckNumber("");
                     setManualPaymentMessage("");
                     setManualPaymentState("idle");
                     setManualPaymentOpen(true);
@@ -1786,6 +1828,20 @@ export default function InvoiceEditor({
             <label style={{ display: "grid", gap: "7px", fontSize: "13px", fontWeight: 800 }}>Amount received
               <input inputMode="decimal" value={manualPaymentAmount} onChange={(event) => setManualPaymentAmount(event.target.value)} style={{ ...inputStyle, height: "48px", fontSize: "18px" }} />
             </label>
+            {manualPaymentMethod === "check" ? (
+              <label style={{ display: "grid", gap: "7px", marginTop: "14px", fontSize: "13px", fontWeight: 800 }}>
+                <span>Check number <span style={{ color: "#777", fontWeight: 600 }}>(optional)</span></span>
+                <input
+                  inputMode="numeric"
+                  autoComplete="off"
+                  maxLength={40}
+                  placeholder="e.g. 1042"
+                  value={manualPaymentCheckNumber}
+                  onChange={(event) => setManualPaymentCheckNumber(event.target.value)}
+                  style={{ ...inputStyle, height: "48px", fontSize: "18px" }}
+                />
+              </label>
+            ) : null}
             <div style={{ marginTop: "8px", color: "#666", fontSize: "13px" }}>Current balance: {money(balanceDueCents)}. Recording the payment emails a branded receipt to the customer and BCCs Cory.</div>
             {manualPaymentMessage ? <div style={{ marginTop: "12px", color: "#b42318", fontWeight: 800 }}>{manualPaymentMessage}</div> : null}
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "22px" }}>

@@ -193,6 +193,7 @@ export async function PATCH(
     // Invoice autosaves are intentionally not appointment changes. The client
     // sets this only when an admin directly changes an appointment control.
     const appointmentChangeRequested = body?.appointment_change_requested === true;
+    const suppressAppointmentEmail = appointmentChangeRequested && body?.suppress_appointment_email === true;
 
     // Manual discounts are invoice rows. Recompute them server-side so a
     // stale or repeated client value can never be added a second time.
@@ -225,7 +226,7 @@ export async function PATCH(
     let customerName = "";
     let customerEmail = "";
     let customerPhone = "";
-    let appointmentEmailScheduledFor = "";
+    let appointmentEmailSent = false;
     let appointmentEmailWarning = "";
     let appointmentChanged = false;
     let nextAppointmentStart = "";
@@ -547,10 +548,13 @@ export async function PATCH(
     const pendingAppointmentStart = clean(nextSiteData.pending_appointment_change_start);
     const pendingAppointmentEnd = clean(nextSiteData.pending_appointment_change_end);
     const pendingEmailScheduledAt = new Date(clean(currentSiteData.appointment_change_email_scheduled_for)).getTime();
-    const canReplacePendingAppointmentEmail = Boolean(
+    const hasPendingAppointmentEmail = Boolean(
       clean(currentSiteData.appointment_change_email_id) &&
       Number.isFinite(pendingEmailScheduledAt) &&
-      pendingEmailScheduledAt > Date.now() &&
+      pendingEmailScheduledAt > Date.now()
+    );
+    const canReplacePendingAppointmentEmail = Boolean(
+      hasPendingAppointmentEmail &&
       clean(currentSiteData.appointment_change_email_start) === nextAppointmentStart
     );
     const needsAppointmentConfirmation = Boolean(
@@ -595,7 +599,7 @@ export async function PATCH(
       );
     }
 
-    if (needsAppointmentConfirmation && customerEmail && isOutboundEmailEnabled() && clean(process.env.RESEND_API_KEY)) {
+    if (needsAppointmentConfirmation && !suppressAppointmentEmail && customerEmail && isOutboundEmailEnabled() && clean(process.env.RESEND_API_KEY)) {
       const assistantEmails = await assistantCcEmails(supabase, clean(siteRow.client_id) || clean(siteRow.client_ms_id));
       const emailPropertyAddress = clean(siteRow.property_full_address) || clean(siteRow.address_full) || [
         clean(siteRow.property_address),
@@ -621,8 +625,8 @@ export async function PATCH(
 
       if (messageId) {
         try {
-          const pendingEmail = await scheduleAppointmentChangeEmail({
-            previousEmailId: clean(currentSiteData.appointment_change_email_id),
+          const sentEmail = await scheduleAppointmentChangeEmail({
+            previousEmailId: hasPendingAppointmentEmail ? clean(currentSiteData.appointment_change_email_id) : "",
             bookingId: clean(siteRow.booking_id),
             siteId: id,
             recipientEmail: customerEmail,
@@ -637,14 +641,15 @@ export async function PATCH(
             packageName: clean(packageRow?.name),
             squareFeet: Number(siteRow.sqft || siteRow.property_sqft || 0),
             totalCents,
+            idempotencyKey,
           });
-          appointmentEmailScheduledFor = pendingEmail.scheduledFor;
-          nextSiteData.appointment_change_email_id = pendingEmail.emailId;
-          nextSiteData.appointment_change_email_scheduled_for = pendingEmail.scheduledFor;
-          nextSiteData.appointment_change_email_start = nextAppointmentStart;
+          appointmentEmailSent = true;
+          delete nextSiteData.appointment_change_email_id;
+          delete nextSiteData.appointment_change_email_scheduled_for;
+          delete nextSiteData.appointment_change_email_start;
           await supabase.from("outbound_messages").update({
             status: "sent",
-            provider_message_id: pendingEmail.emailId,
+            provider_message_id: sentEmail.emailId,
             sent_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }).eq("id", messageId);
@@ -668,11 +673,17 @@ export async function PATCH(
         .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
         .eq("id", id);
       if (appointmentEmailStateError) {
-        await cancelScheduledAppointmentChangeEmail(clean(nextSiteData.appointment_change_email_id));
-        return NextResponse.json({ error: "The calendar changed, but its delayed confirmation could not be recorded." }, { status: 500 });
+        return NextResponse.json({ error: "The calendar changed and the client was emailed, but the notification state could not be finalized." }, { status: 500 });
       }
     } else if (needsAppointmentConfirmation) {
-      if (!isOutboundEmailEnabled() || !clean(process.env.RESEND_API_KEY)) {
+      if (suppressAppointmentEmail) {
+        if (hasPendingAppointmentEmail) {
+          await cancelScheduledAppointmentChangeEmail(clean(currentSiteData.appointment_change_email_id), { strict: true });
+        }
+        delete nextSiteData.appointment_change_email_id;
+        delete nextSiteData.appointment_change_email_scheduled_for;
+        delete nextSiteData.appointment_change_email_start;
+      } else if (!isOutboundEmailEnabled() || !clean(process.env.RESEND_API_KEY)) {
         appointmentEmailWarning = "Email delivery is disabled. The appointment was saved without sending a customer email.";
       }
       delete nextSiteData.pending_appointment_change_start;
@@ -708,7 +719,9 @@ export async function PATCH(
       previous_paid_cents: previousPaidCents,
       balance_due_cents: balanceDueCents,
       invoice_items: invoiceItems,
-      appointment_email_scheduled_for: appointmentEmailScheduledFor || null,
+      appointment_email_suppressed: suppressAppointmentEmail,
+      appointment_email_sent: appointmentEmailSent,
+      appointment_email_scheduled_for: null,
       appointment_email_warning: appointmentEmailWarning || null,
       calendar_sync: calendarSync,
     });

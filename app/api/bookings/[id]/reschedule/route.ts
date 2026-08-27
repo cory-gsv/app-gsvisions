@@ -7,7 +7,6 @@ import {
   updateMicrosoftCalendarEvent,
 } from "@/lib/m365-calendar";
 import {
-  cancelScheduledAppointmentChangeEmail,
   scheduleAppointmentChangeEmail,
 } from "@/lib/appointment-change-email";
 import { assistantCcEmails } from "@/lib/portal-access";
@@ -788,12 +787,18 @@ export async function POST(
         );
       }
 
-      let appointmentEmailScheduledFor: string | null = null;
+      let appointmentEmailSent = false;
       const clientEmail = clean(booking.client_email);
       if (clientEmail && site?.id) {
         const assistantEmails = await assistantCcEmails(supabase, clean(booking.client_id));
-        const pendingEmail = await scheduleAppointmentChangeEmail({
-          previousEmailId: clean(siteData.appointment_change_email_id),
+        const pendingEmailScheduledAt = new Date(clean(siteData.appointment_change_email_scheduled_for)).getTime();
+        const hasPendingAppointmentEmail = Boolean(
+          clean(siteData.appointment_change_email_id) &&
+          Number.isFinite(pendingEmailScheduledAt) &&
+          pendingEmailScheduledAt > Date.now()
+        );
+        await scheduleAppointmentChangeEmail({
+          previousEmailId: hasPendingAppointmentEmail ? clean(siteData.appointment_change_email_id) : "",
           bookingId: clean(id),
           siteId: clean(site.id),
           recipientEmail: clientEmail,
@@ -808,22 +813,22 @@ export async function POST(
           packageName: clean(booking.selected_package_name),
           squareFeet: Number(site.sqft || site.property_sqft || 0),
           totalCents: Number(booking.total_cents || 0),
+          idempotencyKey: `appointment-change:${clean(id)}:${scheduled_start}`,
         });
-        appointmentEmailScheduledFor = pendingEmail.scheduledFor;
+        appointmentEmailSent = true;
         const nextSiteData = {
           ...siteData,
-          appointment_change_email_id: pendingEmail.emailId,
-          appointment_change_email_scheduled_for: pendingEmail.scheduledFor,
-          appointment_change_email_start: scheduled_start,
         };
+        delete nextSiteData.appointment_change_email_id;
+        delete nextSiteData.appointment_change_email_scheduled_for;
+        delete nextSiteData.appointment_change_email_start;
         const { error: emailStateError } = await supabase
           .from("sites")
           .update({ site_data: nextSiteData, updated_at: new Date().toISOString() })
           .eq("id", site.id);
         if (emailStateError) {
-          await cancelScheduledAppointmentChangeEmail(pendingEmail.emailId);
           return NextResponse.json(
-            { error: "Your appointment changed, but the confirmation email could not be scheduled. Please call (916) 432-3373." },
+            { error: "Your appointment changed and the confirmation email was sent, but its notification state could not be finalized. Please call (916) 432-3373." },
             { status: 500 }
           );
         }
@@ -850,7 +855,7 @@ export async function POST(
         confirmed: true,
         scheduled_start,
         scheduled_end,
-        appointment_email_scheduled_for: appointmentEmailScheduledFor,
+        appointment_email_sent: appointmentEmailSent,
       });
     }
 

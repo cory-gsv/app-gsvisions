@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { normalizePaymentHistory, totalPaymentsReceived } from "@/lib/payment-history";
 
 function clean(v: unknown): string {
   return String(v ?? "").trim();
@@ -229,6 +230,16 @@ export async function GET(
       booking = bookingData as BookingRow | null;
     }
 
+    const { data: paymentRows, error: paymentRowsError } = await supabase
+      .from("payments")
+      .select("stripe_payment_intent_id,amount_cents,tip_cents,currency,provider_created_at,created_at,status")
+      .eq("site_id", site.id)
+      .in("status", ["succeeded", "partially_refunded"])
+      .order("provider_created_at", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (paymentRowsError) throw new Error(`Payment history could not be loaded: ${paymentRowsError.message}`);
+    const paymentHistory = normalizePaymentHistory(paymentRows);
+
     const invoiceItems = normalizeInvoiceItems(site.invoice_items);
     const subtotalCents =
       booking?.subtotal_cents ??
@@ -240,7 +251,9 @@ export async function GET(
       Math.max(0, subtotalCents - additionalDiscountCents);
 
     const balanceDueCents = Math.max(0, Number(site.balance_due_cents ?? totalCents) || 0);
-    const paidCents = Math.max(0, totalCents - balanceDueCents);
+    const paidCents = paymentHistory.length
+      ? totalPaymentsReceived(paymentHistory)
+      : Math.max(0, totalCents - balanceDueCents);
 
     return NextResponse.json({
       ok: true,
@@ -272,6 +285,13 @@ export async function GET(
         paid_cents: paidCents,
         balance_due_cents: balanceDueCents,
         fully_paid: balanceDueCents <= 0,
+        payment_history: paymentHistory.map((payment) => ({
+          method: payment.label,
+          amount_cents: payment.amountCents,
+          tip_cents: payment.tipCents,
+          currency: payment.currency,
+          paid_at: payment.paidAt,
+        })),
       },
     });
   } catch (err) {
