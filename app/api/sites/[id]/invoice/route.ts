@@ -382,9 +382,7 @@ export async function PATCH(
       };
 
       if (balanceDueCents > 0) {
-        bookingUpdatePayload.payment_status = previousPaidCents > 0
-          ? "partially_paid"
-          : "invoice_requested";
+        bookingUpdatePayload.payment_status = "invoice_requested";
       }
 
       if (appointmentChangeRequested && nextScheduledStart) {

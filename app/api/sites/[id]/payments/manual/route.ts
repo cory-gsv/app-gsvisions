@@ -85,3 +85,52 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ error: error instanceof Error ? error.message : "Manual payment failed." }, { status: 500 });
   }
 }
+
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { admin, user } = await requireAdmin(request);
+    const { id } = await context.params;
+    const siteId = clean(id);
+    const body = await request.json().catch(() => ({}));
+    const paymentId = clean(body?.payment_id);
+    const method = clean(body?.method).toLowerCase();
+    const amountCents = Math.max(0, Math.round(Number(body?.amount_cents) || 0));
+    const checkNumber = method === "check" ? clean(body?.check_number) : "";
+
+    if (!siteId || !paymentId || !["check", "cash"].includes(method)) {
+      return NextResponse.json({ error: "Choose a valid check or cash payment." }, { status: 400 });
+    }
+    if (amountCents <= 0) {
+      return NextResponse.json({ error: "Payment amount must be greater than zero." }, { status: 400 });
+    }
+    if (checkNumber.length > 40) {
+      return NextResponse.json({ error: "Check number must be 40 characters or fewer." }, { status: 400 });
+    }
+
+    const reference = `manual:${method}:${checkNumber ? `${encodeURIComponent(checkNumber)}:` : ""}${crypto.randomUUID()}`;
+    const { data, error } = await admin.rpc("adjust_manual_payment", {
+      p_payment_id: paymentId,
+      p_site_id: siteId,
+      p_amount_cents: amountCents,
+      p_payment_reference: reference,
+      p_adjusted_by: user.id,
+    });
+    if (error) throw new Error(`The manual payment could not be adjusted: ${error.message}`);
+
+    const result = Array.isArray(data) && data.length ? data[0] as Record<string, unknown> : {};
+    return NextResponse.json({
+      ok: true,
+      payment_id: paymentId,
+      payment_reference: reference,
+      amount_cents: amountCents,
+      check_number: checkNumber || null,
+      balance_due_cents: Math.max(0, Number(result.balance_due_cents || 0)),
+      total_paid_cents: Math.max(0, Number(result.total_paid_cents || 0)),
+      email_sent: false,
+    });
+  } catch (error) {
+    const authResponse = authorizationErrorResponse(error);
+    if (authResponse) return authResponse;
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Manual payment adjustment failed." }, { status: 500 });
+  }
+}

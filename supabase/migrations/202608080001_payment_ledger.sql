@@ -81,7 +81,7 @@ begin
 
   if p_booking_id is not null then
     update public.bookings
-      set payment_status = case when next_balance = 0 then 'paid' else 'partially_paid' end,
+      set payment_status = case when next_balance = 0 then 'paid' else 'invoice_requested' end,
           updated_at = now()
       where id = p_booking_id;
   end if;

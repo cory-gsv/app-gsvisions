@@ -18,6 +18,14 @@ type AdminUser = {
   email: string;
 };
 
+type ManualPayment = {
+  id: string;
+  method: "check" | "cash";
+  checkNumber: string;
+  amountCents: number;
+  paidAt: string;
+};
+
 type InvoiceItem = {
   id: string;
   kind: string;
@@ -60,6 +68,7 @@ type Props = {
   canEdit: boolean;
   sitePaid: boolean;
   recordedPaidCents: number;
+  initialManualPayments: ManualPayment[];
   adminUsers: AdminUser[];
   invoicePublicUrl?: string | null;
   invoiceViewUrl?: string | null;
@@ -505,6 +514,7 @@ export default function InvoiceEditor({
   canEdit,
   sitePaid,
   recordedPaidCents,
+  initialManualPayments,
   adminUsers,
   invoicePublicUrl,
   invoiceViewUrl,
@@ -524,6 +534,7 @@ export default function InvoiceEditor({
   const [manualPaymentMethod, setManualPaymentMethod] = useState<"check" | "cash">("check");
   const [manualPaymentAmount, setManualPaymentAmount] = useState("");
   const [manualPaymentCheckNumber, setManualPaymentCheckNumber] = useState("");
+  const [manualPaymentEditingId, setManualPaymentEditingId] = useState("");
   const [manualPaymentState, setManualPaymentState] = useState<"idle" | "saving" | "error">("idle");
   const [manualPaymentMessage, setManualPaymentMessage] = useState("");
   const [suppressAppointmentEmail, setSuppressAppointmentEmail] = useState(false);
@@ -590,8 +601,8 @@ export default function InvoiceEditor({
   const hasInvalidDiscount = totalDiscountCents > subtotalCents;
   const totalCents = Math.max(0, subtotalCents - totalDiscountCents);
 
-  // Payments are immutable financial records. Editing an invoice must not
-  // manufacture a larger paid amount merely because the total changed.
+  // Provider payments remain immutable. Manual corrections are made through
+  // the audited payment endpoint and returned here by the authoritative ledger.
   const paidCents = Math.max(0, Number(recordedPaidCents ?? 0) || 0);
 
   const balanceDueCents = Math.max(0, totalCents - paidCents);
@@ -999,9 +1010,11 @@ export default function InvoiceEditor({
 
   async function handleManualPayment() {
     const amountCents = parseMoneyInputToCents(manualPaymentAmount);
-    if (amountCents <= 0 || amountCents > balanceDueCents) {
+    const editingPayment = initialManualPayments.find((payment) => payment.id === manualPaymentEditingId) || null;
+    const maximumAmountCents = balanceDueCents + (editingPayment?.amountCents || 0);
+    if (amountCents <= 0 || amountCents > maximumAmountCents) {
       setManualPaymentState("error");
-      setManualPaymentMessage(`Enter an amount from $0.01 to ${money(balanceDueCents)}.`);
+      setManualPaymentMessage(`Enter an amount from $0.01 to ${money(maximumAmountCents)}.`);
       return;
     }
 
@@ -1012,22 +1025,29 @@ export default function InvoiceEditor({
         await saveInvoicePayload(invoicePayload, false);
       }
       const response = await authenticatedFetch(`/api/sites/${encodeURIComponent(siteId)}/payments/manual`, {
-        method: "POST",
+        method: editingPayment ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           method: manualPaymentMethod,
           amount_cents: amountCents,
           check_number: manualPaymentMethod === "check" ? manualPaymentCheckNumber.trim() : "",
+          payment_id: editingPayment?.id || undefined,
         }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.error || "Manual payment could not be recorded.");
       setManualPaymentOpen(false);
+      setManualPaymentEditingId("");
       setManualPaymentState("idle");
-      setSendState(payload?.email_sent === false ? "error" : "sent");
-      setSendMessage(payload?.email_sent === false
-        ? "Payment recorded, but the customer receipt needs attention."
-        : `${manualPaymentMethod === "check" ? "Check" : "Cash"} payment recorded · receipt emailed`);
+      if (editingPayment) {
+        setSendState("sent");
+        setSendMessage(`${manualPaymentMethod === "check" ? "Check" : "Cash"} payment corrected · invoice balance updated · no email sent`);
+      } else {
+        setSendState(payload?.email_sent === false ? "error" : "sent");
+        setSendMessage(payload?.email_sent === false
+          ? "Payment recorded, but the customer receipt needs attention."
+          : `${manualPaymentMethod === "check" ? "Check" : "Cash"} payment recorded · receipt emailed`);
+      }
       router.refresh();
     } catch (error) {
       setManualPaymentState("error");
@@ -1576,7 +1596,7 @@ export default function InvoiceEditor({
         )}
       </div>
 
-      {canEdit ? (
+      {canEdit && (hasUnsavedChanges || hasInvalidDiscount || saveState === "error") ? (
         <div
           style={{
             marginTop: "18px",
@@ -1587,34 +1607,34 @@ export default function InvoiceEditor({
             gap: "16px",
             flexWrap: "wrap",
             border: "1px solid #d8ddd9",
-            borderLeft: `6px solid ${hasInvalidDiscount ? "#c62828" : hasUnsavedChanges ? "#ffc72c" : "#1f8f4e"}`,
+            borderLeft: `6px solid ${hasInvalidDiscount || saveState === "error" ? "#c62828" : "#ffc72c"}`,
             borderRadius: "14px",
-            background: hasInvalidDiscount ? "#fff1f1" : hasUnsavedChanges ? "#fff8df" : "#f4f7f5",
+            background: hasInvalidDiscount || saveState === "error" ? "#fff1f1" : "#fff8df",
             boxShadow: hasUnsavedChanges ? "0 10px 26px rgba(23,35,31,.1)" : "none",
           }}
         >
           <div style={{ minWidth: "220px", flex: "1 1 360px" }}>
             <div
               style={{
-                color: hasInvalidDiscount ? "#c62828" : hasUnsavedChanges ? "#8a6710" : "#1f6f43",
+                color: hasInvalidDiscount || saveState === "error" ? "#c62828" : "#8a6710",
                 fontSize: "12px",
                 fontWeight: 900,
                 letterSpacing: ".1em",
                 textTransform: "uppercase",
               }}
             >
-              {hasInvalidDiscount
+              {saveState === "error"
+                ? "Save needs attention"
+                : hasInvalidDiscount
                 ? "Fix required"
-                : hasUnsavedChanges
-                  ? "Unsaved order changes"
-                  : "Order changes saved"}
+                : "Unsaved order changes"}
             </div>
             <div style={{ marginTop: "4px", color: "#515a56", fontSize: "14px", fontWeight: 600, lineHeight: 1.45 }}>
-              {hasInvalidDiscount
+              {saveState === "error"
+                ? saveMessage || "The changes could not be saved."
+                : hasInvalidDiscount
                 ? "Reduce the discount before saving this order."
-                : hasUnsavedChanges
-                  ? "Review the order and totals, then save once when you are finished editing."
-                  : saveMessage || "This order is up to date."}
+                : "Review the order and totals, then save once when you are finished editing."}
             </div>
             {hasUnsavedChanges ? (
               <label
@@ -1735,6 +1755,7 @@ export default function InvoiceEditor({
                   style={{ ...coolActionStyle, opacity: hasBalanceDue ? 1 : 0.5 }}
                   disabled={!hasBalanceDue}
                   onClick={() => {
+                    setManualPaymentEditingId("");
                     setManualPaymentAmount((balanceDueCents / 100).toFixed(2));
                     setManualPaymentCheckNumber("");
                     setManualPaymentMessage("");
@@ -1760,6 +1781,52 @@ export default function InvoiceEditor({
               </a>
             ) : null}
             </div>
+            {canEdit && initialManualPayments.length ? (
+              <div style={{ marginTop: "4px", display: "grid", gap: "8px" }}>
+                <div style={{ color: "#69736e", fontSize: "11px", fontWeight: 900, letterSpacing: ".1em", textTransform: "uppercase" }}>
+                  Check and cash payments
+                </div>
+                {initialManualPayments.map((payment) => (
+                  <div
+                    key={payment.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      padding: "11px 13px",
+                      border: "1px solid #dfe3e1",
+                      borderRadius: "10px",
+                      background: "#f8f9f8",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <strong style={{ display: "block", color: "#17231f", fontSize: "14px" }}>
+                        {payment.method === "check" ? `Check${payment.checkNumber ? ` #${payment.checkNumber}` : ""}` : "Cash"} · {money(payment.amountCents)}
+                      </strong>
+                      <span style={{ color: "#6d7672", fontSize: "12px" }}>
+                        {payment.paidAt ? new Date(payment.paidAt).toLocaleString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "short" }) : "Date unavailable"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManualPaymentEditingId(payment.id);
+                        setManualPaymentMethod(payment.method);
+                        setManualPaymentAmount((payment.amountCents / 100).toFixed(2));
+                        setManualPaymentCheckNumber(payment.checkNumber);
+                        setManualPaymentMessage("");
+                        setManualPaymentState("idle");
+                        setManualPaymentOpen(true);
+                      }}
+                      style={{ ...coolActionStyle, minHeight: "38px", padding: "0 15px", justifyContent: "center" }}
+                    >
+                      Edit amount
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           {sendMessage ? (
@@ -1819,7 +1886,7 @@ export default function InvoiceEditor({
         <div role="dialog" aria-modal="true" aria-label="Record manual payment" style={{ position: "fixed", inset: 0, zIndex: 10000, display: "grid", placeItems: "center", padding: "20px", background: "rgba(0,0,0,.62)" }}>
           <div style={{ width: "min(440px, 100%)", borderRadius: "18px", borderTop: "6px solid #ffc72c", background: "#fff", padding: "26px", boxShadow: "0 24px 70px rgba(0,0,0,.35)" }}>
             <div style={{ fontSize: "12px", fontWeight: 900, letterSpacing: ".12em", color: "#8a6710", textTransform: "uppercase" }}>Manual payment</div>
-            <h2 style={{ margin: "8px 0 18px", fontSize: "28px" }}>Record check or cash</h2>
+            <h2 style={{ margin: "8px 0 18px", fontSize: "28px" }}>{manualPaymentEditingId ? "Edit check or cash payment" : "Record check or cash"}</h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
               {(["check", "cash"] as const).map((method) => (
                 <button key={method} type="button" onClick={() => setManualPaymentMethod(method)} style={{ height: "46px", border: `2px solid ${manualPaymentMethod === method ? "#17231f" : "#d8d8d8"}`, borderRadius: "10px", background: manualPaymentMethod === method ? "#ffc72c" : "#fff", color: "#17231f", fontWeight: 900, textTransform: "capitalize" }}>{method}</button>
@@ -1842,11 +1909,17 @@ export default function InvoiceEditor({
                 />
               </label>
             ) : null}
-            <div style={{ marginTop: "8px", color: "#666", fontSize: "13px" }}>Current balance: {money(balanceDueCents)}. Recording the payment emails a branded receipt to the customer and BCCs Cory.</div>
+            <div style={{ marginTop: "8px", color: "#666", fontSize: "13px" }}>
+              {manualPaymentEditingId
+                ? `Current balance: ${money(balanceDueCents)}. Saving this correction recalculates the invoice balance and does not send an email.`
+                : `Current balance: ${money(balanceDueCents)}. Recording the payment emails a branded receipt to the customer and BCCs Cory.`}
+            </div>
             {manualPaymentMessage ? <div style={{ marginTop: "12px", color: "#b42318", fontWeight: 800 }}>{manualPaymentMessage}</div> : null}
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "22px" }}>
               <button type="button" disabled={manualPaymentState === "saving"} onClick={() => setManualPaymentOpen(false)} style={{ ...coolActionStyle, justifyContent: "center" }}>Cancel</button>
-              <button type="button" disabled={manualPaymentState === "saving"} onClick={handleManualPayment} style={{ ...blackPill, height: "46px", borderRadius: "10px", background: "#17231f" }}>{manualPaymentState === "saving" ? "Recording…" : "Record & email receipt"}</button>
+              <button type="button" disabled={manualPaymentState === "saving"} onClick={handleManualPayment} style={{ ...blackPill, height: "46px", borderRadius: "10px", background: "#17231f" }}>
+                {manualPaymentState === "saving" ? "Saving…" : manualPaymentEditingId ? "Save payment correction" : "Record & email receipt"}
+              </button>
             </div>
           </div>
         </div>

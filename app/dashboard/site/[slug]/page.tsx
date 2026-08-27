@@ -19,6 +19,7 @@ import { makePropertySiteSlug, normalizePropertySiteSlug, propertySiteUrl } from
 import { marketingEditorAllowsClientAccess, marketingEditorEnabled } from "@/lib/marketing-kit";
 import { createRescheduleToken } from "@/lib/reschedule-token";
 import { portalOwnerIds, portalUserOwnsSite } from "@/lib/portal-access";
+import { parseManualPaymentReference } from "@/lib/payment-history";
 
 type Site = {
   id: string;
@@ -135,6 +136,14 @@ type AdminUser = {
   id: string;
   name: string;
   email: string;
+};
+
+type ManualPayment = {
+  id: string;
+  method: "check" | "cash";
+  checkNumber: string;
+  amountCents: number;
+  paidAt: string;
 };
 
 type MediaAsset = {
@@ -809,16 +818,29 @@ export default async function SitePage({
   // The payment ledger is authoritative. Invoice totals can change, but that
   // must never cause the UI to manufacture or erase money already received.
   let recordedPaidCents = 0;
+  let initialManualPayments: ManualPayment[] = [];
   const { data: paymentRows } = await adminSb
     .from("payments")
-    .select("amount_cents,status")
+    .select("id,stripe_payment_intent_id,amount_cents,status,provider_created_at,created_at")
     .eq("site_id", site.id)
-    .in("status", ["succeeded", "partially_refunded"]);
+    .in("status", ["succeeded", "partially_refunded"])
+    .order("provider_created_at", { ascending: false, nullsFirst: false });
   if (Array.isArray(paymentRows) && paymentRows.length > 0) {
     recordedPaidCents = paymentRows.reduce(
       (sum, payment) => sum + Math.max(0, Number(payment.amount_cents ?? 0) || 0),
       0
     );
+    initialManualPayments = paymentRows.flatMap((payment) => {
+      const parsed = parseManualPaymentReference(clean(payment.stripe_payment_intent_id));
+      if (!parsed || clean(payment.status) !== "succeeded") return [];
+      return [{
+        id: clean(payment.id),
+        method: parsed.method,
+        checkNumber: parsed.checkNumber,
+        amountCents: Math.max(0, Number(payment.amount_cents ?? 0) || 0),
+        paidAt: clean(payment.provider_created_at) || clean(payment.created_at),
+      }];
+    });
   } else {
     // Legacy orders may predate the payment ledger. Preserve their already
     // recorded paid amount without deriving it from the editor's next total.
@@ -1250,6 +1272,7 @@ export default async function SitePage({
             canEdit={canEdit}
             sitePaid={!!site.paid}
             recordedPaidCents={recordedPaidCents}
+            initialManualPayments={initialManualPayments}
             adminUsers={adminUsers}
             invoicePublicUrl={invoicePublicUrl}
             customerNotes={clean(siteData.customer_notes)}

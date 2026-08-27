@@ -28,13 +28,25 @@ function decodedCheckNumber(reference: string) {
   }
 }
 
-export function paymentReferenceLabel(reference: string) {
-  const normalized = clean(reference).toLowerCase();
-  if (normalized.startsWith("manual:cash:")) return "Cash";
-  if (normalized.startsWith("manual:check:")) {
-    const checkNumber = decodedCheckNumber(reference);
-    return checkNumber ? `Check #${checkNumber}` : "Check";
+export function parseManualPaymentReference(reference: string) {
+  const normalized = clean(reference);
+  const lower = normalized.toLowerCase();
+  if (lower.startsWith("manual:cash:")) {
+    return { method: "cash" as const, checkNumber: "" };
   }
+  if (lower.startsWith("manual:check:")) {
+    return { method: "check" as const, checkNumber: decodedCheckNumber(normalized) };
+  }
+  return null;
+}
+
+export function paymentReferenceLabel(reference: string) {
+  const manualPayment = parseManualPaymentReference(reference);
+  if (manualPayment?.method === "cash") return "Cash";
+  if (manualPayment?.method === "check") {
+    return manualPayment.checkNumber ? `Check #${manualPayment.checkNumber}` : "Check";
+  }
+  const normalized = clean(reference).toLowerCase();
   if (normalized.startsWith("paypal:")) return "PayPal";
   return "Credit or debit card";
 }
