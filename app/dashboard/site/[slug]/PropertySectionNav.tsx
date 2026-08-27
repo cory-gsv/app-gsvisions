@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 const allSections = [
   ["summary", "Site Summary"],
   ["invoice", "Order & Invoice"],
+  ["delivery", "Media Delivery"],
   ["details", "Property Details"],
   ["map", "Map & Location"],
   ["downloads", "Download Media"],
@@ -12,7 +13,6 @@ const allSections = [
   ["video", "Video"],
   ["matterport", "3D Tour"],
   ["floorplan", "Floor Plan"],
-  ["delivery", "Media Delivery"],
   ["leads", "Leads"],
 ] as const;
 
