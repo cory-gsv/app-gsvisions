@@ -21,6 +21,7 @@ type MediaAsset = {
   width: number | null;
   height: number | null;
   created_at?: string | null;
+  gallery_position?: number | null;
 };
 
 type Mode = "hero" | "gallery" | "floorplan";
@@ -2166,7 +2167,12 @@ if (mode === "floorplan") {
               const originalGalleryIndex = isPending
                 ? -1
                 : galleryItems.findIndex((galleryItem) => clean(galleryItem.id) === clean(item.id));
-              const orderNumber = originalGalleryIndex >= 0 ? originalGalleryIndex + 1 : i + 1;
+              const serverGalleryPosition = Number("gallery_position" in item ? item.gallery_position : 0);
+              const orderNumber = serverGalleryPosition > 0
+                ? serverGalleryPosition
+                : originalGalleryIndex >= 0
+                  ? originalGalleryIndex + 1
+                  : i + 1;
 
               if (isPending) {
                 return (
@@ -2375,8 +2381,8 @@ if (mode === "floorplan") {
                         width: "90%",
                         height: "90%",
                         objectFit: "contain",
-                        opacity: 0.52,
-                        filter: "drop-shadow(0 1px 3px rgba(0,0,0,.42))",
+                        opacity: 0.16,
+                        filter: "drop-shadow(0 1px 2px rgba(0,0,0,.18))",
                         pointerEvents: "none",
                         zIndex: 8,
                       }}

@@ -8,6 +8,27 @@ function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
 
+function randomPreviewIds(
+  rows: Array<Record<string, unknown>>,
+  limit: number
+): Set<string> {
+  if (rows.length <= limit) return new Set(rows.map((row) => clean(row.id)).filter(Boolean));
+
+  const hero = rows.find((row) => row.is_primary === true) || rows[0];
+  const remaining = rows.filter((row) => clean(row.id) !== clean(hero?.id));
+
+  for (let index = remaining.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [remaining[index], remaining[swapIndex]] = [remaining[swapIndex], remaining[index]];
+  }
+
+  return new Set(
+    [hero, ...remaining.slice(0, Math.max(0, limit - 1))]
+      .map((row) => clean(row?.id))
+      .filter(Boolean)
+  );
+}
+
 function getAdminSupabase() {
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -124,18 +145,34 @@ export async function GET(req: NextRequest) {
     }
 
     const items = Array.isArray(data) ? data : [];
-    const previewCounts = new Map<string, number>();
+    const previewIdsBySite = new Map<string, Set<string>>();
+    const galleryPositionById = new Map<string, number>();
+
+    if (!isStaff) {
+      for (const lockedSiteId of lockedSiteIds) {
+        const galleryRows = items.filter(
+          (item) =>
+            clean(item?.site_id) === lockedSiteId &&
+            clean(item?.category).toLowerCase() === "gallery"
+        );
+        galleryRows.forEach((item, index) => {
+          galleryPositionById.set(clean(item?.id), index + 1);
+        });
+        previewIdsBySite.set(lockedSiteId, randomPreviewIds(galleryRows, 9));
+      }
+    }
+
     const visibleItems = isStaff
       ? items
-      : items.filter((item) => {
+      : items.flatMap((item) => {
           const itemSiteId = clean(item?.site_id);
-          if (!lockedSiteIds.has(itemSiteId)) return true;
-          if (clean(item?.category).toLowerCase() !== "gallery") return false;
-
-          const count = previewCounts.get(itemSiteId) ?? 0;
-          if (count >= 6) return false;
-          previewCounts.set(itemSiteId, count + 1);
-          return true;
+          if (!lockedSiteIds.has(itemSiteId)) return [item];
+          if (clean(item?.category).toLowerCase() !== "gallery") return [];
+          if (!previewIdsBySite.get(itemSiteId)?.has(clean(item?.id))) return [];
+          return [{
+            ...item,
+            gallery_position: galleryPositionById.get(clean(item?.id)) ?? null,
+          }];
         });
 
     return NextResponse.json({
