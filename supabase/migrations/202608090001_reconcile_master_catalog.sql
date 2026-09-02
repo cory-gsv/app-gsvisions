@@ -18,7 +18,7 @@ begin
   for family in
     select * from (values
       ('standard-media', 'Standard Media', 'Listing photography, aerial drone photos, and one polished virtual twilight.', array[30000,40000,50000,62000,79000]::integer[], array[85,100,130,160,190]::integer[]),
-      ('matterport-media', 'Matterport Media', 'Listing photography and aerial photos paired with virtual twilight and an immersive 3D Matterport tour.', array[45000,57000,70000,84000,105000]::integer[], array[120,140,190,205,270]::integer[]),
+      ('matterport-media', 'Matterport Media', 'Listing photography and aerial photos paired with virtual twilight and an immersive 3D Matterport tour.', array[45000,55000,70000,84000,105000]::integer[], array[120,140,190,205,270]::integer[]),
       ('video-plus', 'Video Plus', 'Photo and cinematic video coverage with aerial drone photography and video.', array[60000,70000,80000,90000,115000]::integer[], array[195,235,290,345,440]::integer[]),
       ('signature', 'Signature', 'Our complete photo, video, aerial photography, aerial video, virtual twilight, and 3D media suite.', array[70000,80000,90000,105000,135000]::integer[], array[230,260,350,420,560]::integer[])
     ) as x(key, label, description, prices, minutes)

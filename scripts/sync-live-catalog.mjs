@@ -15,7 +15,7 @@ const tiers = [
 ];
 const packageFamilies = [
   { key: "standard-media", name: "Standard Media", description: "Listing photography, aerial drone photos, and one polished virtual twilight.", prices: [300, 400, 500, 620, 790], minutes: [85, 100, 130, 160, 190], includes: ["photoshoot", "aerial-photography", "floor-plan", "virtual-twilight"] },
-  { key: "matterport-media", name: "Matterport Media", description: "Listing photography and aerial photos paired with virtual twilight and an immersive 3D Matterport tour.", prices: [450, 570, 700, 840, 1050], minutes: [120, 140, 190, 205, 270], includes: ["photoshoot", "aerial-photography", "floor-plan", "virtual-twilight", "matterport-scanning"] },
+  { key: "matterport-media", name: "Matterport Media", description: "Listing photography and aerial photos paired with virtual twilight and an immersive 3D Matterport tour.", prices: [450, 550, 700, 840, 1050], minutes: [120, 140, 190, 205, 270], includes: ["photoshoot", "aerial-photography", "floor-plan", "virtual-twilight", "matterport-scanning"] },
   { key: "video-plus", name: "Video Plus", description: "Photo and cinematic video coverage with aerial drone photography and video.", prices: [600, 700, 800, 900, 1150], minutes: [195, 235, 290, 345, 440], includes: ["photoshoot", "cinematic-video-tour", "aerial-photography", "aerial-video", "floor-plan", "virtual-twilight"] },
   { key: "signature", name: "Signature", description: "Our complete photo, video, aerial photography, aerial video, virtual twilight, and 3D media suite.", prices: [700, 800, 900, 1050, 1350], minutes: [230, 260, 350, 420, 560], includes: ["photoshoot", "cinematic-video-tour", "aerial-photography", "aerial-video", "floor-plan", "virtual-twilight", "matterport-scanning"] },
 ];
