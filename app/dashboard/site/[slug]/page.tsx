@@ -90,6 +90,11 @@ type Profile = {
 
 type Booking = {
   id: string;
+  client_id: string | null;
+  client_first_name: string | null;
+  client_last_name: string | null;
+  client_email: string | null;
+  client_phone: string | null;
   selected_package_id: string | null;
   selected_package_name: string | null;
   selected_services: Array<{ name?: string | null }> | null;
@@ -805,6 +810,11 @@ export default async function SitePage({
       .from("bookings")
       .select(`
         id,
+        client_id,
+        client_first_name,
+        client_last_name,
+        client_email,
+        client_phone,
         selected_package_id,
         selected_package_name,
         selected_services,
@@ -1119,9 +1129,14 @@ export default async function SitePage({
         clean(siteData.floorplan_url) ||
         "";
 
-  const agentName = getProfileName(assignedProfile);
-  const agentPhone = clean(assignedProfile?.phone) || "Not added";
-  const agentEmail = clean(assignedProfile?.email) || "Not added";
+  const bookingClientFirstName = clean(booking?.client_first_name);
+  const bookingClientLastName = clean(booking?.client_last_name);
+  const bookingClientName = [bookingClientFirstName, bookingClientLastName].filter(Boolean).join(" ");
+  const agentName = assignedProfile
+    ? getProfileName(assignedProfile)
+    : bookingClientName || clean(booking?.client_email) || "Client";
+  const agentPhone = clean(assignedProfile?.phone) || clean(booking?.client_phone) || "Not added";
+  const agentEmail = clean(assignedProfile?.email) || clean(booking?.client_email) || "Not added";
   const brokerageName = clean(assignedProfile?.brokerage_name) || "Not added";
   const mlsLicense = clean(assignedProfile?.mls_license) || "Not added";
   const agentPhoto = clean(assignedProfile?.profile_photo_url) || "";
@@ -1242,10 +1257,10 @@ export default async function SitePage({
                 <div style={{ marginTop: 8, color: "rgba(255,255,255,.72)", fontSize: 14 }}>{cityStateZip}{cityStateZip ? " · " : ""}Site ID: {site.id.slice(0, 8)}</div>
               </div>
               <div className="gsv-summary-contacts"><ClientSummaryCard client={{
-                id: clean(assignedProfile?.id),
+                id: clean(assignedProfile?.id) || clean(booking?.client_id) || assignedProfileId,
                 name: agentName,
-                firstName: clean(assignedProfile?.first_name),
-                lastName: clean(assignedProfile?.last_name),
+                firstName: clean(assignedProfile?.first_name) || bookingClientFirstName,
+                lastName: clean(assignedProfile?.last_name) || bookingClientLastName,
                 photo: agentPhoto,
                 phone: agentPhone,
                 email: agentEmail,
