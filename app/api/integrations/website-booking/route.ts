@@ -55,7 +55,6 @@ async function resolveCustomer(
   if (existingProfile?.id) return clean(existingProfile.id);
 
   let authUserId = "";
-  let createdAuthUser = false;
   for (let page = 1; page <= 20 && !authUserId; page += 1) {
     const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 1000 });
     if (error) throw error;
@@ -76,7 +75,6 @@ async function resolveCustomer(
     });
     if (!error && data.user) {
       authUserId = data.user.id;
-      createdAuthUser = true;
     } else {
       // Another request may have created this email after our initial lookup.
       const { data: retryUsers, error: retryError } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -108,9 +106,13 @@ async function resolveCustomer(
       origin,
     });
   } catch (error) {
-    await admin.from("profiles").delete().eq("id", authUserId);
-    if (createdAuthUser) await admin.auth.admin.deleteUser(authUserId).catch(() => undefined);
-    throw error;
+    // Email delivery is a secondary side effect. A provider outage must never
+    // erase the customer or prevent a paid booking from being ingested.
+    console.error("WEBSITE_CUSTOMER_INVITE_FAILED", {
+      customerId: authUserId,
+      email,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
   return authUserId;
 }
