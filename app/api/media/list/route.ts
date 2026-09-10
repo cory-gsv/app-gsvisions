@@ -8,25 +8,19 @@ function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
 
-function randomPreviewIds(
+function evenlySpacedPreviewIds(
   rows: Array<Record<string, unknown>>,
   limit: number
 ): Set<string> {
   if (rows.length <= limit) return new Set(rows.map((row) => clean(row.id)).filter(Boolean));
+  if (limit <= 1) return new Set([clean(rows[0]?.id)].filter(Boolean));
 
-  const hero = rows.find((row) => row.is_primary === true) || rows[0];
-  const remaining = rows.filter((row) => clean(row.id) !== clean(hero?.id));
+  const selectedIds = Array.from({ length: limit }, (_, index) => {
+    const galleryIndex = Math.round((index * (rows.length - 1)) / (limit - 1));
+    return clean(rows[galleryIndex]?.id);
+  });
 
-  for (let index = remaining.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [remaining[index], remaining[swapIndex]] = [remaining[swapIndex], remaining[index]];
-  }
-
-  return new Set(
-    [hero, ...remaining.slice(0, Math.max(0, limit - 1))]
-      .map((row) => clean(row?.id))
-      .filter(Boolean)
-  );
+  return new Set(selectedIds.filter(Boolean));
 }
 
 function getAdminSupabase() {
@@ -158,7 +152,7 @@ export async function GET(req: NextRequest) {
         galleryRows.forEach((item, index) => {
           galleryPositionById.set(clean(item?.id), index + 1);
         });
-        previewIdsBySite.set(lockedSiteId, randomPreviewIds(galleryRows, 9));
+        previewIdsBySite.set(lockedSiteId, evenlySpacedPreviewIds(galleryRows, 9));
       }
     }
 
