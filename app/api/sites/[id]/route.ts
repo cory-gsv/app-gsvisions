@@ -47,16 +47,20 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
 
     const { data: site, error: siteError } = await admin
       .from("sites")
-      .select("id,property_address,property_full_address,site_name")
+      .select("id,booking_id,property_address,property_full_address,site_name")
       .eq("id", siteId)
       .maybeSingle();
     if (siteError) throw siteError;
     if (!site) return Response.json({ error: "Site not found." }, { status: 404 });
 
+    const bookingId = clean(site.booking_id);
+    const paymentFilter = bookingId
+      ? `site_id.eq.${siteId},booking_id.eq.${bookingId}`
+      : `site_id.eq.${siteId}`;
     const { count: paymentCount, error: paymentError } = await admin
       .from("payments")
       .select("id", { count: "exact", head: true })
-      .eq("site_id", siteId);
+      .or(paymentFilter);
     if (paymentError && paymentError.code !== "42P01") throw paymentError;
     if ((paymentCount ?? 0) > 0) {
       return Response.json(
@@ -77,11 +81,41 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
       .eq("site_id", siteId);
     if (messagesError && messagesError.code !== "42P01") throw messagesError;
 
-    const { error: ingestError } = await admin.from("booking_ingest_events").delete().eq("site_id", siteId);
+    if (bookingId) {
+      const { error: bookingMessagesError } = await admin
+        .from("outbound_messages")
+        .update({ booking_id: null })
+        .eq("booking_id", bookingId);
+      if (bookingMessagesError && bookingMessagesError.code !== "42P01") throw bookingMessagesError;
+    }
+
+    const ingestFilter = bookingId
+      ? `site_id.eq.${siteId},booking_id.eq.${bookingId}`
+      : `site_id.eq.${siteId}`;
+    const { error: ingestError } = await admin.from("booking_ingest_events").delete().or(ingestFilter);
     if (ingestError && ingestError.code !== "42P01") throw ingestError;
 
-    const { error: deleteError } = await admin.from("sites").delete().eq("id", siteId);
+    if (bookingId) {
+      const { error: detachBookingError } = await admin
+        .from("bookings")
+        .update({ site_id: null })
+        .eq("id", bookingId);
+      if (detachBookingError) throw detachBookingError;
+    }
+
+    const { data: deletedSites, error: deleteError } = await admin.from("sites").delete().eq("id", siteId).select("id");
     if (deleteError) throw deleteError;
+    if (deletedSites?.length !== 1) throw new Error("The site was not deleted.");
+
+    if (bookingId) {
+      const { data: deletedBookings, error: bookingDeleteError } = await admin
+        .from("bookings")
+        .delete()
+        .eq("id", bookingId)
+        .select("id");
+      if (bookingDeleteError) throw bookingDeleteError;
+      if (deletedBookings?.length !== 1) throw new Error("The linked booking was not deleted.");
+    }
 
     const cleanup = (assets || []).flatMap((asset) => [
       deleteCloudinary(asset.cloudinary_public_id, asset.cloudinary_resource_type),
@@ -92,7 +126,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
     const cleanupFailures = cleanupResults.filter((result) => result.status === "rejected");
     if (cleanupFailures.length) console.error("SITE_MEDIA_CLEANUP_PARTIAL", { siteId, failures: cleanupFailures.length });
 
-    return Response.json({ ok: true, deleted_id: siteId, media_cleanup_failures: cleanupFailures.length });
+    return Response.json({ ok: true, deleted_id: siteId, deleted_booking_id: bookingId || null, media_cleanup_failures: cleanupFailures.length });
   } catch (error) {
     const authResponse = authorizationErrorResponse(error);
     if (authResponse) return authResponse;

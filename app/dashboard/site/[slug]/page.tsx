@@ -1291,7 +1291,8 @@ export default async function SitePage({
                     <span>Manage appointment</span>
                     <span aria-hidden="true">→</span>
                   </Link> : null}
-                  {viewerIsAdmin && !bookingIsCancelled ? (
+                  {bookingIsCancelled ? <span className="gsv-site-appointment__cancelled">Booking canceled</span> : null}
+                  {viewerIsAdmin ? (
                     <DeleteSiteButton
                       className="gsv-site-appointment__cancel"
                       siteId={site.id}
@@ -1300,8 +1301,9 @@ export default async function SitePage({
                       recipientName={[bookingClientFirstName || clean(assignedProfile?.first_name), bookingClientLastName || clean(assignedProfile?.last_name)].filter(Boolean).join(" ")}
                       recipientEmail={clean(booking?.client_email) || clean(assignedProfile?.email)}
                       appointmentStart={appointmentStart}
+                      bookingCancelled={bookingIsCancelled}
                     />
-                  ) : bookingIsCancelled ? <span className="gsv-site-appointment__cancelled">Booking canceled</span> : null}
+                  ) : null}
                 </div>
               </div>
             ) : null}
