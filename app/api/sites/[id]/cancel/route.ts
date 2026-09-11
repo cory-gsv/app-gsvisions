@@ -18,7 +18,7 @@ async function loadCancellation(admin: Awaited<ReturnType<typeof requireAdmin>>[
   const bookingId = clean(site.booking_id);
   if (!bookingId) throw new Error("This property site does not have a booking to cancel.");
   const { data: booking, error: bookingError } = await admin.from("bookings")
-    .select("id,client_id,client_first_name,client_last_name,client_email,selected_package_name,scheduled_start,scheduled_end,reschedule_status")
+    .select("id,client_id,client_first_name,client_last_name,client_email,selected_package_name,scheduled_start,scheduled_end,status")
     .eq("id", bookingId).maybeSingle();
   if (bookingError) throw bookingError;
   if (!booking) throw new Error("The linked booking could not be found.");
@@ -107,7 +107,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const { error: siteUpdateError } = await admin.from("sites").update({ status: "cancelled", site_data: nextSiteData, updated_at: now }).eq("id", siteId);
     if (siteUpdateError) throw siteUpdateError;
-    const { error: bookingUpdateError } = await admin.from("bookings").update({ reschedule_status: "cancelled", updated_at: now }).eq("id", loaded.booking.id);
+    const { error: bookingUpdateError } = await admin.from("bookings").update({ status: "cancelled", updated_at: now }).eq("id", loaded.booking.id);
     if (bookingUpdateError) throw bookingUpdateError;
     const { error: requestError } = await admin.from("appointment_change_requests").update({ status: "canceled", reviewed_at: now, reviewed_by: user.id, updated_at: now }).eq("booking_id", loaded.booking.id).eq("status", "pending");
     if (requestError && requestError.code !== "42P01") warnings.push(`The pending cancellation-request record could not be closed: ${requestError.message}`);
