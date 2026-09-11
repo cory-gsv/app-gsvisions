@@ -9,6 +9,7 @@ import MediaManager from "./MediaManager";
 import MediaLinksEditor from "./MediaLinksEditor";
 import PropertySectionNav from "./PropertySectionNav";
 import SiteSummaryPanel from "./SiteSummaryPanel";
+import DeleteSiteButton from "./DeleteSiteButton";
 import LeadCapturePanel from "./LeadCapturePanel";
 import ClientSummaryCard from "./ClientSummaryCard";
 import CoListerManager from "./CoListerManager";
@@ -1285,10 +1286,23 @@ export default async function SitePage({
                   <h2 id="gsv-site-appointment-title">{formatAppointmentDate(appointmentStart)}</h2>
                   <p>{formatAppointmentTime(appointmentStart, appointmentEnd)}</p>
                 </div>
-                <Link className="gsv-site-appointment__action" href={manageAppointmentUrl}>
-                  <span>Manage appointment</span>
-                  <span aria-hidden="true">→</span>
-                </Link>
+                <div className="gsv-site-appointment__actions">
+                  <Link className="gsv-site-appointment__action" href={manageAppointmentUrl}>
+                    <span>Manage appointment</span>
+                    <span aria-hidden="true">→</span>
+                  </Link>
+                  {viewerIsAdmin && !bookingIsCancelled ? (
+                    <DeleteSiteButton
+                      className="gsv-site-appointment__cancel"
+                      siteId={site.id}
+                      label={clean(site.property_full_address) || clean(site.property_address) || clean(site.site_name) || site.id}
+                      bookingId={clean(booking?.id)}
+                      recipientName={[bookingClientFirstName || clean(assignedProfile?.first_name), bookingClientLastName || clean(assignedProfile?.last_name)].filter(Boolean).join(" ")}
+                      recipientEmail={clean(booking?.client_email) || clean(assignedProfile?.email)}
+                      appointmentStart={appointmentStart}
+                    />
+                  ) : null}
+                </div>
               </div>
             ) : null}
             <div className="gsv-summary-hero">
@@ -1318,11 +1332,6 @@ export default async function SitePage({
               initialPublicAliases={publicSiteAliases}
               customDomain={clean(siteData.custom_domain)}
               canManageAddresses={viewerIsAdmin}
-              deleteLabel={clean(site.property_full_address) || clean(site.property_address) || clean(site.site_name) || site.id}
-              bookingId={clean(booking?.id)}
-              cancellationRecipientName={[bookingClientFirstName || clean(assignedProfile?.first_name), bookingClientLastName || clean(assignedProfile?.last_name)].filter(Boolean).join(" ")}
-              cancellationRecipientEmail={clean(booking?.client_email) || clean(assignedProfile?.email)}
-              appointmentStart={appointmentStart}
               initialStatus={clean(siteData.listing_status) || "active"}
               initialOpenHouseEnabled={siteData.open_house_enabled === true}
               initialOpenHouseStart={clean(siteData.open_house_start)}

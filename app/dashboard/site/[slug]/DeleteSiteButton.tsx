@@ -7,6 +7,7 @@ import { authenticatedFetch } from "@/src/lib/authenticated-fetch";
 type Props = {
   siteId: string;
   label: string;
+  className?: string;
   bookingId?: string;
   recipientName?: string;
   recipientEmail?: string;
@@ -15,7 +16,7 @@ type Props = {
 
 const buttonStyle: React.CSSProperties = { minHeight: "44px", padding: "0 18px", border: "1px solid #17231f", borderRadius: "999px", background: "#fff", color: "#17231f", fontSize: "11px", fontWeight: 900, letterSpacing: ".08em", textTransform: "uppercase", cursor: "pointer" };
 
-export default function DeleteSiteButton({ siteId, label, bookingId, recipientName, recipientEmail, appointmentStart }: Props) {
+export default function DeleteSiteButton({ siteId, label, className, bookingId, recipientName, recipientEmail, appointmentStart }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [working, setWorking] = useState(false);
@@ -83,7 +84,7 @@ export default function DeleteSiteButton({ siteId, label, bookingId, recipientNa
     : "Appointment time unavailable";
 
   return <>
-    <button type="button" onClick={() => { setOpen(true); setError(""); }} style={{ ...buttonStyle, borderColor: "rgba(164,61,50,.58)", color: "#a43d32", borderRadius: 0 }}>{bookingId ? "Cancel Booking" : "Delete Test Site"}</button>
+    <button className={className} type="button" onClick={() => { setOpen(true); setError(""); }} style={{ ...buttonStyle, borderColor: "rgba(164,61,50,.58)", color: "#a43d32", borderRadius: 0 }}>{bookingId ? "Cancel Booking" : "Delete Test Site"}</button>
     {open ? <div role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !working) setOpen(false); }} style={{ position: "fixed", inset: 0, zIndex: 1000, display: "grid", placeItems: "center", padding: "24px", background: "rgba(10,18,15,.72)" }}>
       <section role="dialog" aria-modal="true" aria-labelledby="cancel-booking-title" style={{ width: "min(860px, 100%)", maxHeight: "calc(100vh - 48px)", overflowY: "auto", background: "#f7f4eb", color: "#17231f", borderTop: "6px solid #ffc72c", boxShadow: "0 24px 70px rgba(0,0,0,.35)" }}>
         <header style={{ padding: "28px 32px", background: "#17231f", color: "#fff", display: "flex", justifyContent: "space-between", gap: "20px" }}><div><p style={{ margin: "0 0 7px", color: "#ffc72c", fontSize: "10px", fontWeight: 900, letterSpacing: ".16em", textTransform: "uppercase" }}>Booking management</p><h2 id="cancel-booking-title" style={{ margin: 0, fontSize: "34px", fontWeight: 500 }}>{bookingId ? "Cancel this booking?" : "Delete this test site?"}</h2></div><button type="button" aria-label="Close" disabled={working} onClick={() => setOpen(false)} style={{ ...buttonStyle, width: 44, padding: 0, background: "transparent", borderColor: "#74807b", color: "#fff", fontSize: "22px" }}>×</button></header>

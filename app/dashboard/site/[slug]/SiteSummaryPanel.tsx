@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { authenticatedFetch } from "@/src/lib/authenticated-fetch";
 import CustomDomainStore from "./CustomDomainStore";
-import DeleteSiteButton from "./DeleteSiteButton";
 
 type Props = {
   siteId: string;
@@ -13,11 +12,6 @@ type Props = {
   initialPublicAliases?: string[];
   customDomain?: string;
   canManageAddresses?: boolean;
-  deleteLabel?: string;
-  bookingId?: string;
-  cancellationRecipientName?: string;
-  cancellationRecipientEmail?: string;
-  appointmentStart?: string;
   initialStatus?: string;
   initialOpenHouseEnabled?: boolean;
   initialOpenHouseStart?: string;
@@ -65,11 +59,6 @@ export default function SiteSummaryPanel({
   initialPublicAliases = [],
   customDomain,
   canManageAddresses = false,
-  deleteLabel = "this property site",
-  bookingId,
-  cancellationRecipientName,
-  cancellationRecipientEmail,
-  appointmentStart,
   initialStatus = "active",
   initialOpenHouseEnabled = false,
   initialOpenHouseStart,
@@ -213,7 +202,6 @@ export default function SiteSummaryPanel({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "16px", flexWrap: "wrap", marginTop: "28px", paddingTop: "24px", borderTop: "1px solid #cfd3d0" }}>
-        {canManageAddresses ? <div style={{ marginRight: "auto" }}><DeleteSiteButton siteId={siteId} label={deleteLabel} bookingId={bookingId} recipientName={cancellationRecipientName} recipientEmail={cancellationRecipientEmail} appointmentStart={appointmentStart} /></div> : null}
         {message ? <p role="status" style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: message.includes("saved") ? "#17683a" : "#a02020" }}>{message}</p> : null}
         <button type="button" onClick={save} disabled={saving} style={{ ...quickLinkStyle, width: "min(100%, 420px)", minHeight: "54px", background: "#ffc72c", borderColor: "#ffc72c", color: "#17231f", opacity: saving ? .7 : 1 }}>{saving ? "Saving all settings…" : "Save all website settings"}</button>
       </div>

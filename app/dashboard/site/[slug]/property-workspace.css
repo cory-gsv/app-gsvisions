@@ -443,6 +443,14 @@
   font-weight: 700;
 }
 
+.gsv-site-appointment__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .gsv-site-appointment__action {
   min-height: 50px;
   display: inline-flex;
@@ -1271,6 +1279,14 @@
   }
 
   .gsv-site-appointment__action { width: 100%; box-sizing: border-box; }
+
+  .gsv-site-appointment__actions {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .gsv-site-appointment__cancel { width: 100%; }
 
   .gsv-client-fields {
     grid-template-columns: minmax(0, 1fr);
