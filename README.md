@@ -97,6 +97,10 @@ The shared integration secret is `PORTAL_INGEST_SECRET`. Do not log or expose it
 
 Required behavior:
 
+- Admin cancellation is record-preserving: mark the site and booking canceled, remove their Microsoft 365 appointment events, close pending change requests/notification holds, and retain invoices and payment history.
+- The cancellation dialog defaults to no email. An admin must explicitly choose whether to send the branded client cancellation, and can preview the exact email before taking action. Cancellation emails use the outbox idempotency key `booking-cancellation:{bookingId}` so retries cannot send duplicates.
+- Permanent deletion is reserved for test sites, requires typing `DELETE`, never sends an email, and remains blocked when payment records exist.
+
 - Customer email is required for ingest.
 - Store client name, email, and phone on the booking as a durable snapshot as well as linking a profile.
 - Portal pages must fall back to the booking snapshot if a linked profile is temporarily missing.

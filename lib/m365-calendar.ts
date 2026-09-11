@@ -137,6 +137,66 @@ export async function updateMicrosoftCalendarEventBody(eventId: string, content:
   return updateMicrosoftCalendarEvent({ eventId, content });
 }
 
+export async function deleteMicrosoftCalendarEvent(eventId: string) {
+  if (!isMicrosoftCalendarConfigured()) {
+    return { deleted: false, reason: "microsoft_not_configured" } as const;
+  }
+  const id = String(eventId || "").trim();
+  if (!id) return { deleted: false, reason: "event_id_not_available" } as const;
+  const response = await graphRequest(
+    `/users/${encodeURIComponent(m365CalendarEmail)}/events/${encodeURIComponent(id)}`,
+    { method: "DELETE" },
+  );
+  if (response.status === 404) return { deleted: true, alreadyMissing: true } as const;
+  if (!response.ok) throw new Error(`Microsoft 365 calendar deletion returned ${response.status}.`);
+  return { deleted: true, alreadyMissing: false } as const;
+}
+
+export async function deleteMicrosoftCalendarTravelEvents(args: {
+  propertyAddress: string;
+  scheduledStart: string;
+  scheduledEnd: string;
+}) {
+  if (!isMicrosoftCalendarConfigured()) {
+    return { deleted: false, count: 0, reason: "microsoft_not_configured" } as const;
+  }
+  const start = new Date(args.scheduledStart);
+  const end = new Date(args.scheduledEnd);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return { deleted: false, count: 0, reason: "appointment_time_not_available" } as const;
+  }
+  const query = new URLSearchParams({
+    startDateTime: new Date(start.getTime() - 24 * 60 * 60_000).toISOString(),
+    endDateTime: new Date(end.getTime() + 24 * 60 * 60_000).toISOString(),
+    "$select": "id,subject,start,end",
+    "$orderby": "start/dateTime",
+    "$top": "100",
+  });
+  const response = await graphRequest(
+    `/users/${encodeURIComponent(m365CalendarEmail)}/calendarView?${query}`,
+    { headers: { Prefer: 'outlook.timezone="UTC"' } },
+  );
+  if (!response.ok) throw new Error(`Microsoft 365 travel-block lookup returned ${response.status}.`);
+  const data = await response.json() as { value?: GraphEvent[] };
+  const addressKey = String(args.propertyAddress || "").split(",")[0].trim().toLowerCase();
+  const matchingIds = (data.value || [])
+    .filter((event) => {
+      const subject = String(event.subject || "").toLowerCase();
+      if (!subject.startsWith("travel to") && !subject.startsWith("travel from")) return false;
+      if (addressKey && !subject.includes(addressKey)) return false;
+      const eventStart = parseGraphUtcDateTime(event.start?.dateTime);
+      const eventEnd = parseGraphUtcDateTime(event.end?.dateTime);
+      return Boolean(
+        (eventEnd && Math.abs(eventEnd.getTime() - start.getTime()) <= 2 * 60_000) ||
+        (eventStart && Math.abs(eventStart.getTime() - end.getTime()) <= 2 * 60_000)
+      );
+    })
+    .map((event) => String(event.id || "").trim())
+    .filter(Boolean);
+  await Promise.all(matchingIds.map((id) => deleteMicrosoftCalendarEvent(id)));
+  return { deleted: true, count: matchingIds.length } as const;
+}
+
 export async function createMicrosoftCalendarEvent(args: {
   subject: string;
   content: string;

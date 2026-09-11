@@ -1318,6 +1318,10 @@ export default async function SitePage({
               customDomain={clean(siteData.custom_domain)}
               canManageAddresses={viewerIsAdmin}
               deleteLabel={clean(site.property_full_address) || clean(site.property_address) || clean(site.site_name) || site.id}
+              bookingId={clean(booking?.id)}
+              cancellationRecipientName={[bookingClientFirstName || clean(assignedProfile?.first_name), bookingClientLastName || clean(assignedProfile?.last_name)].filter(Boolean).join(" ")}
+              cancellationRecipientEmail={clean(booking?.client_email) || clean(assignedProfile?.email)}
+              appointmentStart={appointmentStart}
               initialStatus={clean(siteData.listing_status) || "active"}
               initialOpenHouseEnabled={siteData.open_house_enabled === true}
               initialOpenHouseStart={clean(siteData.open_house_start)}
