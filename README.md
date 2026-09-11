@@ -103,6 +103,7 @@ Required behavior:
 - A failed invitation email must never delete the customer profile or order.
 - Exact normalized-address lookup warns about an existing property, but does not automatically reject a legitimate repeat booking.
 - Repeated checkout submissions must be idempotent. Do not create a second order or second payment for the same provider/session event.
+- `profiles.payment_required_at_checkout` is exposed through the signed customer lookup. When enabled, the website must hide deferred payment and both the website pay-later route and portal booking ingest must reject an unpaid booking. The paid Stripe/PayPal completion paths remain the only permitted checkout completion paths for that client.
 
 ## Appointments and calendar
 

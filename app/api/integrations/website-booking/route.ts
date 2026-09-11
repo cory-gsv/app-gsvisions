@@ -159,6 +159,20 @@ export async function POST(request: Request) {
     console.error("WEBSITE_CUSTOMER_RESOLUTION_FAILED", { reference, error: error instanceof Error ? error.message : "Unknown error" });
     return NextResponse.json({ error: "Could not resolve the portal customer." }, { status: 500 });
   }
+  if (body.paid !== true) {
+    const { data: paymentPolicy, error: paymentPolicyError } = await admin
+      .from("profiles")
+      .select("payment_required_at_checkout")
+      .eq("id", customerId)
+      .maybeSingle();
+    if (paymentPolicyError) {
+      console.error("WEBSITE_CUSTOMER_PAYMENT_POLICY_LOOKUP_FAILED", { reference, customerId, error: paymentPolicyError.message });
+      return NextResponse.json({ error: "Could not verify the customer's checkout payment requirement." }, { status: 503 });
+    }
+    if (paymentPolicy?.payment_required_at_checkout === true) {
+      return NextResponse.json({ error: "Payment is required at checkout for this customer." }, { status: 403 });
+    }
+  }
   const incomingLines = Array.isArray(body.lines) ? body.lines : [];
   const assignedLines = incomingLines.map((line) => {
     if (!line || typeof line !== "object" || Array.isArray(line)) return line;

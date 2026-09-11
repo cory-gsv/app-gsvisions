@@ -488,7 +488,7 @@ export async function initClientsDashboard() {
   function applyModalModeUI() {
     const modal = $("#gsv-client-modal")
     modal?.classList.toggle("is-create-mode", _isCreateMode)
-    updateModalTitle(_isCreateMode ? "Add New Client" : "Edit Client")
+    updateModalTitle(_isCreateMode ? "Add New Client" : `Edit ${clientDisplayName(_editingClient)}`)
     updateModalSaveText(_isCreateMode ? "Create Client" : "Save Client")
     setEmailLocked(!_isCreateMode)
     setUploadsEnabled(true)
