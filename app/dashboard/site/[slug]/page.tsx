@@ -1282,15 +1282,15 @@ export default async function SitePage({
             {manageAppointmentUrl ? (
               <div className="gsv-site-appointment" aria-labelledby="gsv-site-appointment-title">
                 <div className="gsv-site-appointment__details">
-                  <div className="gsv-site-appointment__eyebrow">Your appointment</div>
+                  <div className="gsv-site-appointment__eyebrow">{bookingIsCancelled ? "Canceled appointment" : "Your appointment"}</div>
                   <h2 id="gsv-site-appointment-title">{formatAppointmentDate(appointmentStart)}</h2>
                   <p>{formatAppointmentTime(appointmentStart, appointmentEnd)}</p>
                 </div>
                 <div className="gsv-site-appointment__actions">
-                  <Link className="gsv-site-appointment__action" href={manageAppointmentUrl}>
+                  {!bookingIsCancelled ? <Link className="gsv-site-appointment__action" href={manageAppointmentUrl}>
                     <span>Manage appointment</span>
                     <span aria-hidden="true">→</span>
-                  </Link>
+                  </Link> : null}
                   {viewerIsAdmin && !bookingIsCancelled ? (
                     <DeleteSiteButton
                       className="gsv-site-appointment__cancel"
@@ -1301,7 +1301,7 @@ export default async function SitePage({
                       recipientEmail={clean(booking?.client_email) || clean(assignedProfile?.email)}
                       appointmentStart={appointmentStart}
                     />
-                  ) : null}
+                  ) : bookingIsCancelled ? <span className="gsv-site-appointment__cancelled">Booking canceled</span> : null}
                 </div>
               </div>
             ) : null}
