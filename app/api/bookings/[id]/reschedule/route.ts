@@ -476,6 +476,9 @@ export async function GET(
     const tz = BUSINESS_TIME_ZONE;
 
     const { booking, site, location, durationMinutes } = await loadBookingContext(bookingId);
+    if (clean(asRecord(site?.site_data).booking_cancelled_at)) {
+      return NextResponse.json({ error: "This booking has been canceled." }, { status: 410 });
+    }
 
     const scheduledStart = clean(booking.scheduled_start);
     const scheduledEnd = clean(booking.scheduled_end);
@@ -608,6 +611,9 @@ export async function POST(
     }
 
     const { booking, site, location, durationMinutes } = await loadBookingContext(clean(id));
+    if (clean(asRecord(site?.site_data).booking_cancelled_at)) {
+      return NextResponse.json({ error: "This booking has been canceled." }, { status: 410 });
+    }
     const currentScheduledStart = clean(booking.scheduled_start);
     const currentScheduledEnd = clean(booking.scheduled_end);
 

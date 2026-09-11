@@ -73,27 +73,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const siteData = record(loaded.site.site_data);
     const warnings: string[] = [];
-    const pendingEmailId = clean(siteData.appointment_change_email_id);
-    if (pendingEmailId) {
-      const canceled = await cancelScheduledAppointmentChangeEmail(pendingEmailId).catch(() => false);
-      if (!canceled) warnings.push("A previously scheduled appointment-update email could not be canceled automatically.");
-    }
     const calendarIds = Array.from(new Set([
       clean(siteData.calendar_event_id),
       clean(siteData.twilight_calendar_event_id),
+      ...((Array.isArray(siteData.cancelled_calendar_event_ids) ? siteData.cancelled_calendar_event_ids : []).map(clean)),
       ...((Array.isArray(siteData.travel_event_ids) ? siteData.travel_event_ids : []).map(clean)),
       ...((Array.isArray(siteData.twilight_travel_event_ids) ? siteData.twilight_travel_event_ids : []).map(clean)),
     ].filter(Boolean)));
-    for (const calendarId of calendarIds) {
-      await deleteMicrosoftCalendarEvent(calendarId).catch((error) => warnings.push(error instanceof Error ? error.message : "A Microsoft 365 calendar event could not be removed."));
-    }
-    if (loaded.booking.scheduled_start && loaded.booking.scheduled_end) {
-      await deleteMicrosoftCalendarTravelEvents({
-        propertyAddress: loaded.emailArgs.propertyAddress,
-        scheduledStart: loaded.booking.scheduled_start,
-        scheduledEnd: loaded.booking.scheduled_end,
-      }).catch((error) => warnings.push(error instanceof Error ? error.message : "Microsoft 365 travel blocks could not be removed."));
-    }
 
     const now = new Date().toISOString();
     const nextSiteData: Record<string, unknown> = { ...siteData, listing_status: "off_market", booking_cancelled_at: now, booking_cancelled_by: user.id, booking_cancellation_email_requested: sendEmail, cancelled_calendar_event_ids: calendarIds };
@@ -105,10 +91,35 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     delete nextSiteData.appointment_change_email_scheduled_for;
     delete nextSiteData.appointment_change_email_start;
 
-    const { error: siteUpdateError } = await admin.from("sites").update({ status: "cancelled", site_data: nextSiteData, updated_at: now }).eq("id", siteId);
+    // Production's legacy sites_status_check does not accept a cancellation
+    // status. Store the cancellation in site_data and make every active/public
+    // query honor that marker instead of writing an unsupported enum value.
+    const { error: siteUpdateError } = await admin.from("sites").update({
+      site_data: nextSiteData,
+      is_published: false,
+      public_site_enabled: false,
+      updated_at: now,
+    }).eq("id", siteId);
     if (siteUpdateError) throw siteUpdateError;
-    const { error: bookingUpdateError } = await admin.from("bookings").update({ status: "cancelled", updated_at: now }).eq("id", loaded.booking.id);
-    if (bookingUpdateError) throw bookingUpdateError;
+
+    // Only perform external side effects after the durable cancellation marker
+    // has been saved. This prevents a failed database write from orphaning the
+    // appointment after its calendar event has already been removed.
+    const pendingEmailId = clean(siteData.appointment_change_email_id);
+    if (pendingEmailId) {
+      const canceled = await cancelScheduledAppointmentChangeEmail(pendingEmailId).catch(() => false);
+      if (!canceled) warnings.push("A previously scheduled appointment-update email could not be canceled automatically.");
+    }
+    for (const calendarId of calendarIds) {
+      await deleteMicrosoftCalendarEvent(calendarId).catch((error) => warnings.push(error instanceof Error ? error.message : "A Microsoft 365 calendar event could not be removed."));
+    }
+    if (loaded.booking.scheduled_start && loaded.booking.scheduled_end) {
+      await deleteMicrosoftCalendarTravelEvents({
+        propertyAddress: loaded.emailArgs.propertyAddress,
+        scheduledStart: loaded.booking.scheduled_start,
+        scheduledEnd: loaded.booking.scheduled_end,
+      }).catch((error) => warnings.push(error instanceof Error ? error.message : "Microsoft 365 travel blocks could not be removed."));
+    }
     const { error: requestError } = await admin.from("appointment_change_requests").update({ status: "canceled", reviewed_at: now, reviewed_by: user.id, updated_at: now }).eq("booking_id", loaded.booking.id).eq("status", "pending");
     if (requestError && requestError.code !== "42P01") warnings.push(`The pending cancellation-request record could not be closed: ${requestError.message}`);
     const { error: holdError } = await admin.from("notification_holds").update({ active: false, released_by: user.id, released_at: now }).eq("booking_id", loaded.booking.id).eq("active", true);

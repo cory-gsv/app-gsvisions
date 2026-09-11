@@ -34,10 +34,11 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
     const admin = serviceClient();
     const { data: site, error: siteError } = await admin.from("sites")
-      .select("id, client_id, client_ms_id, property_address, property_full_address, address_full, site_name, name, status")
+      .select("id, client_id, client_ms_id, property_address, property_full_address, address_full, site_name, name, status, site_data")
       .eq("id", id).maybeSingle();
     if (siteError || !site) return NextResponse.json({ error: "Property website not found." }, { status: 404 });
-    if (["cancelled", "canceled", "archived"].includes(clean(site.status).toLowerCase())) return NextResponse.json({ error: "This property website is not accepting inquiries." }, { status: 410 });
+    const siteData = site.site_data && typeof site.site_data === "object" && !Array.isArray(site.site_data) ? site.site_data as Record<string, unknown> : {};
+    if (clean(siteData.booking_cancelled_at) || ["cancelled", "canceled", "archived"].includes(clean(site.status).toLowerCase())) return NextResponse.json({ error: "This property website is not accepting inquiries." }, { status: 410 });
 
     const clientId = clean(site.client_id) || clean(site.client_ms_id);
     if (!clientId) return NextResponse.json({ error: "This listing does not have a contact assigned." }, { status: 409 });

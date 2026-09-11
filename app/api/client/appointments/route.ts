@@ -41,7 +41,10 @@ export async function GET(request: Request) {
 
     const activeSites = (sites || []).filter((site) => {
       const status = clean(site.status).toLowerCase();
-      return status !== "cancelled" && status !== "canceled" && status !== "archived";
+      const data = site.site_data && typeof site.site_data === "object" && !Array.isArray(site.site_data)
+        ? site.site_data as Record<string, unknown>
+        : {};
+      return !clean(data.booking_cancelled_at) && status !== "cancelled" && status !== "canceled" && status !== "archived";
     });
     const bookingIds = Array.from(
       new Set(activeSites.map((site) => clean(site.booking_id)).filter(Boolean)),

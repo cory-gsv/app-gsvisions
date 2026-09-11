@@ -85,7 +85,7 @@ async function loadSite(identifier: string) {
       return makePropertySiteSlug(address).toLowerCase() === wanted || aliases.includes(normalizePropertySiteSlug(wanted)) || customDomains.includes(wanted);
     }) as AnyRow | undefined || null;
   }
-  if (!resolved || ["cancelled", "canceled", "archived"].includes(clean(resolved.status).toLowerCase())) return null;
+  if (!resolved || clean(siteData(resolved).booking_cancelled_at) || ["cancelled", "canceled", "archived"].includes(clean(resolved.status).toLowerCase())) return null;
   return resolved;
 }
 

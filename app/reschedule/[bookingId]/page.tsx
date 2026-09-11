@@ -15,6 +15,12 @@ function clean(v: unknown): string {
   return String(v ?? "").trim();
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 function getAdminSupabase() {
   const url =
     process.env.NEXT_PUBLIC_SUPABASE_URL ||
@@ -100,11 +106,14 @@ export default async function ReschedulePage({
       property_state,
       property_zip,
       property_full_address,
-      address_full
+      address_full,
+      site_data
     `)
     .eq("booking_id", cleanBookingId)
     .limit(1)
     .maybeSingle();
+
+  if (clean(asRecord(site?.site_data).booking_cancelled_at)) notFound();
 
   const location =
     clean(site?.property_full_address) ||

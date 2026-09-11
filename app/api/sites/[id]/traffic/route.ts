@@ -30,8 +30,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const mediaAssetId = eventType === "media_view" ? clean(body.media_asset_id, 80) : "";
     const db = adminClient();
 
-    const { data: site } = await db.from("sites").select("id, status").eq("id", id).maybeSingle();
-    if (!site || ["cancelled", "canceled", "archived"].includes(clean(site.status, 30).toLowerCase())) {
+    const { data: site } = await db.from("sites").select("id, status, site_data").eq("id", id).maybeSingle();
+    const siteData = site?.site_data && typeof site.site_data === "object" && !Array.isArray(site.site_data) ? site.site_data as Record<string, unknown> : {};
+    if (!site || clean(siteData.booking_cancelled_at, 100) || ["cancelled", "canceled", "archived"].includes(clean(site.status, 30).toLowerCase())) {
       return NextResponse.json({ error: "Site not found." }, { status: 404 });
     }
 
@@ -82,4 +83,3 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     return NextResponse.json({ error: "Could not record site traffic." }, { status: 500 });
   }
 }
-

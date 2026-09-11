@@ -998,13 +998,14 @@ export default async function SitePage({
   const legacyGalleryImages = getGalleryImages(site.gallery);
 
   const siteData = getSiteData(site.site_data);
+  const bookingIsCancelled = Boolean(clean(siteData.booking_cancelled_at));
 
   const hasAppointment = Boolean(
     clean(booking?.scheduled_start) || clean(siteData.calendar_event_id) || clean(siteData.fulfillment_appointment_id)
   );
   const storedLifecycle = clean(site.status).toLowerCase() || "draft";
-  const lifecycleStatus = storedLifecycle === "draft" && hasAppointment ? "scheduled" : storedLifecycle;
-  if (lifecycleStatus !== storedLifecycle) {
+  const lifecycleStatus = bookingIsCancelled ? "cancelled" : storedLifecycle === "draft" && hasAppointment ? "scheduled" : storedLifecycle;
+  if (!bookingIsCancelled && lifecycleStatus !== storedLifecycle) {
     const { error: lifecycleError } = await adminSb
       .from("sites")
       .update({ status: lifecycleStatus, updated_at: new Date().toISOString() })

@@ -10,8 +10,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
   if (!url || !key) return [{ url: base, changeFrequency: "weekly", priority: 1 }];
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-  const { data } = await db.from("sites").select("slug,site_slug,updated_at,is_published,public_site_enabled,status,property_address,property_full_address,address_full,site_name,name");
-  const sites = (Array.isArray(data) ? data : []).filter((site) => !["cancelled", "canceled", "archived"].includes(String(site.status || "").toLowerCase())).flatMap((site) => {
+  const { data } = await db.from("sites").select("slug,site_slug,updated_at,is_published,public_site_enabled,status,site_data,property_address,property_full_address,address_full,site_name,name");
+  const sites = (Array.isArray(data) ? data : []).filter((site) => {
+    const siteData = site.site_data && typeof site.site_data === "object" && !Array.isArray(site.site_data)
+      ? site.site_data as Record<string, unknown>
+      : {};
+    return !String(siteData.booking_cancelled_at || "").trim() && !["cancelled", "canceled", "archived"].includes(String(site.status || "").toLowerCase());
+  }).flatMap((site) => {
     const slug = String(site.site_slug || "").trim() || makePropertySiteSlug(site.property_address || site.property_full_address || site.address_full || site.site_name || site.name) || String(site.slug || "").trim();
     return slug ? [{ url: `${base}/${slug}`, lastModified: site.updated_at ? new Date(site.updated_at) : undefined, changeFrequency: "weekly" as const, priority: 0.8 }] : [];
   });
