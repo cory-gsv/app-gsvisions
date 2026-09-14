@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { createRescheduleToken } from "@/lib/reschedule-token";
 import { requireOutboundEmailApiKey } from "@/lib/outbound-email";
+import { buildAppointmentUpdateIcs } from "@/lib/calendar-invite";
 
 const LOGO_URL = "https://res.cloudinary.com/dqcgvorw1/image/upload/v1773956428/Wide-w-House_mip8se.png";
 const CORY_PHOTO_URL = "https://res.cloudinary.com/dqcgvorw1/image/upload/v1773956828/GSVME_umbfcz.jpg";
@@ -204,6 +205,20 @@ export async function scheduleAppointmentChangeEmail(args: {
     "Cory", "Golden State Visions · (916) 432-3373 · gsvisions.co",
   ].join("\n");
   const themedHtml = applyEmailTheme(html);
+  const calendarDescription = [
+    "Golden State Visions photoshoot appointment.",
+    `Manage appointment: ${manageUrl}`,
+    "Questions: (916) 432-3373",
+  ].join("\n");
+  const icsContent = buildAppointmentUpdateIcs({
+    bookingId: args.bookingId,
+    scheduledStart: args.scheduledStart,
+    scheduledEnd: clean(args.scheduledEnd),
+    propertyAddress,
+    description: calendarDescription,
+    generatedAt: sentAt,
+  });
+  if (!icsContent) throw new Error("The updated appointment email is missing a valid appointment end time for its calendar attachment.");
 
   const emailRequest = {
     from: process.env.EMAIL_FROM || "Golden State Visions <onboarding@resend.dev>",
@@ -214,6 +229,11 @@ export async function scheduleAppointmentChangeEmail(args: {
     subject: `${args.sample ? "[SAMPLE] " : ""}Appointment updated – ${propertyAddress}`,
     html: themedHtml,
     text,
+    attachments: [{
+      filename: "golden-state-visions-appointment.ics",
+      content: Buffer.from(icsContent).toString("base64"),
+      contentType: "text/calendar; charset=utf-8; method=REQUEST",
+    }],
   };
   const idempotencyKey = clean(args.idempotencyKey);
   const { data, error } = await resend.emails.send(
