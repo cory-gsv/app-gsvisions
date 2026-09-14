@@ -193,6 +193,7 @@ export async function initClientsDashboard() {
     role: "role",
     sms_enabled: "sms_enabled",
     payment_required_at_checkout: "payment_required_at_checkout",
+    ordering_blocked: "ordering_blocked",
     brokerage_name: "brokerage_name",
     mls_license: "mls_license",
     brokerage_website_url: "brokerage_website_url",
@@ -244,6 +245,7 @@ export async function initClientsDashboard() {
           "is_admin",
           COL.sms_enabled,
           COL.payment_required_at_checkout,
+          COL.ordering_blocked,
           COL.brokerage_name,
           COL.mls_license,
           COL.brokerage_website_url,
@@ -534,6 +536,7 @@ export async function initClientsDashboard() {
     setVal("#gsv-cm-role", "user")
     setVal("#gsv-cm-sms", false)
     setVal("#gsv-cm-payment-required", false)
+    setVal("#gsv-cm-ordering-blocked", false)
     populateAssistantOptions()
 
     setImgSafe("#gsv-cm-avatar-img", "", { placeholder: window.GSV_PLACEHOLDER_LOGO })
@@ -569,6 +572,7 @@ export async function initClientsDashboard() {
     setVal("#gsv-cm-role", clean(client.role) || "user")
     setVal("#gsv-cm-sms", !!client.sms_enabled)
     setVal("#gsv-cm-payment-required", !!client.payment_required_at_checkout)
+    setVal("#gsv-cm-ordering-blocked", !!client.ordering_blocked)
     populateAssistantOptions(clean(client.assistant_to_profile_id), clean(client.id))
 
     applyModalModeUI()
@@ -600,6 +604,7 @@ export async function initClientsDashboard() {
             <div class="gsv-client__email">${email ? escapeHtml(email) : '<span style="opacity:.6;">No email</span>'}</div>
             <div class="gsv-client__phone">${phone ? escapeHtml(phone) : '<span style="opacity:.6;">No phone</span>'}</div>
             ${realtor ? `<div class="gsv-client__assistant">Assistant to: ${escapeHtml(clientDisplayName(realtor))}</div>` : ""}
+            ${c?.ordering_blocked ? `<div class="gsv-client__assistant" style="color:#b42318;">Ordering blocked</div>` : ""}
           </div>
         </div>
 
@@ -709,6 +714,7 @@ export async function initClientsDashboard() {
       [COL.role]: role,
       [COL.sms_enabled]: smsEnabled,
       [COL.payment_required_at_checkout]: paymentRequired,
+      [COL.ordering_blocked]: !!$("#gsv-cm-ordering-blocked")?.checked,
       [COL.brokerage_name]: brokerage || null,
       [COL.mls_license]: mls || null,
       [COL.brokerage_website_url]: clean($("#gsv-cm-website")?.value) || null,
@@ -780,6 +786,7 @@ export async function initClientsDashboard() {
       [COL.role]: clean($("#gsv-cm-role")?.value) || "user",
       [COL.sms_enabled]: !!$("#gsv-cm-sms")?.checked,
       [COL.payment_required_at_checkout]: !!$("#gsv-cm-payment-required")?.checked,
+      [COL.ordering_blocked]: !!$("#gsv-cm-ordering-blocked")?.checked,
       [COL.assistant_to_profile_id]: clean($("#gsv-cm-assistant-to")?.value) || null
     }
 

@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     if (listCustomers) {
       const { data, error } = await adminClient()
         .from("profiles")
-        .select("id,email,first_name,last_name,full_name,phone,role,is_admin,payment_required_at_checkout")
+        .select("id,email,first_name,last_name,full_name,phone,role,is_admin,payment_required_at_checkout,ordering_blocked")
         .order("first_name", { ascending: true })
         .limit(500);
       if (error) throw error;
@@ -72,6 +72,7 @@ export async function POST(request: Request) {
           name: clean(profile.full_name) || [clean(profile.first_name), clean(profile.last_name)].filter(Boolean).join(" "),
           phone: clean(profile.phone),
           payment_required_at_checkout: profile.payment_required_at_checkout === true,
+          ordering_blocked: profile.ordering_blocked === true,
         }))
         .filter((customer) => customer.id && customer.email)
         .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
     const admin = adminClient();
     let query = admin
       .from("profiles")
-      .select("id,email,first_name,last_name,full_name,phone,payment_required_at_checkout");
+      .select("id,email,first_name,last_name,full_name,phone,payment_required_at_checkout,ordering_blocked");
     query = profileId ? query.eq("id", profileId) : query.ilike("email", email);
     const { data, error } = await query.maybeSingle();
     if (error) throw error;
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
             name,
             phone: clean(data.phone),
             payment_required_at_checkout: data.payment_required_at_checkout === true,
+            ordering_blocked: data.ordering_blocked === true,
           }
         : null,
       assistant_cc_emails: assistantCc,

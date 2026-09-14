@@ -1492,6 +1492,27 @@ export default function DashboardPage() {
             />
             Require payment at checkout during booking
           </label>
+
+          <label
+            className="gsv-dash__label"
+            style={{
+              marginTop: 10,
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              color: "#b42318",
+            }}
+          >
+            <input
+              id="gsv-cm-ordering-blocked"
+              type="checkbox"
+              style={{ transform: "translateY(1px)" }}
+            />
+            Block this client from placing new orders
+          </label>
+          <div className="gsv-dash__mini">
+            Existing properties and portal access remain available. New invoice, card, and PayPal orders are rejected.
+          </div>
           </div>
 
           <div className="gsv-modal__actions">

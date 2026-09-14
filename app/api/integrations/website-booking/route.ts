@@ -159,6 +159,18 @@ export async function POST(request: Request) {
     console.error("WEBSITE_CUSTOMER_RESOLUTION_FAILED", { reference, error: error instanceof Error ? error.message : "Unknown error" });
     return NextResponse.json({ error: "Could not resolve the portal customer." }, { status: 500 });
   }
+  const { data: orderingPolicy, error: orderingPolicyError } = await admin
+    .from("profiles")
+    .select("ordering_blocked")
+    .eq("id", customerId)
+    .maybeSingle();
+  if (orderingPolicyError) {
+    console.error("WEBSITE_CUSTOMER_ORDERING_POLICY_LOOKUP_FAILED", { reference, customerId, error: orderingPolicyError.message });
+    return NextResponse.json({ error: "Could not verify the customer's ordering access." }, { status: 503 });
+  }
+  if (orderingPolicy?.ordering_blocked === true) {
+    return NextResponse.json({ error: "Online ordering is unavailable for this account. Please call (916) 432-3373." }, { status: 403 });
+  }
   if (body.paid !== true) {
     const { data: paymentPolicy, error: paymentPolicyError } = await admin
       .from("profiles")

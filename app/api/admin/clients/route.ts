@@ -58,10 +58,12 @@ export async function POST(request: Request) {
       "brokerage_website_url", "facebook_url", "instagram_url", "linkedin_url",
       "twitter_url", "youtube_url",
       "assistant_to_profile_id",
+      "ordering_blocked",
     ];
     const supplied = Object.fromEntries(allowedFields.map((key) => [key, body[key] ?? null]));
     const profile = {
       ...supplied,
+      ordering_blocked: body.ordering_blocked === true,
       id: authData.user.id,
       email,
       role: clean(body.role) || "user",
@@ -144,6 +146,7 @@ export async function PATCH(request: Request) {
       update.is_admin = nextRole === "admin";
       update.sms_enabled = body.sms_enabled === true;
       update.payment_required_at_checkout = body.payment_required_at_checkout === true;
+      update.ordering_blocked = body.ordering_blocked === true;
     }
     const { data, error } = await admin.from("profiles").update(update).eq("id", clientId).select("*").maybeSingle();
     if (error) throw error;
