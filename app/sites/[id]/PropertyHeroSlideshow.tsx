@@ -42,11 +42,11 @@ export default function PropertyHeroSlideshow({ images, address, place, agentNam
       <div className="vertical-address">{address}{place ? <><i />{place}</> : null}</div>
       <div className="hero-agents" aria-label="Listing agents">
         <div className="hero-agent">
-          {agentPhoto ? <img src={agentPhoto} alt={agentName} /> : <span>{agentName.charAt(0)}</span>}
+          {agentPhoto ? <img src={agentPhoto} alt={agentName} /> : null}
           <div><strong>{agentName}</strong>{brokerage ? <small>{brokerage}</small> : null}{phone ? <small>{phone}</small> : null}{license ? <small>LIC. {license}</small> : null}{listingMls ? <small>MLS# {listingMls}</small> : null}</div>
         </div>
         {coLister ? <div className="hero-agent">
-          {coLister.photo ? <img src={coLister.photo} alt={coLister.name} /> : <span>{coLister.name.charAt(0)}</span>}
+          {coLister.photo ? <img src={coLister.photo} alt={coLister.name} /> : null}
           <div><strong>{coLister.name}</strong>{coLister.brokerage ? <small>{coLister.brokerage}</small> : null}{coLister.phone ? <small>{coLister.phone}</small> : null}{coLister.license ? <small>LIC. {coLister.license}</small> : null}</div>
         </div> : null}
       </div>

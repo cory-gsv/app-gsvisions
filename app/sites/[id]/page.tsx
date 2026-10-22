@@ -20,6 +20,11 @@ function clean(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function brokerageDisplayName(value: unknown) {
+  const name = clean(value);
+  return /^not\s+added$/i.test(name) ? "" : name;
+}
+
 function adminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -200,7 +205,7 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
   const agentName = clean(agent?.full_name) || [clean(agent?.first_name), clean(agent?.last_name)].filter(Boolean).join(" ") || "Golden State Visions";
   const agentPhone = clean(agent?.phone);
   const agentEmail = clean(agent?.email);
-  const brokerageName = clean(agent?.brokerage_name);
+  const brokerageName = brokerageDisplayName(agent?.brokerage_name);
   const brokerageLogo = clean(agent?.brokerage_logo1_url) || clean(agent?.brokerage_logo2_url);
   const agentPhoto = clean(agent?.profile_photo_url);
   const agentLicense = clean(agent?.mls_license);
@@ -217,7 +222,7 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
   const coListerEmail = clean(coLister?.email);
   const coListerPhoto = clean(coLister?.profile_photo_url);
   const coListerLicense = clean(coLister?.mls_license);
-  const coListerBrokerage = clean(coLister?.brokerage_name);
+  const coListerBrokerage = brokerageDisplayName(coLister?.brokerage_name);
   const coListerBrokerageLogo = clean(coLister?.brokerage_logo1_url) || clean(coLister?.brokerage_logo2_url);
   const description = clean(data.public_site_description) || clean(data.description);
   const listingMls = clean(data.listing_mls_number) || clean(data.mls_number) || clean(data.listing_mls);
@@ -278,7 +283,7 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
       <div><a href="#details">Details</a>{video ? <a href="#video">Video</a> : null}{gallery.length ? <a href="#gallery">Gallery</a> : null}{tour ? <a href="#tour">3D Scanning</a> : null}{floorPlans.length ? <a href="#floor-plans">Floor plans</a> : null}<a href="#contact">Contact</a><a href="#map">Map</a></div>
     </nav>
 
-    <PropertyHeroSlideshow images={heroImages} address={streetAddress} place={place} agentName={agentName} agentPhoto={clean(agent?.profile_photo_url)} brokerage={clean(agent?.brokerage_name)} phone={agentPhone} license={clean(agent?.mls_license)} listingMls={listingMls} status={listingStatus} coLister={coListerName ? { name: coListerName, photo: coListerPhoto, brokerage: coListerBrokerage, phone: coListerPhone, license: coListerLicense } : undefined} />
+    <PropertyHeroSlideshow images={heroImages} address={streetAddress} place={place} agentName={agentName} agentPhoto={clean(agent?.profile_photo_url)} brokerage={brokerageName} phone={agentPhone} license={clean(agent?.mls_license)} listingMls={listingMls} status={listingStatus} coLister={coListerName ? { name: coListerName, photo: coListerPhoto, brokerage: coListerBrokerage, phone: coListerPhone, license: coListerLicense } : undefined} />
 
     <div className="property-facts-wrap">
       {formattedListPrice ? <div className="property-list-price"><span>Offered at</span><strong>{formattedListPrice}</strong></div> : null}
@@ -301,8 +306,8 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
       <div className="property-contact-inner">
         {agentEmail ? <PropertyContactPanel siteId={clean(site.id)} agentName={agentName} propertyAddress={fullAddress || address} /> : null}
         <aside className="listing-agent-profile">
-          <div className="listing-agent-main">
-            {agentPhoto ? <img className="listing-agent-photo" src={agentPhoto} alt={agentName} /> : <div className="agent-placeholder">{agentName.charAt(0)}</div>}
+          <div className={`listing-agent-main${agentPhoto ? "" : " without-photo"}`}>
+            {agentPhoto ? <img className="listing-agent-photo" src={agentPhoto} alt={agentName} /> : null}
             <div className="listing-agent-copy">
               <p className="eyebrow">Listing contact</p><h2>{agentName}</h2>
               {agentPhone ? <a href={`tel:${agentPhone.replace(/[^+\d]/g, "")}`}>{agentPhone}</a> : null}
@@ -311,8 +316,8 @@ export default async function PublicPropertySite({ params }: { params: Promise<{
               {(agentWebsite || socialLinks.length) ? <div className="agent-social-links">{agentWebsite ? <a href={agentWebsite} target="_blank" rel="noreferrer">Website ↗</a> : null}{socialLinks.map((item) => <a key={item.label} href={item.url} target="_blank" rel="noreferrer">{item.label} ↗</a>)}</div> : null}
             </div>
           </div>
-          {coListerName ? <div className="listing-agent-main">
-            {coListerPhoto ? <img className="listing-agent-photo" src={coListerPhoto} alt={coListerName} /> : <div className="agent-placeholder">{coListerName.charAt(0)}</div>}
+          {coListerName ? <div className={`listing-agent-main${coListerPhoto ? "" : " without-photo"}`}>
+            {coListerPhoto ? <img className="listing-agent-photo" src={coListerPhoto} alt={coListerName} /> : null}
             <div className="listing-agent-copy">
               <p className="eyebrow">Co-listing contact</p><h2>{coListerName}</h2>
               {coListerPhone ? <a href={`tel:${coListerPhone.replace(/[^+\d]/g, "")}`}>{coListerPhone}</a> : null}

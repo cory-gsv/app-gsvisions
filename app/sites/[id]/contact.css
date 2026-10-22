@@ -47,6 +47,7 @@
 .contact-form-note.is-error { color: #ff8f85; }
 .listing-agent-profile { display: grid; gap: 32px; }
 .listing-agent-main { display: grid; grid-template-columns: 214px minmax(0, 1fr); gap: 36px; align-items: start; }
+.listing-agent-main.without-photo { grid-template-columns: minmax(0, 1fr); }
 .listing-agent-photo,
 .listing-agent-main .agent-placeholder { width: 214px; height: 262px; border: 2px solid #fff; border-radius: 0; object-fit: cover; }
 .listing-agent-copy h2 { font-size: clamp(40px, 4vw, 58px); margin-bottom: 18px; }

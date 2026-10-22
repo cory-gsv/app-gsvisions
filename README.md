@@ -177,6 +177,10 @@ Before payment testing, confirm all of the following explicitly:
 
 ## Media delivery and access control
 
+Public property websites hide the brokerage text line when the profile brokerage is blank or the placeholder `Not added` (ignoring case and whitespace). This applies to both listing agents in the hero and contact section; saved profile values are unchanged.
+Agents without a profile photo have no image or initial placeholder in either section, and their contact details use the available width without reserving a photo column.
+Run `node --test tests/property-agent-display.test.mjs` to render both listing agents with fixture records and verify missing details are omitted while photos, names, logos, contact links, gallery, and video remain available. The test uses no live data or services.
+
 Media release and payment unlock are different concepts:
 
 - A file must be published/ready before it is releasable.
