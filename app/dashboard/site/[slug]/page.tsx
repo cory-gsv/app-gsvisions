@@ -639,10 +639,12 @@ function statusPillStyle(active: boolean, delivered = false): React.CSSPropertie
 
 export default async function SitePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ domain_purchase?: string }>;
 }) {
-  const { slug } = await params;
+  const [{ slug }, query] = await Promise.all([params, searchParams]);
   const cleanSlug = clean(slug);
   const lookupSlug = normalizePropertySiteSlug(cleanSlug);
   const isSiteId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanSlug);
@@ -1333,6 +1335,8 @@ export default async function SitePage({
               initialPublicSlug={propertySiteSlug}
               initialPublicAliases={publicSiteAliases}
               customDomain={clean(siteData.custom_domain)}
+              domainPurchaseProcessing={query.domain_purchase === "processing"}
+              domainPurchases={Array.isArray(siteData.custom_domains) ? siteData.custom_domains.map((item: unknown) => { const purchase = item as Record<string, unknown>; return { domain: clean(purchase.domain), status: clean(purchase.status) }; }) : []}
               canManageAddresses={viewerIsAdmin}
               initialStatus={clean(siteData.listing_status) || "active"}
               initialOpenHouseEnabled={siteData.open_house_enabled === true}

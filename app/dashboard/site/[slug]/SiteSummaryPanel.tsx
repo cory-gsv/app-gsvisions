@@ -11,6 +11,8 @@ type Props = {
   initialPublicSlug: string;
   initialPublicAliases?: string[];
   customDomain?: string;
+  domainPurchaseProcessing?: boolean;
+  domainPurchases?: { domain: string; status: string }[];
   canManageAddresses?: boolean;
   initialStatus?: string;
   initialOpenHouseEnabled?: boolean;
@@ -58,6 +60,8 @@ export default function SiteSummaryPanel({
   initialPublicSlug,
   initialPublicAliases = [],
   customDomain,
+  domainPurchases,
+  domainPurchaseProcessing,
   canManageAddresses = false,
   initialStatus = "active",
   initialOpenHouseEnabled = false,
@@ -184,6 +188,8 @@ export default function SiteSummaryPanel({
           <CustomDomainStore
             siteId={siteId}
             currentDomain={customDomain}
+            initialPurchases={domainPurchases}
+            purchaseProcessing={domainPurchaseProcessing}
             suggestedDomain={`${(initialPublicSlug || "property").replace(/[^a-z0-9]/gi, "").toLowerCase()}.com`}
           />
         </div>

@@ -1,7 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { addDomainToProject, buyDomain, getDomainQuote, normalizeDomain } from "@/lib/custom-domains";
 import { completeDomainPurchase as completePaidDomainPurchase, registrantFromMetadata } from "@/lib/domain-purchase";
 import { sendPaymentReceivedEmail } from "@/lib/payment-received-email";
 
@@ -14,110 +13,18 @@ function adminClient() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
-
 async function completeDomainPurchase(stripe: Stripe, supabase: ReturnType<typeof adminClient>, session: Stripe.Checkout.Session) {
-  const siteId = String(session.metadata?.site_id || "").trim();
-  const domain = normalizeDomain(session.metadata?.domain);
-  const chargedCents = Number(session.metadata?.retail_price_cents || session.amount_total || 0);
-  if (!siteId || !domain || !Number.isSafeInteger(chargedCents) || chargedCents <= 0) throw new Error("Invalid custom-domain checkout metadata.");
-
-  const { data: site, error: siteError } = await supabase.from("sites").select("id, site_data").eq("id", siteId).maybeSingle();
-  if (siteError || !site) throw new Error(siteError?.message || "The property linked to this domain no longer exists.");
-  const siteData = asRecord(site.site_data);
-  const domains = Array.isArray(siteData.custom_domains) ? siteData.custom_domains.map(asRecord) : [];
-  if (domains.some((item) => normalizeDomain(item.domain) === domain && ["active", "purchased", "configuration_required"].includes(String(item.status).toLowerCase()))) return;
-
-  if (!session.livemode) {
-    const testPurchase = {
-      domain,
-      status: "test_checkout_complete",
-      checkout_session_id: session.id,
-      amount_paid_cents: chargedCents,
-      tested_at: new Date().toISOString(),
-      renew: false,
-    };
-    const { error: testUpdateError } = await supabase.from("sites").update({
-      site_data: {
-        ...siteData,
-        custom_domains: [...domains.filter((item) => normalizeDomain(item.domain) !== domain), testPurchase],
-      },
-      updated_at: new Date().toISOString(),
-    }).eq("id", siteId);
-    if (testUpdateError) throw new Error(testUpdateError.message);
-    return;
-  }
-
   const paymentIntent = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
   const details = session.customer_details;
-  const address = details?.address;
-  const nameParts = String(details?.name || "Golden State Visions Client").trim().split(/\s+/);
-  const contact = {
-    firstName: nameParts[0] || "Golden",
-    lastName: nameParts.slice(1).join(" ") || "State Visions Client",
-    email: String(details?.email || session.customer_email || "").trim(),
-    phone: String(details?.phone || "").trim(),
-    address1: String(address?.line1 || "").trim(),
-    city: String(address?.city || "").trim(),
-    state: String(address?.state || "").trim(),
-    postalCode: String(address?.postal_code || "").trim(),
-    country: String(address?.country || "US").trim(),
-  };
-
-  try {
-    if (!contact.email || !contact.phone || !contact.address1 || !contact.city || !contact.state || !contact.postalCode) throw new Error("Checkout did not provide the registrant contact details required by the domain registrar.");
-    const quote = await getDomainQuote(domain);
-    if (!quote.available) throw new Error(`${domain} was registered by someone else before checkout completed.`);
-    await buyDomain({ domain, wholesalePriceCents: quote.wholesalePriceCents, contact });
-  } catch (error) {
-    let refunded = false;
-    if (paymentIntent) {
-      await stripe.refunds.create({ payment_intent: paymentIntent, reason: "requested_by_customer", metadata: { purpose: "custom_domain_registration_failed", site_id: siteId, domain } });
-      refunded = true;
-    }
-    const failure = {
-      domain,
-      status: refunded ? "registration_failed_refunded" : "registration_failed",
-      checkout_session_id: session.id,
-      payment_intent_id: paymentIntent || null,
-      amount_paid_cents: chargedCents,
-      error: error instanceof Error ? error.message : "Domain registration failed.",
-      updated_at: new Date().toISOString(),
-    };
-    await supabase.from("sites").update({ site_data: { ...siteData, custom_domains: [...domains.filter((item) => normalizeDomain(item.domain) !== domain), failure] }, updated_at: new Date().toISOString() }).eq("id", siteId);
-    return;
-  }
-
-  let status = "active";
-  let configurationError: string | null = null;
-  try {
-    await addDomainToProject(domain);
-  } catch (error) {
-    status = "configuration_required";
-    configurationError = error instanceof Error ? error.message : "The purchased domain could not be attached to the website project.";
-  }
-  const purchase = {
-    domain,
-    status,
-    checkout_session_id: session.id,
-    payment_intent_id: paymentIntent || null,
-    amount_paid_cents: chargedCents,
-    purchased_at: new Date().toISOString(),
-    renew: false,
-    expires_at: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-    configuration_error: configurationError,
-  };
-  const { error: updateError } = await supabase.from("sites").update({
-    site_data: {
-      ...siteData,
-      custom_domain: String(siteData.custom_domain || domain),
-      custom_domains: [...domains.filter((item) => normalizeDomain(item.domain) !== domain), purchase],
-    },
-    updated_at: new Date().toISOString(),
-  }).eq("id", siteId);
-  if (updateError) throw new Error(updateError.message);
+  const names = String(details?.name || "").trim().split(/\s+/);
+  const result = await completePaidDomainPurchase({
+    db: supabase, siteId: String(session.metadata?.site_id || ""), domain: String(session.metadata?.domain || ""),
+    chargedCents: session.amount_total || 0, paymentReference: paymentIntent || session.id, provider: "stripe", live: session.livemode,
+    maxWholesaleCents: session.metadata?.wholesale_price_cents ? Number(session.metadata.wholesale_price_cents) : undefined,
+    contact: { firstName: names[0] || "", lastName: names.slice(1).join(" "), email: details?.email || session.customer_email || "", phone: details?.phone || "", address1: details?.address?.line1 || "", city: details?.address?.city || "", state: details?.address?.state || "", postalCode: details?.address?.postal_code || "", country: details?.address?.country || "US" },
+    refund: paymentIntent ? () => stripe.refunds.create({ payment_intent: paymentIntent, reason: "requested_by_customer" }, { idempotencyKey: `domain-refund-${paymentIntent}` }).then(() => undefined) : undefined,
+  });
+  if (result.status === "registration_pending") throw new Error("Registrar order is still processing; retry this webhook.");
 }
 
 export async function POST(request: Request) {
@@ -155,7 +62,7 @@ export async function POST(request: Request) {
     const intent = event.data.object as Stripe.PaymentIntent;
     if (intent.metadata.purpose === "custom_domain_purchase") {
       try {
-        await completePaidDomainPurchase({
+        const result = await completePaidDomainPurchase({
           db: supabase,
           siteId: String(intent.metadata.site_id || "").trim(),
           domain: intent.metadata.domain,
@@ -164,8 +71,10 @@ export async function POST(request: Request) {
           provider: "stripe",
           contact: registrantFromMetadata(intent.metadata),
           live: intent.livemode,
-          refund: () => stripe.refunds.create({ payment_intent: intent.id, reason: "requested_by_customer", metadata: { purpose: "custom_domain_registration_failed", site_id: intent.metadata.site_id || "", domain: intent.metadata.domain || "" } }).then(() => undefined),
+          maxWholesaleCents: intent.metadata.wholesale_price_cents ? Number(intent.metadata.wholesale_price_cents) : undefined,
+          refund: () => stripe.refunds.create({ payment_intent: intent.id, reason: "requested_by_customer" }, { idempotencyKey: `domain-refund-${intent.id}` }).then(() => undefined),
         });
+        if (result.status === "registration_pending") throw new Error("Registrar order is still processing; retry this webhook.");
       } catch (error) {
         const message = error instanceof Error ? error.message : "Custom domain processing failed.";
         await supabase.from("stripe_webhook_events").update({ processing_error: message }).eq("event_id", event.id);

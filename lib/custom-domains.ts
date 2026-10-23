@@ -2,6 +2,10 @@ type JsonRecord = Record<string, unknown>;
 
 const VERCEL_API = "https://api.vercel.com";
 
+export class RegistrarRequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 function record(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 }
@@ -56,11 +60,12 @@ async function vercelRequest(path: string, init?: RequestInit) {
     ...init,
     headers: { ...vercelHeaders(), ...(init?.headers || {}) },
     cache: "no-store",
+    signal: AbortSignal.timeout(15000),
   });
   const json = await response.json().catch(() => ({}));
   if (!response.ok) {
     const error = record(record(json).error);
-    throw new Error(String(error.message || record(json).message || "The domain registrar could not complete this request."));
+    throw new RegistrarRequestError(String(error.message || record(json).message || "The domain registrar could not complete this request."), response.status);
   }
   return record(json);
 }
@@ -70,6 +75,7 @@ function findNumber(value: unknown, keys: string[]): number | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const source = record(value);
   for (const key of keys) {
+    if (source[key] == null || source[key] === "" || typeof source[key] === "object") continue;
     const number = Number(source[key]);
     if (Number.isFinite(number) && number >= 0) return number;
   }
@@ -96,6 +102,9 @@ export async function getDomainQuote(rawDomain: unknown) {
   const markupPercent = Math.max(0, Number(process.env.CUSTOM_DOMAIN_MARKUP_PERCENT || 0));
   const markupFlatCents = Math.max(0, Math.round(Number(process.env.CUSTOM_DOMAIN_MARKUP_FLAT_CENTS || 2500)));
   const retailPriceCents = Math.round(wholesalePriceCents * (1 + markupPercent / 100) + markupFlatCents);
+  if (available && (!Number.isSafeInteger(wholesalePriceCents) || wholesalePriceCents <= 0 || !Number.isSafeInteger(retailPriceCents) || retailPriceCents < wholesalePriceCents)) {
+    throw new Error("The registrar did not return a valid purchase price.");
+  }
   return { domain, available, wholesalePriceCents, retailPriceCents, markupPercent };
 }
 
@@ -116,13 +125,30 @@ export async function buyDomain(args: {
   contact: { firstName: string; lastName: string; email: string; phone: string; address1: string; city: string; state: string; postalCode: string; country: string };
 }) {
   const body = {
-    name: args.domain,
     expectedPrice: args.wholesalePriceCents / 100,
-    renew: false,
-    orgName: "Golden State Visions",
-    ...args.contact,
+    autoRenew: false,
+    years: 1,
+    contactInformation: {
+      firstName: args.contact.firstName, lastName: args.contact.lastName,
+      email: args.contact.email, phone: args.contact.phone,
+      address1: args.contact.address1, city: args.contact.city, state: args.contact.state,
+      zip: args.contact.postalCode, country: args.contact.country,
+      companyName: "Golden State Visions",
+    },
   };
   return vercelRequest(`/v1/registrar/domains/${encodeURIComponent(args.domain)}/buy`, { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function getDomainOrder(orderId: string, domain: string) {
+  const order = await vercelRequest(`/v1/registrar/orders/${encodeURIComponent(orderId)}`);
+  const item = (Array.isArray(order.domains) ? order.domains : []).map(record)
+    .find((entry) => normalizeDomain(entry.domainName) === domain && entry.purchaseType === "purchase");
+  if (!item) throw new Error("The registrar order did not include the purchased domain.");
+  const status = String(item.status || "");
+  return {
+    status: status === "completed" ? "completed" : ["failed", "refunded", "refund-failed"].includes(status) ? "failed" : "pending",
+    error: String(record(item.error).message || record(order.error).message || "Domain registration failed."),
+  };
 }
 
 export async function addDomainToProject(domain: string) {

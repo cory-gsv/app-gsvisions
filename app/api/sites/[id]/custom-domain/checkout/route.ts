@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/lib/authz";
 import { getDomainQuote } from "@/lib/custom-domains";
+import { domainPurchaseBlocked } from "@/lib/domain-purchase";
 import { portalUserOwnsSite } from "@/lib/portal-access";
 
 export const runtime = "nodejs";
@@ -16,11 +17,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     const isAdmin = profile?.is_admin === true || role === "admin";
     if (!isAdmin && !portalUserOwnsSite(site, user.id, profile)) throw new AuthorizationError("You do not have access to this site.", 403);
     const body = await request.json().catch(() => ({}));
+    if (domainPurchaseBlocked(site.site_data, body.domain)) return NextResponse.json({ error: "This domain is already registered or its registration is processing for this property." }, { status: 409 });
     const quote = await getDomainQuote(body.domain);
     if (!quote.available) return NextResponse.json({ error: "That domain is no longer available." }, { status: 409 });
     const stripeKey = process.env.STRIPE_SECRET_KEY || "";
     if (!stripeKey) return NextResponse.json({ error: "Domain checkout is not configured." }, { status: 503 });
     const { GSV_DOMAIN_REGISTRANT: registrant } = await import("@/lib/domain-purchase");
+    const attemptId = typeof body.attemptId === "string" && /^[a-zA-Z0-9-]{1,64}$/.test(body.attemptId) ? body.attemptId : "legacy";
     const intent = await new Stripe(stripeKey).paymentIntents.create({
       amount: quote.retailPriceCents,
       currency: "usd",
@@ -44,7 +47,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         registrant_postal_code: registrant.postalCode,
         registrant_country: registrant.country,
       },
-    }, { idempotencyKey: `domain-${site.id}-${quote.domain}-${quote.retailPriceCents}` });
+    }, { idempotencyKey: `domain-${site.id}-${quote.domain}-${quote.retailPriceCents}-${attemptId}` });
     return NextResponse.json({ clientSecret: intent.client_secret, amountCents: quote.retailPriceCents, domain: quote.domain });
   } catch (error) {
     const auth = authorizationErrorResponse(error);

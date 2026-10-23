@@ -1,8 +1,9 @@
 import type Stripe from "stripe";
-import { addDomainToProject, buyDomain, getDomainQuote, normalizeDomain } from "@/lib/custom-domains";
+import { addDomainToProject, buyDomain, getDomainOrder, getDomainQuote, normalizeDomain, RegistrarRequestError, validDomain } from "@/lib/custom-domains";
 
 // Supabase clients instantiated from different schema typings still expose the
 // same PostgREST surface used by this payment/fulfillment helper.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- clients with different schema generics share this PostgREST interface.
 type Db = ReturnType<typeof import("@supabase/supabase-js").createClient<any>>;
 
 export type DomainRegistrant = {
@@ -61,7 +62,14 @@ export function validateRegistrant(value: Partial<DomainRegistrant>): DomainRegi
   return contact;
 }
 
-export async function completeDomainPurchase(args: {
+export function domainPurchaseBlocked(siteData: unknown, rawDomain: unknown) {
+  const domain = normalizeDomain(rawDomain);
+  const data = record(siteData);
+  return (Array.isArray(data.custom_domains) ? data.custom_domains : []).map(record)
+    .some((item) => normalizeDomain(item.domain) === domain && !["registration_failed_refunded", "test_checkout_complete"].includes(String(item.status)));
+}
+
+type PurchaseArgs = {
   db: Db;
   siteId: string;
   domain: string;
@@ -70,41 +78,121 @@ export async function completeDomainPurchase(args: {
   provider: "stripe" | "paypal";
   contact: DomainRegistrant;
   live: boolean;
+  maxWholesaleCents?: number;
+  resumeOnly?: boolean;
   refund?: () => Promise<void>;
-}) {
-  const domain = normalizeDomain(args.domain);
-  if (!args.siteId || !domain || !Number.isSafeInteger(args.chargedCents) || args.chargedCents <= 0) throw new Error("Invalid custom-domain payment metadata.");
-  const { data: site, error } = await args.db.from("sites").select("id, site_data").eq("id", args.siteId).maybeSingle();
-  if (error || !site) throw new Error(error?.message || "The property linked to this domain no longer exists.");
-  const siteData = record(site.site_data);
-  const domains = Array.isArray(siteData.custom_domains) ? siteData.custom_domains.map(record) : [];
-  if (domains.some((item) => normalizeDomain(item.domain) === domain && ["active", "purchased", "configuration_required", "test_checkout_complete"].includes(String(item.status).toLowerCase()))) {
-    return { domain, alreadyCompleted: true };
+};
+
+async function loadPurchaseSite(db: Db, siteId: string) {
+  const { data, error } = await db.from("sites").select("id, site_data").eq("id", siteId).maybeSingle();
+  if (error || !data) throw new Error(error?.message || "The property linked to this domain no longer exists.");
+  return data;
+}
+
+// Compare the JSON snapshot so simultaneous payments cannot submit two registrar
+// orders, and updates made to unrelated website settings are never overwritten.
+async function savePurchase(db: Db, site: { id: string; site_data: unknown }, purchase: Record<string, unknown>, connect = false) {
+  const data = record(site.site_data);
+  const domains = (Array.isArray(data.custom_domains) ? data.custom_domains : []).map(record);
+  const next = { ...data, custom_domains: [...domains.filter((item) => normalizeDomain(item.domain) !== purchase.domain), purchase] };
+  if (connect) Object.assign(next, { custom_domain: String(data.custom_domain || purchase.domain) });
+  let query = db.from("sites").update({ site_data: next, updated_at: new Date().toISOString() }).eq("id", site.id);
+  query = site.site_data == null ? query.is("site_data", null) : query.filter("site_data", "eq", JSON.stringify(site.site_data));
+  const { data: saved, error } = await query.select("id").maybeSingle();
+  if (error || !saved) throw new Error(error?.message || "Website settings changed while registration was processing. Please retry.");
+}
+
+async function updatePurchase(args: PurchaseArgs, purchase: Record<string, unknown>, connect = false) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const site = await loadPurchaseSite(args.db, args.siteId);
+    try { await savePurchase(args.db, site, purchase, connect); return; }
+    catch (error) { if (attempt === 2) throw error; }
   }
-  const base = { domain, payment_provider: args.provider, payment_reference: args.paymentReference, amount_paid_cents: args.chargedCents };
+}
+
+export async function completeDomainPurchase(args: PurchaseArgs) {
+  const domain = normalizeDomain(args.domain);
+  if (!args.siteId || !validDomain(domain) || !args.paymentReference || !Number.isSafeInteger(args.chargedCents) || args.chargedCents <= 0) throw new Error("Invalid custom-domain payment metadata.");
+  const site = await loadPurchaseSite(args.db, args.siteId);
+  const siteData = record(site.site_data);
+  const domains = (Array.isArray(siteData.custom_domains) ? siteData.custom_domains : []).map(record);
+  const previous = domains.find((item) => normalizeDomain(item.domain) === domain);
+  const samePayment = previous?.payment_reference === args.paymentReference || previous?.payment_intent_id === args.paymentReference;
+  if (args.resumeOnly && !samePayment) throw new Error("The saved registration changed. Refresh the property before retrying.");
+  const terminal = ["active", "purchased", "configuration_required", "registration_failed_refunded", "test_checkout_complete"];
+  if (previous && samePayment && terminal.includes(String(previous.status))) return { domain, status: String(previous.status), alreadyCompleted: true };
+  if (previous && !samePayment && domainPurchaseBlocked(siteData, domain)) {
+    if (!args.refund) throw new Error("This domain already has a purchase in progress.");
+    await args.refund();
+    return { domain, status: "duplicate_payment_refunded" };
+  }
+  const base = { domain, payment_provider: args.provider, payment_reference: args.paymentReference, amount_paid_cents: args.chargedCents, renew: false };
   if (!args.live) {
-    const purchase = { ...base, status: "test_checkout_complete", tested_at: new Date().toISOString(), renew: false };
-    const { error: updateError } = await args.db.from("sites").update({ site_data: { ...siteData, custom_domains: [...domains.filter((item) => normalizeDomain(item.domain) !== domain), purchase] }, updated_at: new Date().toISOString() }).eq("id", args.siteId);
-    if (updateError) throw new Error(updateError.message);
+    const purchase = { ...base, status: "test_checkout_complete", tested_at: new Date().toISOString() };
+    await savePurchase(args.db, site, purchase);
     return { domain, status: purchase.status };
   }
-  try {
-    const contact = validateRegistrant(args.contact);
-    const quote = await getDomainQuote(domain);
-    if (!quote.available) throw new Error(`${domain} was registered by someone else before checkout completed.`);
-    await buyDomain({ domain, wholesalePriceCents: quote.wholesalePriceCents, contact });
-  } catch (purchaseError) {
-    let refunded = false;
-    if (args.refund) { await args.refund(); refunded = true; }
-    const failure = { ...base, status: refunded ? "registration_failed_refunded" : "registration_failed", error: purchaseError instanceof Error ? purchaseError.message : "Domain registration failed.", updated_at: new Date().toISOString() };
-    await args.db.from("sites").update({ site_data: { ...siteData, custom_domains: [...domains.filter((item) => normalizeDomain(item.domain) !== domain), failure] }, updated_at: new Date().toISOString() }).eq("id", args.siteId);
-    return { domain, status: failure.status };
+  let purchase: Record<string, unknown> = samePayment && previous ? previous : { ...base };
+  async function fail(message: string) {
+    // Persist the failure before refunding. Retried callbacks use the same provider
+    // refund idempotency key and never submit another registrar purchase.
+    purchase = { ...purchase, ...base, status: "registration_failed", error: message };
+    await updatePurchase(args, purchase);
+    if (args.refund) {
+      await args.refund();
+      purchase = { ...purchase, status: "registration_failed_refunded" };
+      await updatePurchase(args, purchase);
+    }
+    return { domain, status: String(purchase.status) };
   }
+  if (samePayment && previous?.status === "registration_failed") return fail(String(previous.error || "Domain registration failed."));
+  if (!samePayment) {
+    purchase = { ...base, status: "registration_processing", started_at: new Date().toISOString() };
+    await savePurchase(args.db, site, purchase);
+  }
+  if (!purchase.registrar_order_id) {
+    if (samePayment && previous) {
+      // A timed-out POST may still have bought the name. Never retry the purchase
+      // or refund it until the registrar outcome has been reconciled by staff.
+      return { domain, status: "registration_review_required" };
+    }
+    let quote;
+    try {
+      validateRegistrant(args.contact);
+      quote = await getDomainQuote(domain);
+      if (!quote.available) throw new Error(`${domain} was registered before checkout completed.`);
+      if (quote.wholesalePriceCents > args.chargedCents || (args.maxWholesaleCents != null && quote.wholesalePriceCents > args.maxWholesaleCents)) throw new Error("The domain price changed during checkout. Please search again.");
+    } catch (error) { return fail(error instanceof Error ? error.message : "Could not verify domain pricing."); }
+    purchase = { ...base, status: "registration_processing", started_at: new Date().toISOString(), wholesale_price_cents: quote.wholesalePriceCents };
+    await updatePurchase(args, purchase);
+    let order;
+    try { order = await buyDomain({ domain, wholesalePriceCents: quote.wholesalePriceCents, contact: args.contact }); }
+    catch (error) {
+      if (error instanceof RegistrarRequestError && error.status >= 400 && error.status < 500 && error.status !== 408) return fail(error.message);
+      purchase = { ...purchase, status: "registration_review_required", error: "The registrar response was interrupted. Contact GSV to confirm registration before trying again." };
+      await updatePurchase(args, purchase);
+      return { domain, status: String(purchase.status) };
+    }
+    if (!order.orderId) {
+      purchase = { ...purchase, status: "registration_review_required", error: "The registrar did not return an order ID. Contact GSV before trying again." };
+      await updatePurchase(args, purchase);
+      return { domain, status: String(purchase.status) };
+    }
+    purchase = { ...purchase, registrar_order_id: String(order.orderId), status: "registration_pending" };
+    await updatePurchase(args, purchase);
+  }
+  let order;
+  try { order = await getDomainOrder(String(purchase.registrar_order_id), domain); }
+  catch { return { domain, status: "registration_pending" }; }
+  if (order.status === "failed") return fail(order.error);
+  if (order.status !== "completed") return { domain, status: "registration_pending" };
   let status = "active";
   let configurationError: string | null = null;
-  try { await addDomainToProject(domain); } catch (attachError) { status = "configuration_required"; configurationError = attachError instanceof Error ? attachError.message : "The purchased domain could not be attached to the website project."; }
-  const purchase = { ...base, status, purchased_at: new Date().toISOString(), renew: false, expires_at: new Date(Date.now() + 365 * 86400000).toISOString(), configuration_error: configurationError };
-  const { error: updateError } = await args.db.from("sites").update({ site_data: { ...siteData, custom_domain: String(siteData.custom_domain || domain), custom_domains: [...domains.filter((item) => normalizeDomain(item.domain) !== domain), purchase] }, updated_at: new Date().toISOString() }).eq("id", args.siteId);
-  if (updateError) throw new Error(updateError.message);
+  try {
+    const attached = await addDomainToProject(domain);
+    if (attached.verified === false) { status = "configuration_required"; configurationError = "Domain verification is still pending."; }
+  } catch (error) { status = "configuration_required"; configurationError = error instanceof Error ? error.message : "The purchased domain could not be attached to the website project."; }
+  purchase = { ...purchase, status, purchased_at: new Date().toISOString(), expires_at: new Date(Date.now() + 365 * 86400000).toISOString(), configuration_error: configurationError };
+  await updatePurchase(args, purchase, true);
   return { domain, status };
 }

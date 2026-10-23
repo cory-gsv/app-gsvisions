@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/lib/authz";
 import { getDomainQuote } from "@/lib/custom-domains";
 import { paypalConfigured, paypalRequest } from "@/lib/paypal";
+import { domainPurchaseBlocked } from "@/lib/domain-purchase";
 import { portalUserOwnsSite } from "@/lib/portal-access";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -10,11 +11,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     const { user, profile, admin } = await requireUser(request);
     const { id } = await context.params;
-    const { data: site } = await admin.from("sites").select("id,client_id,client_ms_id,property_full_address,address_full").eq("id", id).maybeSingle();
+    const { data: site } = await admin.from("sites").select("id,client_id,client_ms_id,property_full_address,address_full,site_data").eq("id", id).maybeSingle();
     if (!site) return NextResponse.json({ error: "Site not found." }, { status: 404 });
     const role = String(profile?.role || "").toLowerCase();
     if (profile?.is_admin !== true && role !== "admin" && !portalUserOwnsSite(site, user.id, profile)) throw new AuthorizationError("You do not have access to this site.", 403);
     const body = await request.json().catch(() => ({}));
+    if (domainPurchaseBlocked(site.site_data, body.domain)) return NextResponse.json({ error: "This domain is already registered or its registration is processing for this property." }, { status: 409 });
     const quote = await getDomainQuote(body.domain);
     if (!quote.available) return NextResponse.json({ error: "That domain is no longer available." }, { status: 409 });
     const response = await paypalRequest("/v2/checkout/orders", {

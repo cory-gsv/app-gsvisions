@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { authenticatedFetch } from "@/src/lib/authenticated-fetch";
 
 type Quote = {
@@ -10,11 +10,42 @@ type Quote = {
   currency: string;
 };
 
-export default function CustomDomainStore({ siteId, currentDomain, suggestedDomain }: { siteId: string; currentDomain?: string; suggestedDomain: string }) {
-  const [domain, setDomain] = useState("");
+export default function CustomDomainStore({ siteId, currentDomain, suggestedDomain, initialPurchases = [], purchaseProcessing = false }: { siteId: string; currentDomain?: string; suggestedDomain: string; initialPurchases?: { domain: string; status: string }[]; purchaseProcessing?: boolean }) {
+  const [awaitingPurchase, setAwaitingPurchase] = useState(purchaseProcessing && !initialPurchases.length);
+  const [domain, setDomain] = useState(suggestedDomain);
+  const [purchases, setPurchases] = useState(initialPurchases);
+  const [connectedDomain, setConnectedDomain] = useState(currentDomain || "");
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+
+  async function refreshRegistration() {
+    const response = await authenticatedFetch(`/api/sites/${encodeURIComponent(siteId)}/custom-domain/status`, { method: "POST" });
+    const json = await response.json();
+    if (!response.ok) throw new Error(json.error || "Could not refresh registration.");
+    setPurchases(Array.isArray(json.purchases) ? json.purchases : []);
+    if (Array.isArray(json.purchases) && json.purchases.length) setAwaitingPurchase(false);
+    setConnectedDomain(json.currentDomain || "");
+  }
+
+  const registrationPending = awaitingPurchase || purchases.some((item) => ["registration_pending", "registration_processing", "registration_failed"].includes(item.status));
+  useEffect(() => {
+    if (!registrationPending) return;
+    let cancelled = false;
+    let attempts = 0;
+    let inFlight = false;
+    const timer = window.setInterval(() => {
+      if (inFlight) return;
+      if (++attempts > 20) { window.clearInterval(timer); return; }
+      if (!cancelled) {
+        inFlight = true;
+        void refreshRegistration().catch(() => { /* Keep the saved status visible; the customer can retry. */ }).finally(() => { inFlight = false; });
+      }
+    }, 5000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+    // Only the site and whether a registration is pending control polling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId, registrationPending]);
 
   async function search() {
     try {
@@ -39,7 +70,7 @@ export default function CustomDomainStore({ siteId, currentDomain, suggestedDoma
   }
 
   function purchase(quote: Quote) {
-    if (!quote.available) return;
+    if (!quote.available || purchases.some((item) => item.domain === quote.domain && !["registration_failed_refunded", "test_checkout_complete"].includes(item.status))) return;
     window.location.assign(`/dashboard/site/${encodeURIComponent(siteId)}/domain-checkout?domain=${encodeURIComponent(quote.domain)}`);
   }
 
@@ -61,7 +92,12 @@ export default function CustomDomainStore({ siteId, currentDomain, suggestedDoma
     <p style={{ margin: "0 0 6px", color: "#8a6800", fontSize: 10, fontWeight: 900, letterSpacing: ".14em", textTransform: "uppercase" }}>Optional upgrade</p>
     <h3 style={{ margin: 0, fontSize: 22 }}>Custom domain</h3>
     <p style={{ margin: "8px 0 0", color: "#64706a", fontSize: 13, lineHeight: 1.5 }}>Recommended for this property: <strong>{suggestedDomain}</strong>. Enter a name with or without an extension; we will prioritize the matching .com and suggest alternatives.</p>
-    {currentDomain ? <div style={{ marginTop: 14, padding: "11px 13px", borderLeft: "4px solid #ffc72c", background: "#fff", fontSize: 13 }}>Connected: <strong>{currentDomain}</strong></div> : null}
+    {connectedDomain ? <div style={{ marginTop: 14, padding: "11px 13px", borderLeft: "4px solid #ffc72c", background: "#fff", fontSize: 13 }}>{purchases.some((item) => item.domain === connectedDomain && item.status === "configuration_required") ? "Purchased:" : "Connected:"} <strong>{connectedDomain}</strong></div> : null}
+    {awaitingPurchase ? <p role="status" style={{ fontSize: 13 }}>Payment confirmation is processing. This page will update when registration is confirmed.</p> : null}
+    {purchases.filter((item) => item.status !== "active").map((item) => <div key={item.domain} role="status" style={{ marginTop: 12, fontSize: 13, lineHeight: 1.5 }}>
+      <strong>{item.domain}</strong>: {item.status === "registration_failed_refunded" ? "Registration failed and your payment was refunded." : item.status === "configuration_required" ? "Purchased. GSV is completing the website connection." : item.status === "test_checkout_complete" ? "Test payment completed; no domain was purchased." : item.status === "registration_review_required" || item.status === "registration_processing" ? "Registration is being confirmed. Contact GSV before trying to purchase again." : item.status === "registration_failed" ? "Registration failed. GSV is confirming your refund." : "Payment received. Domain registration is processing."}
+    </div>)}
+    {registrationPending ? <button type="button" onClick={() => void refreshRegistration().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Could not refresh registration."))} style={{ ...button, marginTop: 12 }}>Refresh registration</button> : null}
     <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8, marginTop: 16 }}>
       <input
         aria-label="Custom domain name"
@@ -81,7 +117,7 @@ export default function CustomDomainStore({ siteId, currentDomain, suggestedDoma
           <strong style={{ display: "block", color: quote.available ? "#17683a" : "#6e7772" }}>{quote.domain} {quote.available ? "is available" : "is registered"}</strong>
           <span style={{ color: "#64706a", fontSize: 12 }}>{index === 0 ? "Preferred .com" : "Suggested .com alternative"}</span>
         </div>
-        {quote.available ? <button type="button" onClick={() => purchase(quote)} disabled={busy} style={{ ...button, background: "#ffc72c", borderColor: "#ffc72c", color: "#17231f" }}>Purchase for ${(quote.priceCents / 100).toFixed(2)}</button> : null}
+        {quote.available && !purchases.some((item) => item.domain === quote.domain && !["registration_failed_refunded", "test_checkout_complete"].includes(item.status)) ? <button type="button" onClick={() => purchase(quote)} disabled={busy} style={{ ...button, background: "#ffc72c", borderColor: "#ffc72c", color: "#17231f" }}>Register for ${(quote.priceCents / 100).toFixed(2)} · 1 year</button> : null}
       </div>)}
     </div> : null}
     {message ? <p role="status" style={{ margin: "12px 0 0", color: "#a02020", fontSize: 13, fontWeight: 700 }}>{message}</p> : null}

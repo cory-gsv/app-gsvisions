@@ -21,20 +21,22 @@ declare global { interface Window { paypal?: { Buttons: (options: Record<string,
 
 export default function DomainCheckout({ siteId, domain, stripeKey, paypalClientId }: { siteId: string; domain: string; stripeKey: string; paypalClientId: string }) {
   const [clientSecret, setClientSecret] = useState(""); const [amountCents, setAmountCents] = useState(0); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const [domainVerified, setDomainVerified] = useState(false);
+  const checkoutAttempt = useRef("");
   const paypalTarget = useRef<HTMLDivElement>(null); const stripePromise = useMemo(() => stripeKey ? loadStripe(stripeKey) : null, [stripeKey]);
   async function startCard() {
     setError("");
-    try { if (!domain) throw new Error("No domain was selected."); setBusy(true); const response = await authenticatedFetch(`/api/sites/${encodeURIComponent(siteId)}/custom-domain/checkout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain }) }); const json = await response.json(); if (!response.ok) throw new Error(json.error || "Could not start checkout."); setClientSecret(json.clientSecret); setAmountCents(json.amountCents); }
+    try { if (!domain) throw new Error("No domain was selected."); if (!checkoutAttempt.current) checkoutAttempt.current = window.crypto.randomUUID(); setBusy(true); const response = await authenticatedFetch(`/api/sites/${encodeURIComponent(siteId)}/custom-domain/checkout`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain, attemptId: checkoutAttempt.current }) }); const json = await response.json(); if (!response.ok) throw new Error(json.error || "Could not start checkout."); setClientSecret(json.clientSecret); setAmountCents(json.amountCents); }
     catch (e) { setError(e instanceof Error ? e.message : "Could not start checkout."); } finally { setBusy(false); }
   }
   useEffect(() => {
     if (!domain) return;
     authenticatedFetch(`/api/sites/${encodeURIComponent(siteId)}/custom-domain/search`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ domain }) })
-      .then(async (response) => { const json = await response.json(); if (!response.ok) throw new Error(json.error || "Could not verify this domain."); const match = Array.isArray(json.results) ? json.results.find((item: { domain?: string }) => item.domain === domain) : null; if (!match?.available) throw new Error("That domain is no longer available."); setAmountCents(Number(match.priceCents) || 0); })
+      .then(async (response) => { const json = await response.json(); if (!response.ok) throw new Error(json.error || "Could not verify this domain."); const match = Array.isArray(json.results) ? json.results.find((item: { domain?: string }) => item.domain === domain) : null; if (!match?.available) throw new Error("That domain is no longer available."); setAmountCents(Number(match.priceCents) || 0); setDomainVerified(true); })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Could not verify this domain."));
   }, [siteId, domain]);
   useEffect(() => {
-    if (!paypalClientId || !paypalTarget.current || paypalTarget.current.dataset.ready) return;
+    if (!paypalClientId || !amountCents || !domainVerified || !paypalTarget.current || paypalTarget.current.dataset.ready) return;
     const mount = () => {
       if (!window.paypal || !paypalTarget.current) return;
       paypalTarget.current.dataset.ready = "true";
@@ -47,12 +49,12 @@ export default function DomainCheckout({ siteId, domain, stripeKey, paypalClient
     };
     if (window.paypal) { mount(); return; }
     const script = document.createElement("script"); script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(paypalClientId)}&currency=USD&intent=capture&components=buttons`; script.onload = mount; script.onerror = () => setError("PayPal could not load."); document.head.appendChild(script);
-  }, [paypalClientId, siteId, domain]);
+  }, [paypalClientId, siteId, domain, amountCents, domainVerified]);
 
   return <main className="domain-checkout"><div className="checkout-shell">
     <aside className="summary"><a href={`/dashboard/site/${encodeURIComponent(siteId)}#site-summary`} className="back">← Return to property</a><p className="eyebrow">Golden State Visions</p><h1>Custom Domain</h1><p className="muted">A memorable address for your property website.</p><div className="rule" /><p className="label">Domain registration</p><h2>{domain || "Domain unavailable"}</h2><p className="muted">One-year registration · connected to your GSV property website</p>{amountCents ? <><div className="rule" /><div className="total"><span>Total today</span><strong>${(amountCents / 100).toFixed(2)}</strong></div></> : null}<p className="renewal">Renewal is off by default. We’ll contact you before the domain expires.</p></aside>
     <section className="checkout"><p className="eyebrow gold">Secure checkout</p><h2>Register your property domain</h2><p className="intro">Golden State Visions manages the registration and connection. Choose card, a supported wallet, or PayPal and enter only your billing information.</p>
-      {!clientSecret ? <button type="button" className="primary" onClick={startCard} disabled={busy || !domain}>{busy ? "Loading secure payment…" : "Pay by card or wallet"}</button> : null}
+      {!clientSecret ? <button type="button" className="primary" onClick={startCard} disabled={busy || !domain || !amountCents || !stripePromise || !domainVerified}>{busy ? "Loading secure payment…" : !amountCents && !error ? "Checking availability…" : "Pay by card or wallet"}</button> : null}
       {clientSecret && stripePromise ? (
         <Elements
           stripe={stripePromise}

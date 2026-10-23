@@ -84,6 +84,17 @@ Catalog changes must be synchronized across:
 
 Never rely on editing an old migration that may already have run. Add a new, idempotent corrective migration.
 
+## Property custom-domain purchases
+
+- The property summary pre-fills the recommended `.com` name so **Check domain** works immediately. Search shows the current registrar quote plus the configured markup; the price shown is for one year with auto-renew off.
+- `lib/custom-domains.ts` uses the Vercel Registrar API's `autoRenew`, `years`, `expectedPrice`, and nested `contactInformation` fields (including `zip`). Availability/pricing, token/team settings, and the existing markup variables must remain configured before accepting checkout.
+- Stripe's verified paid webhook or the verified PayPal capture is authoritative. A stored registration claim prevents concurrent callbacks from buying twice. Stripe checkout uses an attempt-specific idempotency key so a refunded attempt cannot be reused as a new purchase.
+- Registration is asynchronous. Save the registrar order ID, then verify that the matching purchase completed before attaching the domain to the project. `registration_pending` is resumed by Stripe webhook retries and by the authenticated `/api/sites/[id]/custom-domain/status` POST when the owner opens the property summary. This endpoint only resumes saved, paid orders; it never submits a fresh purchase or payment.
+- Definite registration failures are refunded with a stable provider idempotency key. An interrupted purchase response without an order ID is held as `registration_review_required` (or a saved `registration_processing` claim after an interrupted worker). Staff must inspect the actual registrar order before retrying or refunding; never assume an interrupted request did not buy the domain.
+- `configuration_required` means the name was purchased but its website connection needs staff attention. Keep the included property URL active. The summary displays pending, refunded, test, and setup states without exposing payment references.
+- Registrant contact remains GSV-managed through `GSV_DOMAIN_REGISTRANT`. Sandbox payments never buy or attach real domains. No schema migration is required; state is stored in `sites.site_data.custom_domains` using conditional updates that preserve other website settings.
+- Regression checks: `node --test tests/custom-domain-purchase.test.mjs tests/property-agent-display.test.mjs`. All payment, refund, registration, and database operations in these tests use fixtures; never run a live purchase as a smoke test.
+
 ## Booking and client identity
 
 The public website sends signed booking payloads to the portal through integration routes. Important routes include:
