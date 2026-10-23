@@ -56,3 +56,10 @@
   .gsv-website-alias button { justify-self: start; }
   .gsv-domain-drawer .gsv-website-button { width: 100%; }
 }
+/* Keep intrinsic widths in other workspace panels from stretching the mobile page. */
+@media (max-width: 980px) {
+  .gsv-property-content { grid-template-columns: minmax(0, 1fr); }
+  .gsv-property-content > * { min-width: 0; }
+  .gsv-property-content > #invoice { overflow-x: auto; }
+  .gsv-property-content > #invoice > div { min-width: 610px; }
+}

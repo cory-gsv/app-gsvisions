@@ -86,6 +86,7 @@ Never rely on editing an old migration that may already have run. Add a new, ide
 
 ## Website essentials workspace
 
+- Mobile workspace columns stay within the viewport; the existing wide invoice editor scrolls inside its own panel instead of stretching every section. Desktop layout is unchanged.
 - Property navigation now separates Overview, Property Details, and Website. Existing invoice, delivery, media, map, marketing, and lead tools remain available.
 - Listing status and open-house scheduling live in Property Details and save together through its existing authenticated PATCH endpoint. Local datetime inputs are submitted with an explicit timezone via ISO strings; enabled schedules require valid start/end times in order.
 - Website focuses on the saved public URL, preview, copy, and sharing. Admin-only included paths/aliases are under collapsed Advanced website settings and have their own Save addresses action. Unsaved paths never change the sharing URL.
