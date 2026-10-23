@@ -84,6 +84,15 @@ Catalog changes must be synchronized across:
 
 Never rely on editing an old migration that may already have run. Add a new, idempotent corrective migration.
 
+## Website essentials workspace
+
+- Property navigation now separates Overview, Property Details, and Website. Existing invoice, delivery, media, map, marketing, and lead tools remain available.
+- Listing status and open-house scheduling live in Property Details and save together through its existing authenticated PATCH endpoint. Local datetime inputs are submitted with an explicit timezone via ISO strings; enabled schedules require valid start/end times in order.
+- Website focuses on the saved public URL, preview, copy, and sharing. Admin-only included paths/aliases are under collapsed Advanced website settings and have their own Save addresses action. Unsaved paths never change the sharing URL.
+- Custom-domain search opens in a native modal side drawer with focus containment/Escape support. It shows current quotes, one primary result, and collapsed alternatives; checkout and asynchronous registration recovery remain unchanged. No price is hardcoded into the offer.
+- Both settings endpoints preserve omitted listing fields and condition their updates on the JSON snapshot, returning 409 when the site changed during the request instead of overwriting registration state. Legacy site-summary listing payloads remain supported.
+- Regression: `node --test tests/website-essentials.test.mjs tests/custom-domain-purchase.test.mjs tests/property-agent-display.test.mjs`. Save, authorization, invalid schedules, address conflicts, concurrent updates, and payment/registration regressions use fixtures. Browser checks must not save real customer data or initiate a purchase.
+
 ## Property custom-domain purchases
 
 - The property summary pre-fills the recommended `.com` name so **Check domain** works immediately. Search shows the current registrar quote plus the configured markup; the price shown is for one year with auto-renew off.

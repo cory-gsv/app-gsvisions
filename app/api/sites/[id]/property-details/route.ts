@@ -1,3 +1,4 @@
+import { listingFieldsPatch } from "@/lib/property-listing";
 import { NextResponse } from "next/server";
 import { AuthorizationError, authorizationErrorResponse, requireUser } from "@/lib/authz";
 import { portalUserOwnsSite } from "@/lib/portal-access";
@@ -167,6 +168,9 @@ export async function PATCH(
       ...currentSiteData,
     };
 
+    try { Object.assign(nextSiteData, listingFieldsPatch(body, currentSiteData)); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid listing details." }, { status: 400 }); }
+
     if (hasVideoUrl) {
       const videoUrl = clean(body?.video_url);
       if (videoUrl) nextSiteData.video_url = videoUrl;
@@ -245,12 +249,10 @@ export async function PATCH(
         property_full_address || clean(existingSite.name) || clean(existingSite.site_name) || null;
     }
 
-    const { data, error } = await supabase
-      .from("sites")
-      .update(updatePayload)
-      .eq("id", id)
-      .select("id, site_data")
-      .single();
+    let update = supabase.from("sites").update(updatePayload).eq("id", id);
+    update = existingSite.site_data == null ? update.is("site_data", null) : update.filter("site_data", "eq", JSON.stringify(existingSite.site_data));
+    const { data, error } = await update.select("id, site_data").maybeSingle();
+    if (!error && !data) return NextResponse.json({ error: "This property changed while saving. Refresh the page and try again." }, { status: 409 });
 
     if (error) {
       console.error("SITE_PROPERTY_UPDATE_FAIL", { id, error, updatePayload });

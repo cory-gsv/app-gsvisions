@@ -22,8 +22,20 @@ type Props = {
     list_price?: string;
     listing_mls_number?: string;
     public_site_description?: string;
+    listing_status?: string;
+    open_house_enabled?: boolean;
+    open_house_start?: string;
+    open_house_end?: string;
+    open_house_notes?: string;
   };
 };
+
+function localDateTime(value?: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
 
 export default function PropertyDetailsEditor({
   siteId,
@@ -49,6 +61,11 @@ export default function PropertyDetailsEditor({
     public_site_description: initial.public_site_description || "",
   });
 
+  const [listingStatus, setListingStatus] = useState(initial.listing_status || "active");
+  const [openHouseEnabled, setOpenHouseEnabled] = useState(initial.open_house_enabled || false);
+  const [openHouseStart, setOpenHouseStart] = useState(localDateTime(initial.open_house_start));
+  const [openHouseEnd, setOpenHouseEnd] = useState(localDateTime(initial.open_house_end));
+  const [openHouseNotes, setOpenHouseNotes] = useState(initial.open_house_notes || "");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("");
 
@@ -69,6 +86,11 @@ export default function PropertyDetailsEditor({
         year_built: form.year_built,
         list_price: form.list_price,
         listing_mls_number: form.listing_mls_number,
+        listing_status: listingStatus,
+        open_house_enabled: openHouseEnabled,
+        open_house_start: openHouseStart ? new Date(openHouseStart).toISOString() : null,
+        open_house_end: openHouseEnd ? new Date(openHouseEnd).toISOString() : null,
+        open_house_notes: openHouseNotes,
       };
 
       const res = await authenticatedFetch(`/api/sites/${siteId}/property-details`, {
@@ -128,7 +150,8 @@ export default function PropertyDetailsEditor({
     fontSize: "16px",
     background: "#fff",
     color: "#171717",
-    outline: "none",
+    boxSizing: "border-box",
+    minWidth: 0,
   };
 
   return (
@@ -165,7 +188,7 @@ export default function PropertyDetailsEditor({
         </h2>
 
         {canEdit ? <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span style={{ fontSize: "14px", color: status === "Saved" ? "#1f8f4e" : "#777" }}>
+          <span role="status" style={{ fontSize: "14px", color: status === "Saved" ? "#1f8f4e" : "#777" }}>
             {status}
           </span>
 
@@ -188,13 +211,7 @@ export default function PropertyDetailsEditor({
         </div> : null}
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          gap: "16px",
-        }}
-      >
+      <div className="gsv-property-details-grid">
         {[
           ["Street Address", "property_address"],
           ["City", "property_city"],
@@ -215,6 +232,7 @@ export default function PropertyDetailsEditor({
           <div key={key} style={cardStyle}>
             <div style={labelStyle}>{label}</div>
             <input
+              aria-label={label}
               value={(form as Record<string, string>)[key]}
               onChange={(e) => updateField(key, e.target.value)}
               readOnly={!fieldCanEdit}
@@ -234,6 +252,7 @@ export default function PropertyDetailsEditor({
       <div style={{ ...cardStyle, marginTop: "20px" }}>
         <div style={labelStyle}>Property Website Description</div>
         <textarea
+          aria-label="Property website description"
           value={form.public_site_description}
           onChange={(e) => updateField("public_site_description", e.target.value)}
           readOnly={!canEditDescription}
@@ -252,6 +271,24 @@ export default function PropertyDetailsEditor({
         <p style={{ color: "#777", fontSize: "13px", margin: "8px 0 0" }}>Used on the public property website and in search previews. Unique copy helps each listing perform better in search.</p>
       </div>
 
+      <div className="gsv-listing-settings">
+        <h3>Listing & open house</h3>
+        <label>Listing status<select aria-label="Listing status" value={listingStatus} onChange={event => setListingStatus(event.target.value)} disabled={!canEdit} className="gsv-website-input" style={{ maxWidth: 300 }}>
+          <option value="active">Active</option><option value="pending">Pending</option><option value="sold">Sold</option><option value="off_market">Off market</option>
+        </select></label>
+        <details className="gsv-open-house" open={initial.open_house_enabled || undefined}>
+          <summary>{openHouseStart || openHouseEnabled ? "Open-house details" : "Add an open house"}</summary>
+          <div className="gsv-open-house-fields">
+            <label style={{ display: "flex", alignItems: "center", gap: 10 }}><input type="checkbox" checked={openHouseEnabled} onChange={event => setOpenHouseEnabled(event.target.checked)} disabled={!canEdit} /> Show open house on website</label>
+            <div className="gsv-property-details-grid">
+              <label>Starts<input aria-label="Open house starts" type="datetime-local" className="gsv-website-input" value={openHouseStart} onChange={event => setOpenHouseStart(event.target.value)} readOnly={!canEdit} /></label>
+              <label>Ends<input aria-label="Open house ends" type="datetime-local" className="gsv-website-input" value={openHouseEnd} onChange={event => setOpenHouseEnd(event.target.value)} readOnly={!canEdit} /></label>
+            </div>
+            <label>Open-house details<textarea className="gsv-website-input" value={openHouseNotes} onChange={event => setOpenHouseNotes(event.target.value)} readOnly={!canEdit} placeholder="Hosted by, gate instructions, refreshments…" rows={3} /></label>
+          </div>
+        </details>
+        <p className="gsv-website-muted">Save Property Details to update the listing and open house together.</p>
+      </div>
     </section>
   );
 }

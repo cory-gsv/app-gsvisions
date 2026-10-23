@@ -1256,7 +1256,7 @@ export default async function SitePage({
           >
             <div className="gsv-summary-header" style={{ padding: "22px 24px", background: "#17231f", color: "#fff", borderTop: "5px solid #ffc72c" }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ color: "#ffc72c", fontSize: 9, fontWeight: 900, letterSpacing: ".14em", textTransform: "uppercase" }}>Site summary</div>
+                <div style={{ color: "#ffc72c", fontSize: 9, fontWeight: 900, letterSpacing: ".14em", textTransform: "uppercase" }}>Overview</div>
                 <div style={{ marginTop: 7, fontSize: "clamp(25px, 3vw, 42px)", lineHeight: 1.05, fontWeight: 800 }}>{streetAddress || address}</div>
                 <div style={{ marginTop: 8, color: "rgba(255,255,255,.72)", fontSize: 14 }}>{cityStateZip}{cityStateZip ? " · " : ""}Site ID: {site.id.slice(0, 8)}</div>
               </div>
@@ -1329,38 +1329,7 @@ export default async function SitePage({
               )}
             </div>
 
-            <SiteSummaryPanel
-              siteId={site.id}
-              publicSiteUrl={publicSiteUrl}
-              initialPublicSlug={propertySiteSlug}
-              initialPublicAliases={publicSiteAliases}
-              customDomain={clean(siteData.custom_domain)}
-              domainPurchaseProcessing={query.domain_purchase === "processing"}
-              domainPurchases={Array.isArray(siteData.custom_domains) ? siteData.custom_domains.map((item: unknown) => { const purchase = item as Record<string, unknown>; return { domain: clean(purchase.domain), status: clean(purchase.status) }; }) : []}
-              canManageAddresses={viewerIsAdmin}
-              initialStatus={clean(siteData.listing_status) || "active"}
-              initialOpenHouseEnabled={siteData.open_house_enabled === true}
-              initialOpenHouseStart={clean(siteData.open_house_start)}
-              initialOpenHouseEnd={clean(siteData.open_house_end)}
-              initialOpenHouseNotes={clean(siteData.open_house_notes)}
-              traffic={traffic}
-            />
           </section>
-
-          <InvoiceEditor
-            siteId={site.id}
-            booking={booking}
-            products={products}
-            initialInvoiceItems={initialInvoiceItems}
-            canEdit={canEdit}
-            sitePaid={!!site.paid}
-            recordedPaidCents={recordedPaidCents}
-            initialPayments={initialPayments}
-            adminUsers={adminUsers}
-            invoicePublicUrl={invoicePublicUrl}
-            customerNotes={clean(siteData.customer_notes)}
-            initialAdminNotes={clean(siteData.admin_notes)}
-          />
 
           <PropertyDetailsEditor
             siteId={site.id}
@@ -1380,7 +1349,38 @@ export default async function SitePage({
               list_price: clean(siteData.list_price) || clean(siteData.price),
               listing_mls_number: clean(siteData.listing_mls_number) || clean(siteData.mls_number) || clean(siteData.listing_mls),
               public_site_description: clean(siteData.public_site_description),
+              listing_status: clean(siteData.listing_status) || "active",
+              open_house_enabled: siteData.open_house_enabled === true,
+              open_house_start: clean(siteData.open_house_start),
+              open_house_end: clean(siteData.open_house_end),
+              open_house_notes: clean(siteData.open_house_notes),
             }}
+          />
+
+            <SiteSummaryPanel
+              siteId={site.id}
+              publicSiteUrl={publicSiteUrl}
+              initialPublicSlug={propertySiteSlug}
+              initialPublicAliases={publicSiteAliases}
+              customDomain={clean(siteData.custom_domain)}
+              domainPurchaseProcessing={query.domain_purchase === "processing"}
+              domainPurchases={Array.isArray(siteData.custom_domains) ? siteData.custom_domains.map((item: unknown) => { const purchase = item as Record<string, unknown>; return { domain: clean(purchase.domain), status: clean(purchase.status) }; }) : []}
+              canManageAddresses={viewerIsAdmin}
+              traffic={traffic}
+            />
+          <InvoiceEditor
+            siteId={site.id}
+            booking={booking}
+            products={products}
+            initialInvoiceItems={initialInvoiceItems}
+            canEdit={canEdit}
+            sitePaid={!!site.paid}
+            recordedPaidCents={recordedPaidCents}
+            initialPayments={initialPayments}
+            adminUsers={adminUsers}
+            invoicePublicUrl={invoicePublicUrl}
+            customerNotes={clean(siteData.customer_notes)}
+            initialAdminNotes={clean(siteData.admin_notes)}
           />
 
           <section id="map" style={sectionCardStyle()}>

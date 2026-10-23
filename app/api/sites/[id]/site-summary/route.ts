@@ -1,3 +1,4 @@
+import { listingFieldsPatch } from "@/lib/property-listing";
 import { NextResponse } from "next/server";
 import { authorizationErrorResponse, AuthorizationError, requireUser } from "@/lib/authz";
 import { makePropertySiteSlug, normalizePropertySiteSlug } from "@/lib/property-site-slug";
@@ -27,7 +28,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     const siteData = asRecord(site.site_data);
     const existingSlug = normalizePropertySiteSlug(site.site_slug) || makePropertySiteSlug(site.property_address || site.property_full_address || site.address_full || site.site_name || site.name);
     const existingAliases = Array.isArray(siteData.public_site_aliases) ? siteData.public_site_aliases.map(normalizePropertySiteSlug).filter(Boolean) : [];
-    const siteSlug = isAdmin ? (normalizePropertySiteSlug(body.site_slug) || existingSlug) : existingSlug;
+    const siteSlug = isAdmin && Object.hasOwn(body, "site_slug") ? normalizePropertySiteSlug(body.site_slug) : existingSlug;
     const requestedAliases = isAdmin && Array.isArray(body.public_site_aliases) ? body.public_site_aliases : existingAliases;
     const publicSiteAliases = Array.from(new Set(requestedAliases.map(normalizePropertySiteSlug).filter(Boolean))).filter((alias) => alias !== siteSlug).slice(0, 10);
     if (!isAdmin && (Object.prototype.hasOwnProperty.call(body, "site_slug") || Object.prototype.hasOwnProperty.call(body, "public_site_aliases"))) {
@@ -35,7 +36,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     }
     if (!siteSlug || siteSlug.length < 3) return NextResponse.json({ error: "Website address must be at least 3 characters." }, { status: 400 });
 
-    if (isAdmin) {
+    if (isAdmin && (Object.hasOwn(body, "site_slug") || Object.hasOwn(body, "public_site_aliases"))) {
       const requestedPaths = new Set([siteSlug, ...publicSiteAliases]);
       const { data: otherSites, error: pathLookupError } = await admin.from("sites")
         .select("id, slug, site_slug, site_data, property_address, property_full_address, address_full, site_name, name")
@@ -49,31 +50,14 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       });
       if (conflict) return NextResponse.json({ error: "That website address is already assigned to another property." }, { status: 409 });
     }
-    const listingStatus = clean(body.listing_status).toLowerCase();
-    if (!['active', 'pending', 'sold', 'off_market'].includes(listingStatus)) {
-      return NextResponse.json({ error: "Choose a valid listing status." }, { status: 400 });
-    }
-
-    const openHouseEnabled = body.open_house_enabled === true;
-    const openHouseStart = clean(body.open_house_start);
-    const openHouseEnd = clean(body.open_house_end);
-    if (openHouseEnabled && (!openHouseStart || !openHouseEnd)) {
-      return NextResponse.json({ error: "Add both an open-house start and end time." }, { status: 400 });
-    }
-    if (openHouseStart && openHouseEnd && new Date(openHouseEnd).getTime() <= new Date(openHouseStart).getTime()) {
-      return NextResponse.json({ error: "Open-house end time must be after its start time." }, { status: 400 });
-    }
-
-    const nextSiteData = {
-      ...siteData,
-      listing_status: listingStatus,
-      open_house_enabled: openHouseEnabled,
-      open_house_start: openHouseStart || null,
-      open_house_end: openHouseEnd || null,
-      open_house_notes: clean(body.open_house_notes) || null,
-      public_site_aliases: publicSiteAliases,
-    };
-    const { data, error } = await admin.from("sites").update({ site_slug: siteSlug, site_data: nextSiteData, updated_at: new Date().toISOString() }).eq("id", id).select("id, site_slug, site_data").single();
+    let listingPatch;
+    try { listingPatch = listingFieldsPatch(body, siteData); }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid listing details." }, { status: 400 }); }
+    const nextSiteData = { ...siteData, ...listingPatch, public_site_aliases: publicSiteAliases };
+    let update = admin.from("sites").update({ site_slug: siteSlug, site_data: nextSiteData, updated_at: new Date().toISOString() }).eq("id", id);
+    update = site.site_data == null ? update.is("site_data", null) : update.filter("site_data", "eq", JSON.stringify(site.site_data));
+    const { data, error } = await update.select("id, site_slug, site_data").maybeSingle();
+    if (!error && !data) return NextResponse.json({ error: "This property changed while saving. Refresh the page and try again." }, { status: 409 });
     if (error) return NextResponse.json({ error: error.message || "Could not update site." }, { status: 500 });
     return NextResponse.json({ ok: true, site: data });
   } catch (error) {

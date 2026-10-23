@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 
 const allSections = [
-  ["summary", "Site Summary"],
+  ["summary", "Overview"],
+  ["details", "Property Details"],
+  ["website", "Website"],
   ["invoice", "Order & Invoice"],
   ["delivery", "Media Delivery"],
-  ["details", "Property Details"],
   ["map", "Map & Location"],
   ["downloads", "Download Media"],
   ["gallery", "Media Gallery"],
@@ -40,7 +41,7 @@ export default function PropertySectionNav({
       if (mediaLocked && ["downloads", "video", "matterport", "floorplan"].includes(id)) return false;
       return true;
     }),
-    [mediaLocked, showDelivery, showMarketingKit, showVideo]
+    [mediaLocked, showDelivery, showVideo]
   );
 
   useEffect(() => {
@@ -79,7 +80,7 @@ export default function PropertySectionNav({
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [menuOpen]);
 
-  const activeLabel = sections.find(([id]) => id === activeId)?.[1] || "Site Summary";
+  const activeLabel = sections.find(([id]) => id === activeId)?.[1] || "Overview";
 
   return (
     <>
