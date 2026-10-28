@@ -27,16 +27,23 @@ export async function GET(request: Request) {
   if (!authorized(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const admin = adminClient();
-  const dryRun = new URL(request.url).searchParams.get("dry_run") === "1";
+  const params = new URL(request.url).searchParams;
+  const dryRun = params.get("dry_run") === "1";
+  const bookingId = clean(params.get("booking_id"));
+  if (bookingId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(bookingId)) {
+    return NextResponse.json({ error: "Invalid booking ID." }, { status: 400 });
+  }
   const now = new Date();
   const targetDate = nextBusinessDateKey(now);
   const searchEnd = new Date(now.getTime() + 72 * 60 * 60 * 1000).toISOString();
-  const { data: bookings, error: bookingsError } = await admin
+  let bookingsQuery = admin
     .from("bookings")
     .select("id,client_id,client_email,client_first_name,client_last_name,selected_package_name,scheduled_start,scheduled_end,status")
     .gte("scheduled_start", now.toISOString())
     .lt("scheduled_start", searchEnd)
     .order("scheduled_start", { ascending: true });
+  if (bookingId) bookingsQuery = bookingsQuery.eq("id", bookingId);
+  const { data: bookings, error: bookingsError } = await bookingsQuery;
   if (bookingsError) throw bookingsError;
 
   const candidates = (bookings || []).filter((booking) => {
@@ -54,9 +61,11 @@ export async function GET(request: Request) {
   if (sitesError) throw sitesError;
 
   const siteIds = (sites || []).map((site) => clean(site.id)).filter(Boolean);
+  // Confirmation, invoice, and media holds belong to their own senders. Only a
+  // pending appointment-change review should suppress a scheduled reminder.
   const holdQueries = [
-    admin.from("notification_holds").select("booking_id,site_id").eq("active", true).in("booking_id", bookingIds),
-    ...(siteIds.length ? [admin.from("notification_holds").select("booking_id,site_id").eq("active", true).in("site_id", siteIds)] : []),
+    admin.from("notification_holds").select("booking_id,site_id").eq("active", true).in("topic", ["appointment_change"]).in("booking_id", bookingIds),
+    ...(siteIds.length ? [admin.from("notification_holds").select("booking_id,site_id").eq("active", true).in("topic", ["appointment_change"]).in("site_id", siteIds)] : []),
   ];
   const holdResults = await Promise.all(holdQueries);
   const holdError = holdResults.find((result) => result.error)?.error;

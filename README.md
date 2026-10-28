@@ -228,6 +228,13 @@ Relevant areas:
 - `lib/media-access.ts`
 - `lib/media-delivery-email.ts`
 
+## Appointment reminders
+
+- Vercel runs `/api/cron/appointment-reminders` daily at 17:00 UTC. It targets the following calendar day in America/Los_Angeles, excludes canceled/archived bookings and sites, and sends through the communications outbox with a per-booking/per-day idempotency key.
+- Only active `appointment_change` notification holds suppress reminders while a schedule change awaits review. Holds for order/appointment confirmations, invoices, receipts, media delivery, or publication belong to their own senders and do not suppress reminders. Confirmation holds can remain active after admin-created orders; do not release those controls just to recover a missed reminder.
+- The CRON_SECRET-authenticated endpoint supports `dry_run=1` (read-only eligibility) and optional `booking_id=<UUID>` (exact recovery target). Real sends require user authorization; inspect both outbox and provider history before recovering a missed reminder. Never use a real send as a test.
+- Checks: `node --test tests/appointment-reminder-route.test.mjs tests/appointment-reminder-schedule.test.ts`. Fixtures cover unrelated and appointment-change holds at both booking/site scopes, cancellation, dry-run, authentication, exact recovery, duplicate suppression, hold lookup errors, and provider failure recording.
+
 ## Email system and safety
 
 Transactional email is a production side effect. Reading code, rendering HTML locally, or inspecting a draft is safe; calling a send endpoint is not.
