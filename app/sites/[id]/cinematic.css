@@ -136,7 +136,7 @@
   left:clamp(56px,5vw,96px);
   bottom:clamp(46px,7vw,96px);
   display:flex;
-  align-items:flex-end;
+  align-items:flex-start;
   gap:clamp(28px,4vw,64px);
   max-width:calc(100% - 250px);
   color:#fff;
@@ -145,6 +145,7 @@
 .hero-agents .hero-agent{
   position:static;
   min-width:0;
+  align-items:flex-start;
 }
 .hero-agents .hero-agent>img,.hero-agents .hero-agent>span{
   flex:0 0 auto;
